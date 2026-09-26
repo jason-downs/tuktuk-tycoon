@@ -3,8 +3,13 @@ import type { MeshWriter } from './mesh';
 import type { Occupancy } from './occupancy';
 import type { Ring } from './shapes';
 
-export type LayerId = 'ground' | 'water' | 'roads' | 'buildings' | 'structures' | 'backdrop';
-export const LAYERS: LayerId[] = ['backdrop', 'ground', 'water', 'roads', 'structures', 'buildings'];
+/**
+ * Static mesh layers, each drawn with its own material:
+ * - windows: window panes and shopfront glass; lit from inside at night.
+ * - glow: always-bright surfaces (neon, lanterns, lit signs), unlit by the sun.
+ */
+export type LayerId = 'ground' | 'water' | 'roads' | 'buildings' | 'structures' | 'backdrop' | 'windows' | 'glow';
+export const LAYERS: LayerId[] = ['backdrop', 'ground', 'water', 'roads', 'structures', 'buildings', 'windows', 'glow'];
 
 /** Tree kinds used by the instanced tree models. */
 export const TREE_KINDS = ['rain', 'round', 'palm', 'yang', 'bodhi'] as const;
@@ -27,4 +32,14 @@ export interface BuildContext {
   roadPts: Ring[];
   /** Tree instances: x, y, scale, kind index. */
   trees: number[];
+  /**
+   * Instanced street props by kind (models in src/world3d/propModels.ts):
+   * x, y (sim metres), yaw (radians, sim heading convention), scale per instance.
+   */
+  props: Record<string, number[]>;
+}
+
+/** Record one instance of a prop kind. */
+export function addProp(ctx: BuildContext, kind: string, x: number, y: number, yaw: number, scale = 1): void {
+  (ctx.props[kind] ??= []).push(x, y, yaw, scale);
 }

@@ -27,6 +27,8 @@ export class Environment implements WorldLayer {
   readonly sunDir = new Vector3(0.5, 0.8, 0.3);
   /** 0 at night … 1 in full daylight. */
   light = 1;
+  /** Called when the light level changes (e.g. to light windows at night). */
+  onLight: ((light: number) => void) | null = null;
   private backdrop: MeshLambertMaterial | null = null;
   private lastHour = -1;
   private readonly ctx: ViewContext;
@@ -75,6 +77,7 @@ export class Environment implements WorldLayer {
       this.sunDir.set(Math.cos(az) * Math.cos(elev), Math.max(0.15, Math.sin(elev)), 0.55 * Math.sin(az) * Math.cos(elev)).normalize();
       renderer.toneMappingExposure = 1.05 + (1 - light) * 0.25;
       if (this.backdrop) this.backdrop.color.set('#ffffff').lerp(this.sky, 0.5);
+      this.onLight?.(light);
     }
     this.fog.near = rig.dist * 1.4 + 250;
     this.fog.far = rig.dist * 4.5 + 1600;

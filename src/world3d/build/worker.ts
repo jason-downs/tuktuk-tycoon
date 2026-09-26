@@ -16,7 +16,7 @@ scope.onmessage = async (e) => {
     if (!res.ok) throw new Error(`${e.data.url}: HTTP ${res.status}`);
     const city = (await res.json()) as CityData;
     const built = buildCity(city);
-    const transfer: Transferable[] = [built.trees.buffer];
+    const transfer: Transferable[] = [built.trees.buffer, ...Object.values(built.props).map((a) => a.buffer)];
     for (const id of LAYERS) {
       const m = built.layers[id];
       transfer.push(m.position.buffer, m.normal.buffer, m.color.buffer, m.index.buffer);

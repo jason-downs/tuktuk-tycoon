@@ -142,6 +142,9 @@ export class World3DView implements GameView, ViewContext {
         this.city = new CityLayer(this, res.built);
         this.layers.push(this.city);
         if (this.city.materials.backdrop) this.env.setBackdropMaterial(this.city.materials.backdrop);
+        const city = this.city;
+        this.env.onLight = (light) => city.setNight(1 - light);
+        city.setNight(1 - this.env.light);
         this.hud.loading = false;
       },
       (err: unknown) => game.notify(`Could not build the 3D city: ${String(err)}`, 'bad'),

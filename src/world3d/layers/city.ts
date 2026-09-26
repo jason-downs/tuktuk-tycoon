@@ -5,6 +5,7 @@ import { BufferAttribute, BufferGeometry, Color, InstancedMesh, Matrix4, Mesh, M
 import type { PackedMesh } from '../build/mesh';
 import { LAYERS, TREE_KINDS, type BuiltCity, type LayerId } from '../build/world';
 import { treeGeometry } from '../models';
+import { PROP_MODELS } from '../propModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
 /** City vertex colours are sRGB bytes; convert to linear in the shader. */
@@ -43,8 +44,10 @@ export class CityLayer implements WorldLayer {
     for (const id of LAYERS) {
       const packed = built.layers[id];
       if (!packed.index.length) continue;
-      const mat = cityMaterial({ polygonOffset: id === 'roads' ? -2 : id === 'water' ? -1 : 0 });
+      const mat = cityMaterial({ polygonOffset: id === 'roads' ? -2 : id === 'water' ? -1 : id === 'windows' ? -1 : 0 });
       if (id === 'backdrop') mat.fog = false;
+      if (id === 'windows') mat.emissive.set('#ffd28a');
+      if (id === 'glow') mat.emissive.set('#ffffff');
       this.materials[id] = mat;
       const m = new Mesh(geometryOf(packed), mat);
       m.frustumCulled = id !== 'ground';
@@ -55,6 +58,42 @@ export class CityLayer implements WorldLayer {
       this.meshes.push(m);
     }
     this.addTrees(built.trees);
+    this.addProps(built.props);
+  }
+
+  /** Night factor 0 (day) … 1 (night): windows light up from inside. */
+  setNight(night: number): void {
+    const w = this.materials.windows;
+    if (w) w.emissiveIntensity = 0.05 + 0.95 * night;
+    const g = this.materials.glow;
+    if (g) g.emissiveIntensity = 0.35 + 0.65 * night;
+  }
+
+  private addProps(props: Record<string, Float32Array>): void {
+    const m = new Matrix4();
+    const q = new Quaternion();
+    const up = new Vector3(0, 1, 0);
+    const pos = new Vector3();
+    const scl = new Vector3();
+    for (const [kind, arr] of Object.entries(props)) {
+      const factory = PROP_MODELS[kind];
+      if (!factory || !arr.length) continue;
+      const n = arr.length / 4;
+      const im = new InstancedMesh(factory(), this.ctx.modelMat, n);
+      for (let i = 0; i < n; i++) {
+        q.setFromAxisAngle(up, arr[i * 4 + 2]);
+        pos.set(arr[i * 4], 0, -arr[i * 4 + 1]);
+        scl.setScalar(arr[i * 4 + 3]);
+        m.compose(pos, q, scl);
+        im.setMatrixAt(i, m);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.castShadow = false;
+      im.receiveShadow = true;
+      this.ctx.scene.add(im);
+      this.meshes.push(im);
+    }
   }
 
   private addTrees(t: Float32Array): void {

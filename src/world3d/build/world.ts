@@ -12,12 +12,14 @@ import { Occupancy } from './occupancy';
 import { buildRoads } from './roads';
 import { scatterTrees } from './scatter';
 
-export { LAYERS, TREE_KINDS, type LayerId, type TreeKind } from './context';
+export { LAYERS, TREE_KINDS, addProp, type LayerId, type TreeKind } from './context';
 
 export interface BuiltCity {
   layers: Record<LayerId, PackedMesh>;
   /** x, y (sim metres), scale, kind index — one tree per 4 floats. */
   trees: Float32Array;
+  /** Street props by kind: x, y, yaw, scale per instance. */
+  props: Record<string, Float32Array>;
   stats: { triangles: Record<LayerId, number>; trees: number; buildings: number; ms: number };
 }
 
@@ -33,6 +35,8 @@ export function buildCity(city: CityData): BuiltCity {
       roads: new MeshWriter(262144),
       structures: new MeshWriter(65536),
       buildings: new MeshWriter(524288),
+      windows: new MeshWriter(65536),
+      glow: new MeshWriter(4096),
     },
     occ: new Occupancy(...keep),
     keep,
@@ -41,6 +45,7 @@ export function buildCity(city: CityData): BuiltCity {
     moatRings: [],
     roadPts: [],
     trees: [],
+    props: {},
   };
   // Order matters: roads and buildings mark the occupancy raster that tree
   // scattering reads; the ground builder collects parks and moat rings.
@@ -57,5 +62,7 @@ export function buildCity(city: CityData): BuiltCity {
     triangles[id] = ctx.w[id].triangleCount;
   }
   const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
-  return { layers, trees: new Float32Array(ctx.trees), stats: { triangles, trees: ctx.trees.length / 4, buildings: built, ms } };
+  const props: Record<string, Float32Array> = {};
+  for (const [kind, arr] of Object.entries(ctx.props)) props[kind] = new Float32Array(arr);
+  return { layers, trees: new Float32Array(ctx.trees), props, stats: { triangles, trees: ctx.trees.length / 4, buildings: built, ms } };
 }
