@@ -6,6 +6,7 @@ import { haggleLine } from '../content/dialogue';
 import { BALANCE, appFare, roundFare, streetFare } from './balance';
 import { earn, currentBook, spend } from './economy';
 import type { Game } from './game';
+import { climbBlocked } from './mountain';
 import { sendTo } from './movement';
 import type { Driver, RideRequest, Trip, Vehicle } from './types';
 
@@ -34,6 +35,7 @@ export function claimRequest(game: Game, v: Vehicle, requestId: number): boolean
   const req = findRequest(game, requestId);
   if (!req || (req.claimedBy !== null && req.claimedBy !== v.id)) return false;
   if (v.task.kind === 'trip' || v.task.kind === 'broken' || v.task.kind === 'haggle') return false;
+  if (climbBlocked(game, v, req)) return false;
   releaseClaim(game, v);
   const place = game.world.places[req.from];
   if (!sendTo(game, v, place.node)) return false;

@@ -8,6 +8,7 @@ import { calendar, type CalendarInfo } from './clock';
 import { abandonRequest, claimRequest, measureRequest, quote, startTrip, findRequest } from './dispatch';
 import { originWeight } from './demand';
 import type { Game } from './game';
+import { climbBlocked } from './mountain';
 import { sendTo } from './movement';
 import type { Driver, Place, RideRequest, Vehicle } from './types';
 
@@ -54,6 +55,7 @@ function pickRequest(game: Game, v: Vehicle, driver: Driver): RideRequest | null
     if (req.claimedBy !== null || !game.canSee(v, req)) continue;
     const model = VEHICLE_MODELS[v.model];
     if (model && req.party > model.seats) continue;
+    if (climbBlocked(game, v, req)) continue;
     let score = requestValue(game, v, req);
     if (zone) {
       const from = game.world.places[req.from];

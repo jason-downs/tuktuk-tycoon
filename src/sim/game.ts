@@ -8,6 +8,7 @@ import { DemandSystem, originWeight, type DemandModifier } from './demand';
 import { abandonRequest, claimRequest, findRequest, quote, releaseClaim, startTrip, type QuoteOutcome } from './dispatch';
 import { EconomySystem } from './economy';
 import type { Pose } from './graph';
+import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
 import { sendTo } from './movement';
 import { Rng } from './rng';
 import type { Driver, GameState, Notice, Place, RideRequest, Trip, Vehicle } from './types';
@@ -369,6 +370,11 @@ export class Game {
       this.notify('Finish your current trip first.', 'bad');
       return false;
     }
+    const req = findRequest(this, requestId);
+    if (req && climbBlocked(this, v, req)) {
+      this.notify(CLIMB_BLOCKED_TEXT, 'bad');
+      return false;
+    }
     if (!claimRequest(this, v, requestId)) {
       this.notify('Can’t reach that passenger.', 'bad');
       return false;
@@ -417,14 +423,15 @@ export class Game {
     return true;
   }
 
-  /** Send the player's tuk-tuk to the nearest pump. */
+  /** Send the player's tuk-tuk to the nearest LPG pump, or the nearest charger for an electric one. */
   playerRefuel(): boolean {
     const v = this.playerVehicle();
     if (!v || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken') return false;
     const pose = this.vehiclePose(v);
+    const stations = VEHICLE_MODELS[v.model]?.powertrain === 'ev' ? this.chargers() : this.world.lpgStations;
     let best: Place | null = null;
     let bestD = Infinity;
-    for (const p of this.world.lpgStations) {
+    for (const p of stations) {
       const d = Math.hypot(p.x - pose.x, p.y - pose.y);
       if (d < bestD) {
         bestD = d;

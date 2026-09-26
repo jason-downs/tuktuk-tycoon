@@ -19,6 +19,8 @@ export interface VehicleModel {
   breakdownPerDay: number;
   /** Can it make the Doi Suthep climb? (economics.md: LPG tuk-tuks "can't climb"). */
   climbs: boolean;
+  /** Set on EV conversions made in the garage: the LPG model this one was converted from. Not sold new. */
+  convertedFrom?: string;
   blurb: string;
 }
 
@@ -82,5 +84,34 @@ export const VEHICLE_MODELS: Record<string, VehicleModel> = {
     breakdownPerDay: 0.01,
     climbs: true,
     blurb: 'Stretch body for families and tour groups.',
+  },
+  // EV conversions of the LPG models, made by the garage's 200,000 THB conversion kit (economics.md
+  // "Suggested game numbers"). price = model price + kit. Range and breakdowns follow the used EV;
+  // the tired body keeps a higher breakdown rate [pacing].
+  rusty_ev: {
+    id: 'rusty_ev',
+    name: 'Converted EV tuk-tuk (tired body)',
+    powertrain: 'ev',
+    price: 350_000,
+    speed: 0.95,
+    seats: 3,
+    rangeKm: 90,
+    breakdownPerDay: 0.02,
+    climbs: true,
+    convertedFrom: 'rusty',
+    blurb: 'Same dented tub, new silent motor. It even makes it up Doi Suthep.',
+  },
+  lpg_used_ev: {
+    id: 'lpg_used_ev',
+    name: 'Converted EV tuk-tuk',
+    powertrain: 'ev',
+    price: 400_000,
+    speed: 1.02,
+    seats: 3,
+    rangeKm: 100,
+    breakdownPerDay: 0.012,
+    climbs: true,
+    convertedFrom: 'lpg_used',
+    blurb: 'A good LPG tuk-tuk given a 72 V battery pack and hub motor.',
   },
 };

@@ -1,0 +1,23 @@
+/* Doi Suthep notice on the request card. */
+
+.climb-notice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(214, 69, 61, 0.45);
+  border-radius: 10px;
+  background: rgba(214, 69, 61, 0.1);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--cream-2);
+}
+.climb-notice b {
+  color: #ffb4a8;
+  font-weight: 600;
+}
+.climb-icon {
+  font-size: 16px;
+  line-height: 1.2;
+}

@@ -6,7 +6,9 @@ import { MapView } from '../map/MapView';
 import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
 import type { Game } from '../sim/game';
 import { setManual } from '../sim/manual';
+import { climbBlocked, requestClimbs } from '../sim/mountain';
 import type { Notice } from '../sim/types';
+import { ClimbNotice } from './ClimbNotice';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
 import { OVERLAYS } from './overlays';
@@ -177,6 +179,7 @@ function PlayerCard({ game, view }: { game: Game; view: MapView | null }) {
       condition: (v?.condition ?? 0) / 100,
       autopilot: g.state.autopilot,
       model: v ? VEHICLE_MODELS[v.model]?.name ?? v.model : '',
+      ev: v ? VEHICLE_MODELS[v.model]?.powertrain === 'ev' : false,
       busy: v ? v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken' : false,
     };
   });
@@ -204,11 +207,15 @@ function PlayerCard({ game, view }: { game: Game; view: MapView | null }) {
       <div className="title">{d.name}</div>
       <div className="muted small">{d.model}</div>
       <div className="task">{d.task}</div>
-      <Bar value={d.fuel} color={d.fuel < 0.2 ? '#d6453d' : '#3aa35b'} label="LPG" />
+      <Bar value={d.fuel} color={d.fuel < 0.2 ? '#d6453d' : '#3aa35b'} label={d.ev ? 'Battery' : 'LPG'} />
       <Bar value={d.condition} color={d.condition < 0.35 ? '#d6453d' : '#d9a13b'} label="Condition" />
       <div className="row">
-        <button className="btn" disabled={d.busy} onClick={() => game.playerRefuel() && game.notify('Off to the LPG pump.', 'info')}>
-          ⛽ Refuel
+        <button
+          className="btn"
+          disabled={d.busy}
+          onClick={() => game.playerRefuel() && game.notify(d.ev ? 'Off to a charger at the mall.' : 'Off to the LPG pump.', 'info')}
+        >
+          {d.ev ? '⚡ Charge' : '⛽ Refuel'}
         </button>
         <ManualToggle game={game} />
         <label className="toggle" title="Let your tuk-tuk find passengers and haggle by itself">
@@ -277,6 +284,8 @@ function RequestCard({ game, view }: { game: Game; view: MapView | null }) {
       away: pose ? Math.hypot(from.x - pose.x, from.y - pose.y) : 0,
       mine: r.claimedBy !== null && r.claimedBy === pv?.id,
       busy: pv?.task.kind === 'trip' || pv?.task.kind === 'haggle',
+      climb: requestClimbs(g.world, r),
+      noClimb: pv ? climbBlocked(g, pv, r) : false,
     };
   });
   if (!d) return null;
@@ -311,15 +320,17 @@ function RequestCard({ game, view }: { game: Game; view: MapView | null }) {
         <span>{r.fixedFare !== null ? `fixed ${baht(r.fixedFare)}` : `going rate ${baht(r.fairFare)}`}</span>
         <span>{km(d.away)} away</span>
         <span className={d.left < 5 ? 'warn' : ''}>waits {minutes(d.left * 60)}</span>
+        {d.climb && <span>⛰️ Doi Suthep climb</span>}
       </div>
+      {d.noClimb && <ClimbNotice />}
       <button
         className="btn primary wide"
-        disabled={d.mine || d.busy}
+        disabled={d.mine || d.busy || d.noClimb}
         onClick={() => {
           if (game.playerClaim(r.id)) ui.set({ follow: true, selectedVehicle: null });
         }}
       >
-        {d.mine ? 'On your way…' : d.busy ? 'Finish your trip first' : 'Pick up'}
+        {d.mine ? 'On your way…' : d.busy ? 'Finish your trip first' : d.noClimb ? 'Can’t make the climb' : 'Pick up'}
       </button>
     </section>
   );

@@ -37,6 +37,7 @@ export function taskText(game: Game, v: Vehicle): string {
     case 'depot':
       return 'Returning to depot';
     case 'broken':
+      if (t.work) return `In the workshop: ${t.work} — ready in ${minutes(t.until - game.state.time)}`;
       return `Broken down — back in ${minutes(t.until - game.state.time)}`;
     case 'offduty':
       return 'Off duty';
