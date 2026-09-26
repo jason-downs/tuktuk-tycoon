@@ -13,19 +13,21 @@ import { sound } from '../../audio/sound';
 import type { Game } from '../../sim/game';
 import { manualInteract, setAutodrive, whoDrives } from '../../sim/manual';
 import { focusNavActive, installFocusNav, onFocusedControl } from '../focusNav';
+import { installKeyTarget, isKeyTarget } from '../keyTarget';
 import { setMode, toggleMode } from '../mode';
 import { ui } from '../store';
 
-/** Input types that take no typed text: a click leaves them focused, and the game keys still work. */
+/** Input types that take no typed text: game keys still work while one has focus. */
 const NON_TEXT_INPUTS: ReadonlySet<string> = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image']);
 
 /**
  * Whether a key belongs to the focused form control rather than the game: every key in a text field, select or
- * editable element; only the arrow, Home, End and page keys on a slider; none on a checkbox or button.
+ * editable element (except the hidden key target, keyTarget.ts); only the arrow, Home, End and page keys on a slider;
+ * none on a checkbox or button.
  */
 export function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
-  if (!el) return false;
+  if (!el || isKeyTarget(el)) return false;
   if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
   if (el.tagName !== 'INPUT') return false;
   const type = (el as HTMLInputElement).type;
@@ -132,9 +134,11 @@ export function useDriveKeys(game: Game): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyDown(game, e);
     const offFocus = installFocusNav();
+    const offTarget = installKeyTarget();
     window.addEventListener('keydown', onKey);
     return () => {
       offFocus();
+      offTarget();
       window.removeEventListener('keydown', onKey);
     };
   }, [game]);

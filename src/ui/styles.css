@@ -805,3 +805,18 @@ button {
   font: 11px ui-monospace, Menlo, monospace;
   pointer-events: none;
 }
+
+/* The hidden element game keys land on (keyTarget.ts): focusable, but never seen or hit. */
+.key-target {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  outline: none;
+  caret-color: transparent;
+  white-space: nowrap;
+}

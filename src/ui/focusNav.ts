@@ -6,6 +6,8 @@
 // focused by a mouse click does not count, so Tab and Enter stay game keys
 // for mouse players.
 
+import { isKeyTarget } from './keyTarget';
+
 /** A focus change this soon (ms) after a Tab keypress the game left alone is keyboard navigation. */
 const TAB_FOCUS_MS = 1000;
 
@@ -45,7 +47,7 @@ export function focusNavActive(): boolean {
 /** The key lands on a control the player reached with the keyboard, so Enter and Space belong to that control. */
 export function onFocusedControl(e: { target: EventTarget | null }): boolean {
   const el = e.target as { tagName?: string } | null;
-  return active && !!el && typeof el.tagName === 'string' && el.tagName !== 'BODY' && el.tagName !== 'HTML';
+  return active && !!el && typeof el.tagName === 'string' && el.tagName !== 'BODY' && el.tagName !== 'HTML' && !isKeyTarget(e.target);
 }
 
 /** Listen for the events that start and end keyboard navigation. Returns the uninstaller. */

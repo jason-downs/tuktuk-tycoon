@@ -11,7 +11,7 @@ import { claimRequest, seatsIn } from '../src/sim/dispatch';
 import { FLEET } from '../src/sim/fleet';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
-import { setManual, whoDrives } from '../src/sim/manual';
+import { setManual, setPedals, whoDrives } from '../src/sim/manual';
 import { RIVAL_KINDS, RivalsSystem } from '../src/sim/rivals';
 import { STARTER_DELAY_S, STARTER_MAX_M, STARTER_MIN_M, STARTER_NEAR_M } from '../src/sim/starter';
 import { installSystems } from '../src/sim/systems';
@@ -77,6 +77,24 @@ describe("the player's first passengers", () => {
     game.state.stats.trips = FLEET.ridesBeforeHiring;
     for (let t = 0; t < 60; t += 1) game.step(1);
     expect(starters(game).length).toBe(0);
+  });
+
+  it('keeps one waiting at a time: one the player drives on past gives up as the next appears', () => {
+    for (const seed of [1, 2, 3]) {
+      const game = newGame(seed);
+      game.step(1);
+      const [first] = starters(game);
+      // Drive on by hand, past the first one, for two game minutes.
+      setManual(game, true);
+      let most = 0;
+      for (let t = 0; t < 120; t++) {
+        setPedals(game, true, false);
+        game.step(1);
+        most = Math.max(most, starters(game).filter((r) => r.claimedBy === null).length);
+      }
+      expect(most, `seed ${seed}`).toBe(1);
+      expect(game.state.requests, `seed ${seed}`).not.toContain(first);
+    }
   });
 
   it('adds none while another passenger already waits nearby', () => {

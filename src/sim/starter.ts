@@ -3,10 +3,12 @@
 // passenger is placed a short drive from the player's free tuk-tuk — along the
 // road ahead or just round the next corner, with no U-turn, so they are on
 // screen in Drive mode — whenever no unclaimed street passenger waits within
-// STARTER_NEAR_M by road. A new game opens with one already waiting; after a
-// drop-off, once the tuk-tuk has been free with nobody near for
-// STARTER_DELAY_S, the next appears. They fit in the tuk-tuk, wait for up to
-// STARTER_PATIENCE_S, and rivals leave them to the player.
+// STARTER_NEAR_M by road. A new game opens with one already waiting, and until
+// the first ride a lost one is replaced at once; after it, once the tuk-tuk has
+// been free with nobody near for STARTER_DELAY_S, the next appears. They fit in
+// the tuk-tuk, wait for up to STARTER_PATIENCE_S, and rivals leave them to the
+// player. One waits at a time: one the player drives on past gives up when the
+// next appears.
 
 import { calendar, HOUR } from './clock';
 import { makeRequest, pickArchetype, pickDestination } from './demand';
@@ -102,6 +104,8 @@ export function spawnStarter(game: Game, v: Vehicle): boolean {
     req.party = Math.min(req.party, seatsIn(v));
     req.expiresAt = game.state.time + STARTER_PATIENCE_S;
     req.starter = true;
+    // One waits at a time: one the player drove on past gives up now.
+    game.state.requests = game.state.requests.filter((r) => !(r.starter && r.claimedBy === null));
     game.state.requests.push(req);
     game.emit('change');
     return true;

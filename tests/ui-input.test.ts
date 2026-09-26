@@ -10,6 +10,7 @@ import { installSystems } from '../src/sim/systems';
 import type { Place } from '../src/sim/types';
 import { driveKeyDown, gameKeyDown, keyDown, toggleWheel } from '../src/ui/drive/DriveKeys';
 import { focusNavActive, noteFocusIn, noteKeyDown, notePointerDown, onFocusedControl } from '../src/ui/focusNav';
+import { blurMeansEscape, keepsFocusAfterPointer } from '../src/ui/keyTarget';
 import { manualKeyDown } from '../src/ui/manual/ManualDrive';
 import { applyMode, canPanWithKeys, sendPlayerTo, sendPlayerToRefuel } from '../src/ui/mode';
 import { ui } from '../src/ui/store';
@@ -266,5 +267,46 @@ describe('a focused form control', () => {
     expect(manualControl(game).turn).toBeNull();
     manualKeyDown(game, asKey(key('ArrowLeft')));
     expect(manualControl(game).turn).not.toBeNull();
+  });
+});
+
+describe('the hidden key target (ui/keyTarget.ts)', () => {
+  const KEY_TARGET = { tagName: 'DIV', isContentEditable: true, hasAttribute: (a: string) => a === 'data-game-keys' };
+  const EDITABLE = { tagName: 'DIV', isContentEditable: true, hasAttribute: () => false };
+  const input = (type: string) => ({ tagName: 'INPUT', type, isContentEditable: false });
+
+  it('passes every game key, though it is an editable element', () => {
+    const game = newGame();
+    applyMode(game, 'drive');
+    driveKeyDown(game, asKey(key('g', { target: KEY_TARGET })));
+    expect(whoDrives(game)).not.toBe('hand');
+    manualKeyDown(game, asKey(key('w', { target: KEY_TARGET })));
+    expect(whoDrives(game)).toBe('hand');
+    expect(manualControl(game).throttle).toBe(true);
+    // Any other editable element keeps its keys.
+    driveKeyDown(game, asKey(key('g', { target: EDITABLE })));
+    expect(whoDrives(game)).toBe('hand');
+    // Enter is a game key there even while keyboard navigation is on.
+    noteKeyDown(key('Tab'), 0);
+    noteFocusIn(5);
+    expect(focusNavActive()).toBe(true);
+    expect(onFocusedControl({ target: KEY_TARGET as unknown as EventTarget })).toBe(false);
+  });
+
+  it('takes the focus back from a clicked button, checkbox or slider, but not from a text field or select', () => {
+    for (const el of [{ tagName: 'BUTTON' }, input('checkbox'), input('range'), input('radio'), KEY_TARGET]) expect(keepsFocusAfterPointer(el), el.tagName).toBe(false);
+    for (const el of [input('text'), input('search'), input('number'), { tagName: 'INPUT' }, { tagName: 'SELECT' }, { tagName: 'TEXTAREA' }, EDITABLE]) {
+      expect(keepsFocusAfterPointer(el), el.tagName).toBe(true);
+    }
+  });
+
+  it('reads a blur nothing explains as an Esc an extension swallowed', () => {
+    const quiet = { pageFocused: true, focusFree: true, sincePointer: 5000, sinceEsc: 5000 };
+    expect(blurMeansEscape(quiet)).toBe(true);
+    // Another window or tab took the focus, a control took it, a pointer press blurred it, or the page saw the Esc itself.
+    expect(blurMeansEscape({ ...quiet, pageFocused: false })).toBe(false);
+    expect(blurMeansEscape({ ...quiet, focusFree: false })).toBe(false);
+    expect(blurMeansEscape({ ...quiet, sincePointer: 20 })).toBe(false);
+    expect(blurMeansEscape({ ...quiet, sinceEsc: 20 })).toBe(false);
   });
 });

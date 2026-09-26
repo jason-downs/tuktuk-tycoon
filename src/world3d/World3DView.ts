@@ -26,6 +26,7 @@ import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
 import { kerbPoint, manualControl, whoDrives, type KerbPoint } from '../sim/manual';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
+import { isKeyTarget } from '../ui/keyTarget';
 import { canPanWithKeys, sendPlayerTo } from '../ui/mode';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
@@ -509,7 +510,7 @@ export class World3DView implements GameView, ViewContext {
     const onContext = (e: Event) => e.preventDefault();
     const typing = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+      return !!t && !isKeyTarget(t) && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
     };
     const onKey = (e: KeyboardEvent) => {
       if (typing(e)) return;
