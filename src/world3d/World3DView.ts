@@ -32,7 +32,9 @@ import { DriveCamera, manageElevation, type CameraMode } from './camera';
 import { DriveHud } from './driveHud';
 import { Hud } from './hud';
 import { FrameStats } from './stats';
+import { edgeLanes } from './kinematics';
 import { CityLayer } from './layers/city';
+import { CrowdLayer } from './layers/crowds';
 import { Environment } from './layers/environment';
 import { MarkerLayer } from './layers/markers';
 import { PeopleLayer } from './layers/people';
@@ -152,6 +154,7 @@ export class World3DView implements GameView, ViewContext {
     this.env = new Environment(this);
     this.vehicles = new VehicleLayer(this);
     this.layers.push(this.env, this.vehicles, new PeopleLayer(this), new MarkerLayer(this));
+    this.layers.push(new CrowdLayer(this));
 
     const start = game.playerVehicle();
     if (start) {
@@ -275,8 +278,7 @@ export class World3DView implements GameView, ViewContext {
   }
 
   laneOffset(arc: number): number {
-    const e = this.game.world.graph.edges[arc >> 1];
-    return e.oneway ? 0 : e.cls <= 3 ? 2.2 : 1.4;
+    return edgeLanes(this.game.world.graph).lane[arc >> 1];
   }
 
   placeVehicle(obj: Object3D, arc: number, s: number, scale: number, lift = 0): void {
@@ -302,7 +304,7 @@ export class World3DView implements GameView, ViewContext {
     return kerbPoint(this.game, this.game.place(req.from));
   }
 
-  vehicleMesh(id: number): Mesh | undefined {
+  vehicleMesh(id: number): Object3D | undefined {
     return this.vehicles.meshOf(id);
   }
 

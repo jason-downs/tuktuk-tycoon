@@ -249,6 +249,8 @@ export function scatterTrees(ctx: BuildContext): void {
   const env = placeEnv(ctx);
   osmTrees(ctx, env);
   templeTrees(ctx, env);
+  // The temple layouts' bodhi spots are planted now; they are not drawn props.
+  delete ctx.props.bodhi_spot;
   moatTrees(ctx, env);
   treeRows(ctx, env);
   streetTrees(ctx, env);
@@ -372,10 +374,14 @@ function templeTrees(ctx: BuildContext, env: PlaceEnv): void {
       cx /= ring.length;
       cy /= ring.length;
     }
-    // Bodhi: the nearest open spot round the hall, well inside the ground.
+    // Bodhi: the spot the temple layout left for it, else the nearest open spot round the hall.
     const a0 = hash01(ai, 51) * Math.PI * 2;
     const s = scaleOf(ai, 52, 0.85, 1.15);
     let done = false;
+    const spots = ctx.props.bodhi_spot ?? [];
+    for (let i = 0; i < spots.length && !done; i += 4) {
+      if (pointInRing(spots[i], spots[i + 1], ring)) done = plant(ctx, env, spots[i], spots[i + 1], 'bodhi', s, { building: 2, crown: 0.3 });
+    }
     for (const d of [reach + 5, reach + 8, reach + 12, reach + 17, reach + 23]) {
       for (let k = 0; k < 12 && !done; k++) {
         const ang = a0 + (k * Math.PI) / 6;

@@ -13,7 +13,7 @@ import { scatterTrees } from '../src/world3d/build/scatter';
 import { pointInRing, type Ring } from '../src/world3d/build/shapes';
 import { placeEnv, streetRules } from '../src/world3d/build/streets';
 import { buildCity } from '../src/world3d/build/world';
-import { PROP_MODELS } from '../src/world3d/propModels';
+import { PROP_MODELS, isMarkerKind } from '../src/world3d/propModels';
 import { treeGeometry } from '../src/world3d/treeModels';
 
 const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', import.meta.url), 'utf8')) as CityData;
@@ -198,6 +198,7 @@ describe('trees and street furniture', () => {
       if (moatRings.some((r) => pointInRing(x, y, r))) bad.push(`tree in moat at ${x.toFixed(1)},${y.toFixed(1)}`);
     }
     for (const [kind, arr] of Object.entries(props)) {
+      if (isMarkerKind(kind)) continue;
       for (let j = 0; j < arr.length; j += 4) {
         const [x, y] = [arr[j], arr[j + 1]];
         if (inBuilding(x, y)) bad.push(`${kind} in building at ${x.toFixed(1)},${y.toFixed(1)}`);
@@ -265,7 +266,7 @@ describe('trees and street furniture', () => {
     const got = Object.fromEntries(Object.keys(min).map((k) => [k, count(k)]));
     console.log('props', got, `cable triangles ${staged.cableTriangles}`);
     for (const [k, n] of Object.entries(min)) expect(count(k), k).toBeGreaterThanOrEqual(n);
-    for (const k of Object.keys(props)) expect(PROP_MODELS[k], k).toBeDefined();
+    for (const k of Object.keys(props)) if (!isMarkerKind(k)) expect(PROP_MODELS[k], k).toBeDefined();
   });
 
   it('stays within the triangle and instance budgets', () => {
@@ -275,6 +276,7 @@ describe('trees and street furniture', () => {
     let propTris = 0;
     let instances = 0;
     for (const [k, arr] of Object.entries(props)) {
+      if (isMarkerKind(k)) continue;
       propTris += tris(PROP_MODELS[k]()) * (arr.length / 4);
       instances += arr.length / 4;
     }

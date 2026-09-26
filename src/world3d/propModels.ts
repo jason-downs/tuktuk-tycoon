@@ -282,3 +282,12 @@ export const PROP_MODELS: Record<string, () => BufferGeometry> = {
   pea_cabinet: peaCabinet,
   bench,
 };
+
+/**
+ * Kinds recorded with addProp that are data for other layers rather than drawn
+ * props: crowd walkways (walk*), effect anchors (fx_*) and temple bodhi-tree
+ * spots (planted by the tree scatter).
+ */
+export function isMarkerKind(kind: string): boolean {
+  return kind === 'bodhi_spot' || kind.startsWith('walk') || kind.startsWith('fx_');
+}

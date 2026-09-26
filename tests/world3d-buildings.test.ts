@@ -492,9 +492,11 @@ describe('whole-city build', () => {
 
   it('stays inside the building triangle budget and time', () => {
     const t = a.stats.triangles;
-    const mine = t.buildings + t.windows + t.glow + t.structures;
+    const mine = t.buildings + t.windows + t.glow;
     console.log(`buildings ${t.buildings}, windows ${t.windows}, glow ${t.glow}, structures ${t.structures}, total ${mine}, build ${ms.toFixed(0)} ms`);
     expect(mine).toBeLessThan(1_600_000);
+    // Structures also hold the moat parapets, bridges, platforms and the power-line cables.
+    expect(t.structures).toBeLessThan(400_000);
     expect(ms).toBeLessThan(4000);
   });
 
@@ -513,7 +515,8 @@ describe('whole-city build', () => {
       for (let i = 0; i < m.normal.length; i += 3) if (Math.abs(Math.hypot(m.normal[i], m.normal[i + 1], m.normal[i + 2]) - 1) > 1e-3) badNormals++;
       expect(nonFinite, id).toBe(0);
       expect(badNormals, id).toBe(0);
-      expect(minY, id).toBeGreaterThan(-0.05);
+      // Structures include moat and river bank walls and bridge piers, which go down to the water.
+      expect(minY, id).toBeGreaterThan(id === 'structures' ? -5 : -0.05);
       expect(maxY, id).toBeLessThan(160);
     }
   });
