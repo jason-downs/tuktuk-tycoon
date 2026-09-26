@@ -46,7 +46,7 @@ import { onShift } from './ai';
 import { BALANCE, appFare, roundFare } from './balance';
 import { DAY, HOUR, MINUTE, calendar, formatClock, type CalendarInfo } from './clock';
 import { HOUR_PROFILE, LANDMARK_SCHEDULE, SEASON_INDEX, makeRequest, originWeight, pickArchetype, pickDestination } from './demand';
-import { claimRequest, refuel, type TripResult } from './dispatch';
+import { addReviews, claimRequest, fitsParty, refuel, seatsIn, type TripResult } from './dispatch';
 import { businessDay, canAfford, earn, spend } from './economy';
 import type { Game, GameSystem } from './game';
 import { sendTo } from './movement';
@@ -175,14 +175,6 @@ export function repairDiscount(game: Game): number {
   const n = depots ? Object.keys(depots).length : 0;
   if (n >= DEPOT.manyDepots) return DEPOT.repairDiscountMany;
   return n > 0 ? DEPOT.repairDiscount : 1;
-}
-
-/** Push `n` reviews of `stars` into the rolling reputation window (goal rewards, missed loan payments). */
-export function addReviews(game: Game, stars: number, n: number): void {
-  const state = game.state;
-  for (let i = 0; i < n; i++) state.ratings.push(Math.max(1, Math.min(5, stars)));
-  if (state.ratings.length > BALANCE.rating.window) state.ratings.splice(0, state.ratings.length - BALANCE.rating.window);
-  state.reputation = state.ratings.reduce((a, b) => a + b, 0) / state.ratings.length;
 }
 
 /** Keep game.state.unlocks in step with the active services, hotels ('hotel:<id>') and depots ('depot:<zone>'). */
@@ -741,7 +733,7 @@ export class BusinessSystem implements GameSystem {
     let bestD = radius;
     for (const v of game.state.vehicles) {
       if (game.state.time < v.busyUntil || !this.isFree(game, v) || !test(v)) continue;
-      if (party > (VEHICLE_MODELS[v.model]?.seats ?? 3)) continue;
+      if (party > seatsIn(v)) continue;
       const pose = game.vehiclePose(v);
       const d = Math.hypot(pose.x - x, pose.y - y);
       if (d <= bestD) {
@@ -880,7 +872,7 @@ export class BusinessSystem implements GameSystem {
       return;
     }
     const player = game.playerVehicle();
-    if (player && canClimb(player) && !game.state.autopilot) {
+    if (player && canClimb(player) && fitsParty(player, req) && !game.state.autopilot) {
       req.claimedBy = player.id;
       const tour = TOUR_BY_ID[req.source?.slice(5) ?? ''];
       game.notify(`${SERVICE_BY_ID[tour?.service ?? '']?.icon ?? '🌄'} Sunset charter booked for you at ${from.name}: ${thb(req.fixedFare ?? 0)} up Doi Suthep. Tap the group to pick them up.`, 'good', from.x, from.y);
@@ -891,7 +883,7 @@ export class BusinessSystem implements GameSystem {
 
   /** A climbing tuk-tuk whose driver (hired, or the player on autopilot) is working and has room for the group. */
   private climberReady(game: Game, v: Vehicle, req: RideRequest): boolean {
-    return canClimb(v) && this.working(game, v) && req.party <= (VEHICLE_MODELS[v.model]?.seats ?? 3);
+    return canClimb(v) && this.working(game, v) && fitsParty(v, req);
   }
 
   /** Between fares (alighting counts) and not waiting for a tour group. */

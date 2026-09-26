@@ -5,7 +5,7 @@ import { FleetAI } from './ai';
 import { BALANCE } from './balance';
 import { BASE_TIME_SCALE, HOUR, SPEED_STEPS, calendar, type CalendarInfo } from './clock';
 import { DemandSystem, originWeight, type DemandModifier } from './demand';
-import { abandonRequest, claimRequest, findRequest, quote, releaseClaim, startTrip, type QuoteOutcome } from './dispatch';
+import { abandonRequest, claimRequest, findRequest, fitsParty, inRide, partyTooBigText, quote, releaseClaim, startTrip, type QuoteOutcome } from './dispatch';
 import { EconomySystem } from './economy';
 import type { Pose } from './graph';
 import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
@@ -389,13 +389,18 @@ export class Game {
   playerClaim(requestId: number): boolean {
     const v = this.playerVehicle();
     if (!v) return false;
-    if (v.task.kind === 'trip') {
-      this.notify('Finish your current trip first.', 'bad');
+    const kind = v.task.kind;
+    if (kind === 'trip' || kind === 'away' || kind === 'broken') {
+      this.notify(kind === 'trip' ? 'Finish your current trip first.' : kind === 'away' ? 'You’re out of town — back soon.' : 'Your tuk-tuk is off the road.', 'bad');
       return false;
     }
     const req = findRequest(this, requestId);
     if (req && climbBlocked(this, v, req)) {
       this.notify(CLIMB_BLOCKED_TEXT, 'bad');
+      return false;
+    }
+    if (req && !fitsParty(v, req)) {
+      this.notify(partyTooBigText(v, req), 'bad');
       return false;
     }
     if (!claimRequest(this, v, requestId)) {
@@ -435,7 +440,7 @@ export class Game {
   /** Drive the player's tuk-tuk to the road nearest a map point; at an LPG pump, fill up. */
   playerDriveTo(x: number, y: number): boolean {
     const v = this.playerVehicle();
-    if (!v || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken') return false;
+    if (!v || inRide(v) || v.task.kind === 'broken') return false;
     const node = this.world.graph.nearestNode(x, y, 400);
     if (node < 0) return false;
     const lpg = VEHICLE_MODELS[v.model]?.powertrain !== 'ev';
@@ -449,7 +454,7 @@ export class Game {
   /** Send the player's tuk-tuk to the nearest LPG pump, or the nearest charger for an electric one. */
   playerRefuel(): boolean {
     const v = this.playerVehicle();
-    if (!v || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken') return false;
+    if (!v || inRide(v) || v.task.kind === 'broken') return false;
     const pose = this.vehiclePose(v);
     const stations = VEHICLE_MODELS[v.model]?.powertrain === 'ev' ? this.chargers() : this.world.lpgStations;
     let best: Place | null = null;

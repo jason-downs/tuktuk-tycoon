@@ -3,6 +3,7 @@
 
 import { ARCHETYPES } from '../content/archetypes';
 import { haggleLine } from '../content/dialogue';
+import { VEHICLE_MODELS } from '../content/vehicles';
 import { BALANCE, appFare, roundFare, streetFare } from './balance';
 import { earn, currentBook, spend } from './economy';
 import type { Game } from './game';
@@ -30,11 +31,31 @@ export function findRequest(game: Game, id: number): RideRequest | undefined {
   return game.state.requests.find((r) => r.id === id);
 }
 
+/** A passenger is aboard or at the kerb, or the tuk-tuk is out of town: it can't take other work or change hands. */
+export function inRide(v: Vehicle): boolean {
+  return v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'away';
+}
+
+/** Passenger seats in a vehicle. */
+export function seatsIn(v: Vehicle): number {
+  return VEHICLE_MODELS[v.model]?.seats ?? 3;
+}
+
+/** The passenger's whole party fits in the vehicle. */
+export function fitsParty(v: Vehicle, req: RideRequest): boolean {
+  return req.party <= seatsIn(v);
+}
+
+/** What the player is told when a party is too big for their tuk-tuk. */
+export function partyTooBigText(v: Vehicle, req: RideRequest): string {
+  return `A party of ${req.party} won’t fit in a ${seatsIn(v)}-seat tuk-tuk.`;
+}
+
 /** Send a vehicle to pick up a waiting passenger. */
 export function claimRequest(game: Game, v: Vehicle, requestId: number): boolean {
   const req = findRequest(game, requestId);
   if (!req || (req.claimedBy !== null && req.claimedBy !== v.id)) return false;
-  if (v.task.kind === 'trip' || v.task.kind === 'broken' || v.task.kind === 'haggle') return false;
+  if (inRide(v) || v.task.kind === 'broken' || !fitsParty(v, req)) return false;
   if (climbBlocked(game, v, req)) return false;
   releaseClaim(game, v);
   const place = game.world.places[req.from];
@@ -129,7 +150,8 @@ export function startTrip(game: Game, v: Vehicle, fare: number): boolean {
 function rateTrip(game: Game, v: Vehicle, trip: Trip, driver: Driver | null): number {
   const info = ARCHETYPES[trip.request.archetype];
   const expected = (trip.distance / 1000 / 24) * 3600 + BALANCE.trip.boardSeconds + 60;
-  const took = game.state.time - trip.startedAt;
+  // Only the driving in town counts: trip.distance is the in-town route, and time beyond the portal is left out.
+  const took = game.state.time - trip.startedAt - (trip.awayS ?? 0);
   const speedScore = Math.max(-1, Math.min(1, (expected - took) / expected)) * (0.4 + info.thrill * 0.4);
   const priceScore = trip.request.fixedFare !== null ? 0.2 : (1.1 - trip.ratio) * 2.2;
   const charm = driver ? (driver.charm - 50) / 100 : 0;
@@ -175,12 +197,13 @@ export function completeTrip(game: Game, v: Vehicle): TripResult | null {
     driver.trips++;
     driver.lifetimeFares += trip.fare;
     driver.rating = driver.rating * 0.95 + rating * 0.05;
-    driver.fatigue = Math.min(100, driver.fatigue + 2 + (trip.distance / 1000) * (1 - driver.stamina / 200));
+    // Every metre driven with the passenger tires the driver, beyond the portal too.
+    const off = game.place(req.to).offmap;
+    const metres = trip.distance + (off ? off.extraM * (off.roundTrip ? 2 : 1) : 0);
+    driver.fatigue = Math.min(100, driver.fatigue + 2 + (metres / 1000) * (1 - driver.stamina / 200));
   }
+  addReviews(game, rating, 1);
   const state = game.state;
-  state.ratings.push(rating);
-  if (state.ratings.length > BALANCE.rating.window) state.ratings.shift();
-  state.reputation = state.ratings.reduce((a, b) => a + b, 0) / state.ratings.length;
   state.stats.trips++;
   state.stats.fares += trip.fare;
   state.stats.passengers += req.party;
@@ -191,6 +214,14 @@ export function completeTrip(game: Game, v: Vehicle): TripResult | null {
   const result: TripResult = { vehicleId: v.id, driverId: driver?.id ?? null, fare: trip.fare, tip, rating, request: req, companyTake };
   game.emit('trip', result);
   return result;
+}
+
+/** Push `n` reviews of `stars` into the rolling reputation window and recompute the reputation. */
+export function addReviews(game: Game, stars: number, n: number): void {
+  const state = game.state;
+  for (let i = 0; i < n; i++) state.ratings.push(Math.max(1, Math.min(5, stars)));
+  if (state.ratings.length > BALANCE.rating.window) state.ratings.splice(0, state.ratings.length - BALANCE.rating.window);
+  state.reputation = state.ratings.reduce((a, b) => a + b, 0) / state.ratings.length;
 }
 
 /** Fill up at a pump (or charger). Who pays depends on the driver's pay model. */

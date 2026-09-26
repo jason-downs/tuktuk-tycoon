@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { makeRequest } from '../src/sim/demand';
-import { claimRequest, startTrip } from '../src/sim/dispatch';
+import { claimRequest, inRide, startTrip, type TripResult } from '../src/sim/dispatch';
 import { calendar, HOUR } from '../src/sim/clock';
+import { whyCantAssign, whyCantReturn } from '../src/sim/fleet';
+import { workshopBlock } from '../src/sim/garage';
 import type { GraphJSON } from '../src/sim/graph';
 import { Game } from '../src/sim/game';
 
@@ -16,6 +18,7 @@ function tripTo(game: Game, toId: string, fromId = 'tha_phae_gate') {
   const from = landmark(fromId);
   const to = landmark(toId);
   const req = makeRequest(game, from, to, 'tourist_west', 'street', calendar(game.state.time));
+  req.party = 2;
   req.expiresAt = game.state.time + 10 * HOUR;
   game.state.requests.push(req);
   expect(claimRequest(game, v, req.id)).toBe(true);
@@ -84,5 +87,61 @@ describe('out-of-town trips through portals', () => {
     const pose = game.vehiclePose(v);
     const from = landmark('tha_phae_gate');
     expect(Math.hypot(pose.x - world.graph.nodeX[from.node], pose.y - world.graph.nodeY[from.node])).toBeLessThan(60);
+  });
+
+  it('out of town the tuk-tuk can’t be sent elsewhere, serviced or handed over, and the fare still comes in', () => {
+    const game = Game.create(world, { seed: 3 });
+    const cash0 = game.state.cash;
+    const { v } = tripTo(game, 'chiang_mai_zoo');
+    for (let t = 0; t < 2 * HOUR && v.task.kind !== 'away'; t += 2) game.step(2);
+    expect(v.task.kind).toBe('away');
+    const gate = landmark('tha_phae_gate');
+    const other = makeRequest(game, gate, landmark('wat_chedi_luang'), 'backpacker', 'app', calendar(game.state.time));
+    other.party = 1;
+    game.state.requests.push(other);
+
+    expect(game.playerDriveTo(gate.x, gate.y)).toBe(false);
+    expect(game.playerRefuel()).toBe(false);
+    expect(game.playerClaim(other.id)).toBe(false);
+    expect(game.state.notices.at(-1)!.text).toMatch(/out of town/);
+    expect(claimRequest(game, v, other.id)).toBe(false);
+    expect(workshopBlock(v)).toMatch(/Out of town/);
+    expect(whyCantReturn(v)).toMatch(/Out of town/);
+    expect(whyCantAssign(game, game.player().id, null)).toMatch(/out of town/);
+    expect(inRide(v)).toBe(true);
+    expect(v.task.kind).toBe('away');
+
+    for (let t = 0; t < 3 * HOUR && v.task.kind !== 'idle'; t += 2) game.step(2);
+    expect(game.state.stats.trips).toBe(1);
+    expect(game.state.cash).toBeGreaterThan(cash0);
+  });
+
+  it('rates an out-of-town ride by its driving in town, and tires the driver for the whole distance', () => {
+    const game = Game.create(world, { seed: 4 });
+    const v = game.playerVehicle()!;
+    v.model = 'ev_new';
+    // Without the random spread, a fair fare and the player's charm put a ride at 4.47 plus its speed term.
+    game.rng.gauss = () => 0;
+    const player = game.player();
+    const fatigue0 = player.fatigue;
+    let result: TripResult | null = null;
+    game.on('trip', (r: TripResult) => (result = r));
+    const { req } = tripTo(game, 'wat_doi_suthep');
+    let inTown = 0;
+    for (let t = 0; t < 6 * HOUR && !result; t += 2) {
+      if (v.task.kind === 'trip') inTown = v.task.trip.distance;
+      game.step(2);
+    }
+    expect(result).not.toBeNull();
+    const r = result as unknown as TripResult;
+    // Driven at the GPS's pace in town, the ride is not rated as a slow one.
+    expect(r.rating).toBeGreaterThan(4.4);
+    // The in-town distance counts both legs: out to the portal and back to the pickup.
+    const portal = world.router.route(landmark('tha_phae_gate').node, landmark('wat_doi_suthep').node)!.length;
+    expect(inTown).toBeGreaterThan(portal * 1.5);
+    const off = landmark('wat_doi_suthep').offmap!;
+    const km = (inTown + 2 * off.extraM) / 1000;
+    expect(player.fatigue - fatigue0).toBeCloseTo(2 + km * (1 - player.stamina / 200), 6);
+    expect(req.fairFare).toBe(400);
   });
 });

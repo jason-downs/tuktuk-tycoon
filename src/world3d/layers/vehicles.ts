@@ -160,7 +160,7 @@ export class VehicleLayer implements WorldLayer {
     ctx.scene.add(this.cones);
   }
 
-  /** The object that follows a fleet vehicle's rendered pose. */
+  /** The object that follows a fleet vehicle's rendered pose; undefined while the vehicle is off the map. */
   meshOf(id: number): Object3D | undefined {
     return this.proxies.get(id);
   }
@@ -237,8 +237,10 @@ export class VehicleLayer implements WorldLayer {
       if (this.cones.instanceColor) this.cones.instanceColor.needsUpdate = true;
     }
     for (const [key, st] of this.kin) if (st.seen !== this.frameNo) this.kin.delete(key);
+    // A vehicle that is gone, or out of town beyond a portal, has no stand-in: nothing reads a stale pose.
     for (const [id, g] of this.proxies) {
-      if (!game.vehicle(id)) {
+      const v = game.vehicle(id);
+      if (!v || v.task.kind === 'away') {
         this.ctx.scene.remove(g);
         this.proxies.delete(id);
       }

@@ -12,13 +12,14 @@
 // the GPS and back.
 //
 // The switch and the controls are runtime-only (not saved): a loaded game
-// starts with the GPS driving.
+// starts with the GPS driving. A passenger walking over to the tuk-tuk is
+// saved in game.state.systems.manual, so the haggle still starts after a load.
 
 import { ARCHETYPES } from '../content/archetypes';
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { angleDiff } from '../geo';
 import { BALANCE } from './balance';
-import { findRequest, refuel, releaseClaim } from './dispatch';
+import { findRequest, fitsParty, partyTooBigText, refuel, releaseClaim } from './dispatch';
 import type { Game, GameSystem, RatingModifier } from './game';
 import { reverseArc, type RoadGraph } from './graph';
 import { beginKerbside } from './kerbside';
@@ -63,6 +64,10 @@ export interface ManualControl {
   trip: number;
   tripMetres: number;
   fastMetres: number;
+}
+
+/** Saved manual-driving state (game.state.systems.manual). */
+interface ManualState {
   /** A passenger walking over to the tuk-tuk: the haggle starts at game time `at`. */
   kerbside: { requestId: number; at: number } | null;
 }
@@ -72,10 +77,16 @@ const controls = new WeakMap<Game, ManualControl>();
 export function manualControl(game: Game): ManualControl {
   let c = controls.get(game);
   if (!c) {
-    c = { on: false, vehicleId: null, throttle: false, brake: false, turn: null, trip: -1, tripMetres: 0, fastMetres: 0, kerbside: null };
+    c = { on: false, vehicleId: null, throttle: false, brake: false, turn: null, trip: -1, tripMetres: 0, fastMetres: 0 };
     controls.set(game, c);
   }
   return c;
+}
+
+function manualState(game: Game): ManualState {
+  const s = (game.state.systems.manual ??= {}) as Partial<ManualState>;
+  s.kerbside ??= null;
+  return s as ManualState;
 }
 
 export function isManualDriven(game: Game, v: Vehicle): boolean {
@@ -305,13 +316,14 @@ export class ManualSystem implements GameSystem {
   }
 
   update(game: Game): void {
-    const c = controls.get(game);
-    if (c?.kerbside && game.state.time >= c.kerbside.at) {
-      const { requestId } = c.kerbside;
-      c.kerbside = null;
+    const s = manualState(game);
+    if (s.kerbside && game.state.time >= s.kerbside.at) {
+      const { requestId } = s.kerbside;
+      s.kerbside = null;
       const v = game.playerVehicle();
       if (v && v.task.kind === 'pickup' && v.task.requestId === requestId) beginKerbside(game, v, requestId);
     }
+    const c = controls.get(game);
     if (!c?.on) return;
     if (game.state.autopilot) {
       setManual(game, false);
@@ -337,13 +349,17 @@ export function kerbPoint(game: Game, place: Place): { x: number; y: number } {
   return { x: nx + (dx / d) * off, y: ny + (dy / d) * off };
 }
 
-/** The nearest passenger the tuk-tuk could pick up here: in sight, not taken by another tuk-tuk, within PICKUP_RADIUS_M. */
-export function kerbsidePassenger(game: Game, v: Vehicle): RideRequest | null {
+/**
+ * The nearest passenger the tuk-tuk could pick up here: in sight, not taken by another tuk-tuk, within
+ * PICKUP_RADIUS_M, and (unless `anyParty`) with a party that fits in the tuk-tuk.
+ */
+export function kerbsidePassenger(game: Game, v: Vehicle, anyParty = false): RideRequest | null {
   const pose = game.vehiclePose(v);
   let best: RideRequest | null = null;
   let bestD = PICKUP_RADIUS_M;
   for (const req of game.visibleTo(v)) {
     if (req.claimedBy !== null && req.claimedBy !== v.id) continue;
+    if (!anyParty && !fitsParty(v, req)) continue;
     const place = game.place(req.from);
     if (place.offmap) continue;
     const k = kerbPoint(game, place);
@@ -356,13 +372,14 @@ export function kerbsidePassenger(game: Game, v: Vehicle): RideRequest | null {
   return best;
 }
 
-export type PickupResult = 'walking' | 'none' | 'moving' | 'busy' | 'climb';
+export type PickupResult = 'walking' | 'none' | 'moving' | 'busy' | 'climb' | 'seats';
 
 /**
  * Pick up the nearest waiting passenger by hand: the tuk-tuk must be within
- * PICKUP_RADIUS_M and slower than PICKUP_MAX_SPEED. The passenger is claimed
- * and walks over (WALK_OVER_S game seconds while the tuk-tuk waits), then the
- * kerbside haggle starts — or a booking with a fixed fare simply boards.
+ * PICKUP_RADIUS_M and slower than PICKUP_MAX_SPEED, with a seat for everyone
+ * in the party. The passenger is claimed and walks over (WALK_OVER_S game
+ * seconds while the tuk-tuk waits), then the kerbside haggle starts — or a
+ * booking with a fixed fare simply boards.
  */
 export function manualPickup(game: Game): PickupResult {
   const v = game.playerVehicle();
@@ -370,7 +387,12 @@ export function manualPickup(game: Game): PickupResult {
   const kind = v.task.kind;
   if (kind === 'trip' || kind === 'haggle' || kind === 'broken' || kind === 'away' || kind === 'offduty') return 'busy';
   const req = kerbsidePassenger(game, v);
-  if (!req) return 'none';
+  if (!req) {
+    const crowd = kerbsidePassenger(game, v, true);
+    if (!crowd) return 'none';
+    game.notify(partyTooBigText(v, crowd), 'bad');
+    return 'seats';
+  }
   if (v.speed >= PICKUP_MAX_SPEED) return 'moving';
   if (climbBlocked(game, v, req)) {
     game.notify(CLIMB_BLOCKED_TEXT, 'bad');
@@ -385,7 +407,7 @@ export function manualPickup(game: Game): PickupResult {
   v.routeIdx = 0;
   v.speed = 0;
   v.busyUntil = Math.max(v.busyUntil, now + WALK_OVER_S);
-  manualControl(game).kerbside = { requestId: req.id, at: now + WALK_OVER_S };
+  manualState(game).kerbside = { requestId: req.id, at: now + WALK_OVER_S };
   game.emit('change');
   return 'walking';
 }
@@ -438,7 +460,7 @@ export type InteractResult = PickupResult | RefuelResult;
 /** The E key: pick up a passenger at the kerb, else fill up at a pump, else say what is missing. */
 export function manualInteract(game: Game): InteractResult {
   const pickup = manualPickup(game);
-  if (pickup === 'walking' || pickup === 'climb') return pickup;
+  if (pickup === 'walking' || pickup === 'climb' || pickup === 'seats') return pickup;
   const fill = manualRefuel(game);
   if (fill === 'filling') return fill;
   if (pickup === 'moving' || fill === 'moving') {
@@ -510,6 +532,6 @@ export function setAutodrive(game: Game, on: boolean): Driving {
 
 /** The passenger walking over to the tuk-tuk, if any. */
 export function walkingPassenger(game: Game): RideRequest | undefined {
-  const k = controls.get(game)?.kerbside;
+  const k = (game.state.systems.manual as Partial<ManualState> | undefined)?.kerbside;
   return k ? findRequest(game, k.requestId) : undefined;
 }

@@ -51,16 +51,18 @@ export class MarkerLayer implements WorldLayer {
     const player = game.playerVehicle();
     const scale = this.ctx.vehicleScale();
     const dist = this.ctx.rig.dist;
-    if (player) {
-      const m = this.ctx.vehicleMesh(player.id);
-      if (m) this.playerRing.position.set(m.position.x, 0.2, m.position.z);
+    // The rings sit under the vehicles' stand-ins, and hide while a vehicle has none (out of town).
+    const pm = player ? this.ctx.vehicleMesh(player.id) : undefined;
+    this.playerRing.visible = !!pm;
+    if (pm) {
+      this.playerRing.position.set(pm.position.x, 0.2, pm.position.z);
       this.playerRing.scale.setScalar(scale * (1 + Math.sin(frame.now / 300) * 0.06));
     }
     const sel = s.selectedVehicle !== null ? game.vehicle(s.selectedVehicle) : undefined;
-    this.selectRing.visible = !!sel;
-    if (sel) {
-      const m = this.ctx.vehicleMesh(sel.id);
-      if (m) this.selectRing.position.set(m.position.x, 0.2, m.position.z);
+    const sm = sel ? this.ctx.vehicleMesh(sel.id) : undefined;
+    this.selectRing.visible = !!sm;
+    if (sm) {
+      this.selectRing.position.set(sm.position.x, 0.2, sm.position.z);
       this.selectRing.scale.setScalar(scale);
     }
     const g = game.world.graph;

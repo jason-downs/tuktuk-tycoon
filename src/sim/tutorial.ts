@@ -149,11 +149,11 @@ export class TutorialSystem implements GameSystem {
     const kind = v.task.kind;
     if (kind === 'pickup' && at < stepIndex('approach')) go(game, st, 'approach');
     else if (kind === 'haggle' && at < stepIndex('haggle')) go(game, st, 'haggle');
-    else if (kind === 'trip' && at < stepIndex('dropoff')) go(game, st, 'dropoff');
+    else if ((kind === 'trip' || (v.task.kind === 'away' && v.task.trip)) && at < stepIndex('dropoff')) go(game, st, 'dropoff');
     else if (st.step === 'drive' && v.speed > MOVING_MS) {
       st.lost = false;
       go(game, st, 'find');
-    } else if (at >= stepIndex('approach') && kind !== 'pickup' && kind !== 'haggle' && kind !== 'trip') {
+    } else if (at >= stepIndex('approach') && kind !== 'pickup' && kind !== 'haggle' && kind !== 'trip' && kind !== 'away') {
       // The passenger walked, the deal fell through or the tuk-tuk broke down: find another.
       st.lost = true;
       go(game, st, 'find');

@@ -223,6 +223,48 @@ describe('picking up by hand', () => {
     expect(manualPickup(game)).toBe('busy');
   });
 
+  it('leaves a party too big for the tuk-tuk at the kerb and takes one that fits', () => {
+    const game = newGame();
+    const v = game.playerVehicle()!;
+    setManual(game, true);
+    const place = kerbPlace();
+    const four = waitingAt(game, place);
+    four.party = 4;
+    parkBefore(v, place.node);
+    expect(manualInteract(game)).toBe('seats');
+    expect(game.state.notices.at(-1)!.text).toBe('A party of 4 won’t fit in a 3-seat tuk-tuk.');
+    expect(four.claimedBy).toBeNull();
+    expect(v.task.kind).toBe('idle');
+    const pair = waitingAt(game, place);
+    pair.party = 2;
+    expect(manualPickup(game)).toBe('walking');
+    expect(pair.claimedBy).toBe(v.id);
+    expect(four.claimedBy).toBeNull();
+  });
+
+  it('a passenger walking over when the game is saved reaches the haggle after loading', () => {
+    const game = newGame();
+    const v = game.playerVehicle()!;
+    setManual(game, true);
+    const place = kerbPlace();
+    const req = waitingAt(game, place);
+    req.party = 2;
+    parkBefore(v, place.node);
+    expect(manualPickup(game)).toBe('walking');
+    game.step(WALK_OVER_S / 2);
+
+    const loaded = Game.load(world, JSON.parse(game.serialize()));
+    installSystems(loaded);
+    let haggle: { requestId: number } | null = null;
+    loaded.on('haggle', (p: { requestId: number }) => (haggle = p));
+    loaded.step(WALK_OVER_S / 2 - 1);
+    expect(haggle).toBeNull();
+    loaded.step(2);
+    expect(haggle).toEqual({ vehicleId: v.id, requestId: req.id });
+    expect(loaded.playerVehicle()!.task.kind).toBe('haggle');
+    expect(loaded.isPaused('haggle')).toBe(true);
+  });
+
   it('fills up when stopped beside a pump', () => {
     const game = newGame();
     const v = game.playerVehicle()!;

@@ -6,7 +6,7 @@ import { RANK_WAIT } from './ai';
 import { BALANCE } from './balance';
 import { repairDiscount } from './business';
 import { HOUR } from './clock';
-import { completeTrip, findRequest, refuel } from './dispatch';
+import { addReviews, completeTrip, findRequest, refuel } from './dispatch';
 import { spend } from './economy';
 import type { Game } from './game';
 import { driveManual, isManualDriven } from './manual';
@@ -39,7 +39,14 @@ export class VehicleSystem {
         }
         continue;
       }
-      if (v.task.kind === 'offduty' || v.task.kind === 'haggle' || v.task.kind === 'away') continue;
+      if (v.task.kind === 'haggle') {
+        // A kerbside haggle holds the 'haggle' pause until it is settled. Pauses are not saved, so a haggle
+        // without one (a game loaded mid-haggle) goes through the kerbside again: the player is asked again,
+        // autopilot settles it, or it ends when the passenger has gone.
+        if (!game.isPaused('haggle')) beginKerbside(game, v, v.task.requestId);
+        continue;
+      }
+      if (v.task.kind === 'offduty' || v.task.kind === 'away') continue;
       const manual = isManualDriven(game, v);
       const wasMoving = (manual ? v.speed > 0.5 : v.route !== null) && game.state.time >= v.busyUntil;
       if (manual ? driveManual(game, v, dt) : driveVehicle(game, v, dt)) this.arrive(game, v);
@@ -87,8 +94,8 @@ export class VehicleSystem {
     const repair = Math.round((game.rng.range(500, 3_000) * repairDiscount(game)) / 50) * 50;
     const hours = game.rng.range(2, 6);
     spend(game, repair, 'maintenance');
-    // A breakdown mid-trip strands the passenger: they pay nothing and leave.
-    if (v.task.kind === 'trip') game.state.ratings.push(1.5);
+    // A breakdown mid-trip strands the passenger: they pay nothing, leave and post a poor review.
+    if (v.task.kind === 'trip') addReviews(game, 1.5, 1);
     if (v.task.kind === 'pickup') {
       const req = findRequest(game, v.task.requestId);
       if (req) req.claimedBy = null;

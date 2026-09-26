@@ -98,6 +98,32 @@ describe('tutorial', () => {
     expect(tutorialState(game).lost).toBe(true);
   });
 
+  it('keeps coaching the drop-off while the first ride is out of town', () => {
+    const game = newGame(8);
+    const v = game.playerVehicle()!;
+    const gate = world.landmarks.find((l) => l.id === 'tha_phae_gate')!;
+    const zoo = world.landmarks.find((l) => l.id === 'chiang_mai_zoo')!;
+    const req = makeRequest(game, gate, zoo, 'tourist_west', 'street', calendar(game.state.time));
+    req.party = 2;
+    req.expiresAt = game.state.time + 36_000;
+    game.state.requests.push(req);
+    expect(game.playerClaim(req.id)).toBe(true);
+    stepUntil(game, () => v.task.kind === 'haggle');
+    game.playerStartTrip(req.fairFare);
+    const whileAway = new Set<string>();
+    stepUntil(
+      game,
+      () => {
+        if (v.task.kind === 'away' && v.task.trip) whileAway.add(tutorialState(game).step);
+        return tutorialState(game).step === 'paid';
+      },
+      3 * 3_600,
+    );
+    expect([...whileAway]).toEqual(['dropoff']);
+    expect(tutorialState(game).step).toBe('paid');
+    expect(tutorialState(game).lost).toBe(false);
+  });
+
   it('can be skipped and replayed', () => {
     const game = newGame(5);
     tutorialSignal(game, { kind: 'skip' });

@@ -106,6 +106,8 @@ export function workshopBlock(v: Vehicle): string | null {
       return 'Drop off the passenger first.';
     case 'haggle':
       return 'Finish agreeing the fare first.';
+    case 'away':
+      return 'Out of town — wait for the drive back.';
     case 'broken':
       return v.task.work ? 'Already in the workshop.' : 'Broken down: the mechanic is already on it.';
     default:

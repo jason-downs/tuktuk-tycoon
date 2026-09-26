@@ -10,6 +10,7 @@
 
 import { calendar } from './clock';
 import { SEASON_INDEX } from './demand';
+import { inRide } from './dispatch';
 import { businessDay } from './economy';
 import { isFestivalTime } from './events';
 import type { Game, GameSystem } from './game';
@@ -370,7 +371,7 @@ export class RivalsSystem implements GameSystem {
     if (time - st.lastNotice < NOTICE_GAP || game.state.autopilot) return;
     // Only tell the player about passengers they could have had: close to their idle or cruising tuk-tuk.
     const v = game.playerVehicle();
-    if (!v || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken') return;
+    if (!v || inRide(v) || v.task.kind === 'broken') return;
     const place = game.world.places[req.from];
     const pose = game.vehiclePose(v);
     if (Math.hypot(place.x - pose.x, place.y - pose.y) > NOTICE_RADIUS) return;
