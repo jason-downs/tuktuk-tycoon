@@ -2,7 +2,7 @@ import { Matrix4, Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { ARCHETYPES } from '../src/content/archetypes';
 import type { Archetype } from '../src/sim/types';
-import { PersonBatch, personMaterials } from '../src/world3d/batches';
+import { PersonBatch, personMaterial } from '../src/world3d/batches';
 import { triangles } from '../src/world3d/models';
 import {
   ANIM,
@@ -60,6 +60,25 @@ describe('people models', () => {
     const pos = geo.getAttribute('position');
     let top = 0;
     for (let i = 0; i < pos.count; i++) top = Math.max(top, rig.getY(i) === 0 ? pos.getY(i) : 0);
+    expect(top).toBeGreaterThan(1.6);
+    expect(top).toBeLessThan(1.72);
+  });
+
+  it('has a distant model with the same tags and the parts that shape a figure, at about half the triangles', () => {
+    const far = personGeometry(1);
+    console.log(`distant person geometry: ${triangles(far)} triangles, ${far.getAttribute('position').count} vertices`);
+    expect(triangles(far)).toBeLessThan(triangles(geo) * 0.55);
+    expect(far.getAttribute('position').count).toBeLessThan(geo.getAttribute('position').count * 0.6);
+    expect(Object.keys(far.attributes).sort()).toEqual(Object.keys(geo.attributes).sort());
+    const farRig = far.getAttribute('aRig');
+    const kept = new Set<number>();
+    let top = 0;
+    for (let i = 0; i < farRig.count; i++) {
+      kept.add(farRig.getY(i));
+      if (farRig.getY(i) === 0) top = Math.max(top, far.getAttribute('position').getY(i));
+    }
+    const shapes: (keyof typeof PART)[] = ['body', 'hairShort', 'hairBun', 'hairLong', 'bucketHat', 'sunHat', 'cap', 'conicalHat', 'helmet', 'backpack', 'bag', 'parasol', 'pole', 'suitcase', 'skirt', 'robe', 'scarf', 'apron'];
+    for (const part of shapes) expect(kept.has(PART[part])).toBe(true);
     expect(top).toBeGreaterThan(1.6);
     expect(top).toBeLessThan(1.72);
   });
@@ -182,7 +201,7 @@ describe('people poses', () => {
 describe('person batches', () => {
   it('grow in place, keeping the mesh and the instances already added', () => {
     const scene = new Scene();
-    const batch = new PersonBatch(scene, personGeometry(), personMaterials(), 2);
+    const batch = new PersonBatch(scene, personMaterial(), 2);
     const mesh = scene.children[0];
     const look = personLook('local', 1);
     const p = new Float32Array(POSE_SIZE);

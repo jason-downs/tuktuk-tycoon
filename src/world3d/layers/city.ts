@@ -1,6 +1,7 @@
 // The static city: generated layer meshes from the build worker, one mesh per
 // tile so off-screen and fogged-out tiles are culled, plus the instanced trees
-// and street props, drawn only from the grid cells in view.
+// and street props, drawn only from the grid cells in view. Buildings tiles
+// far from the camera draw a coarser triangle list over the same vertices.
 
 import { BufferAttribute, BufferGeometry, Color, Fog, Frustum, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Quaternion, Sphere, Vector3 } from 'three';
 import type { GpuMesh } from '../build/mesh';
@@ -44,6 +45,8 @@ export function geometryOf(m: GpuMesh): BufferGeometry {
 
 /** Metres beyond which window and sign tiles are not drawn (a few pixels each by then). */
 const DETAIL_RANGE = 1800;
+/** Metres beyond which a buildings tile draws its coarse triangles (a merged cell is then two or three pixels across). */
+const FAR_BUILDINGS_RANGE = 1800;
 
 const _proj = new Matrix4();
 const _sphere = new Sphere();
@@ -58,6 +61,8 @@ export class CityLayer implements WorldLayer {
   private readonly tiles: Mesh[] = [];
   /** Window and sign tiles, which also go beyond DETAIL_RANGE. */
   private readonly detail = new Set<Mesh>();
+  /** Buildings tiles, and the same tiles drawn with their coarse triangles. */
+  private readonly buildings: { near: Mesh; far: Mesh }[] = [];
   private readonly instances: CulledInstances[] = [];
   private readonly frustum = new Frustum();
 
@@ -80,7 +85,7 @@ export class CityLayer implements WorldLayer {
       if (id === 'roads') mat.depthWrite = false;
       if (id === 'water') mat.polygonOffset = false;
       this.materials[id] = mat;
-      for (const packed of pieces) {
+      const tile = (packed: GpuMesh): Mesh => {
         const m = new Mesh(geometryOf(packed), mat);
         m.frustumCulled = id !== 'ground';
         m.receiveShadow = id !== 'backdrop';
@@ -88,12 +93,34 @@ export class CityLayer implements WorldLayer {
         m.renderOrder = id === 'ground' ? -3 : id === 'water' ? -0.5 : id === 'roads' ? -1 : 0;
         scene.add(m);
         this.meshes.push(m);
-        if (id !== 'ground' && id !== 'backdrop') this.tiles.push(m);
+        return m;
+      };
+      pieces.forEach((packed, i) => {
+        const m = tile(packed);
+        if (id === 'buildings') this.buildings.push({ near: m, far: this.coarse(m, built.farBuildings[i]) });
+        else if (id !== 'ground' && id !== 'backdrop') this.tiles.push(m);
         if (id === 'windows' || id === 'glow') this.detail.add(m);
-      }
+      });
     }
     this.addTrees(built.trees);
     this.addProps(built.props);
+  }
+
+  /** A second mesh for a tile that draws `index` over the tile's own vertex buffers. */
+  private coarse(tile: Mesh, index: Uint16Array | Uint32Array): Mesh {
+    const g = new BufferGeometry();
+    for (const [name, attr] of Object.entries(tile.geometry.attributes)) g.setAttribute(name, attr);
+    g.setIndex(new BufferAttribute(index, 1));
+    g.boundingSphere = tile.geometry.boundingSphere;
+    const m = new Mesh(g, tile.material);
+    m.frustumCulled = tile.frustumCulled;
+    m.receiveShadow = tile.receiveShadow;
+    m.castShadow = tile.castShadow;
+    m.renderOrder = tile.renderOrder;
+    m.visible = false;
+    this.ctx.scene.add(m);
+    this.meshes.push(m);
+    return m;
   }
 
   /** Night factor 0 (day) … 1 (night): windows light up from inside. */
@@ -172,6 +199,12 @@ export class CityLayer implements WorldLayer {
     for (const m of this.tiles) {
       _sphere.copy(m.geometry.boundingSphere!);
       m.visible = _sphere.distanceToPoint(eye) < (this.detail.has(m) ? Math.min(far, DETAIL_RANGE) : far);
+    }
+    for (const b of this.buildings) {
+      _sphere.copy(b.near.geometry.boundingSphere!);
+      const d = _sphere.distanceToPoint(eye);
+      b.near.visible = d < Math.min(far, FAR_BUILDINGS_RANGE);
+      b.far.visible = d >= FAR_BUILDINGS_RANGE && d < far;
     }
     for (const c of this.instances) c.update(this.frustum, eye, far);
   }

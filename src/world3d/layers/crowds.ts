@@ -3,15 +3,16 @@
 // They walk at real walking pace (never faster than twice real time, so they
 // don't sprint at high game speeds), stand still while the game is paused,
 // fade in and out at the edge of the area, and are hidden when zoomed out.
+// Each has a soft blob shadow at its feet.
 
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { BASE_TIME_SCALE, calendar } from '../../sim/clock';
 import { originWeight } from '../../sim/demand';
-import { PersonBatch, personMaterials } from '../batches';
+import { BlobShadows, blobOpacity, PersonBatch, personLod, personMaterial, PERSON_BLOB_RADIUS } from '../batches';
 import { hash01 } from '../build/mesh';
 import { CrowdSim, lookEnvAt, WalkNet } from '../crowd';
 import { PAVEMENT_Y, ROAD_SURFACE_Y } from '../kinematics';
-import { ANIM, personGeometry, personLook, posePerson, POSE_SIZE } from '../personModels';
+import { ANIM, personLook, posePerson, POSE_SIZE } from '../personModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
 /** Most pedestrians drawn at once. */
@@ -32,13 +33,15 @@ export class CrowdLayer implements WorldLayer {
   readonly id = 'crowds';
   private readonly ctx: ViewContext;
   private readonly batch: PersonBatch;
+  private readonly blobs: BlobShadows;
   private readonly pose = new Float32Array(POSE_SIZE);
   private sim: CrowdSim | null = null;
   private lastTime = -1;
 
   constructor(ctx: ViewContext) {
     this.ctx = ctx;
-    this.batch = new PersonBatch(ctx.scene, personGeometry(), personMaterials(), 320);
+    this.batch = new PersonBatch(ctx.scene, personMaterial(), 320);
+    this.blobs = new BlobShadows(ctx.scene, 320);
   }
 
   update(frame: FrameInfo): void {
@@ -65,6 +68,7 @@ export class CrowdLayer implements WorldLayer {
       realDt: frame.dt,
     });
     this.batch.begin();
+    this.blobs.begin();
     if (near) {
       const env = lookEnvAt(game);
       const now = frame.now / 1000;
@@ -75,17 +79,22 @@ export class CrowdLayer implements WorldLayer {
         const phase = w.moving ? (w.dist / ((w.run ? RUN_STRIDE : STRIDE) * look.scale)) * Math.PI * 2 : hash01(w.id, 5) * Math.PI * 2;
         posePerson(anim, now, phase, look, this.pose);
         const bob = w.moving ? Math.abs(Math.sin(phase)) * 0.03 * scale : 0;
-        _p.set(w.x, (w.street ? ROAD_SURFACE_Y : PAVEMENT_Y) + bob, -w.y);
+        const ground = w.street ? ROAD_SURFACE_Y : PAVEMENT_Y;
+        const size = scale * look.scale * Math.max(0.01, w.fade);
+        _p.set(w.x, ground + bob, -w.y);
         _q.setFromAxisAngle(_up, w.yaw);
-        _s.setScalar(scale * look.scale * Math.max(0.01, w.fade));
+        _s.setScalar(size);
         _m.compose(_p, _q, _s);
-        this.batch.add(_m, look, this.pose);
+        this.batch.add(_m, look, this.pose, personLod(Math.hypot(rig.dist, w.x - rig.tx, w.y - rig.ty), size));
+        this.blobs.add(w.x, ground, -w.y, PERSON_BLOB_RADIUS * size);
       }
     }
     this.batch.flush();
+    this.blobs.flush(blobOpacity(1 - this.ctx.envState().night));
   }
 
   dispose(): void {
     this.batch.dispose();
+    this.blobs.dispose();
   }
 }

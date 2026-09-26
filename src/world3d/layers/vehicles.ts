@@ -5,16 +5,22 @@
 // smoothed corners, roll, pitch, wheel spin, kerbside queues). Each fleet
 // vehicle also has an empty Object3D that follows its rendered pose, for the
 // HUD, markers, picking and anything attached to it.
+// Each vehicle picks its detail by its own distance from the camera: beyond
+// the fog it is not drawn (fleet vehicles still move, for their stand-ins),
+// far tuk-tuks use the simple model, and riders too small to make out are
+// left out. Riders cast no shadow-map shadow: under a roof they sit in the
+// vehicle's shadow, and a scooter's riders get a blob on the road beneath.
 
-import { Color, Group, InstancedMesh, Matrix4, Quaternion, Vector3, type MeshBasicMaterial, type Object3D } from 'three';
+import { Color, Fog, Group, InstancedMesh, Matrix4, Quaternion, Vector3, type MeshBasicMaterial, type Object3D } from 'three';
 import { PAINTS } from '../../content/paints';
 import { VEHICLE_MODELS } from '../../content/vehicles';
+import type { Pose } from '../../sim/graph';
 import { RIVAL_KINDS, rivalsOf } from '../../sim/rivals';
-import { lightPoolMaterial, PersonBatch, personMaterials, VehicleBatch, vehicleMaterial } from '../batches';
+import { BlobShadows, blobOpacity, lightPoolMaterial, PersonBatch, personLod, personMaterial, VehicleBatch, vehicleMaterial } from '../batches';
 import { hash01 } from '../build/mesh';
 import { lookEnvAt } from '../crowd';
 import { edgeLanes, kerbOffset, newKinState, ROAD_SURFACE_Y, spreadParked, stepKinematics, type KinState, type ParkItem, type PathRef } from '../kinematics';
-import { ANIM, packHex, personGeometry, personLook, posePerson, POSE_SIZE, seatedLook, SIT_HIP_Y, type LookEnv, type PersonType } from '../personModels';
+import { ANIM, packHex, personLook, posePerson, POSE_SIZE, seatedLook, SIT_HIP_Y, type LookEnv, type PersonType } from '../personModels';
 import { CosmeticTraffic, trafficLevel } from '../traffic';
 import {
   AMBIENT_HALF_WIDTH,
@@ -23,6 +29,7 @@ import {
   ambientPaint,
   headlightConeGeometry,
   LIVERY_EXTRA,
+  SCOOTER_RIDER_BLOB,
   SCOOTER_SEATS,
   TUK_WHEEL_R,
   tukAccessoryGeometry,
@@ -37,10 +44,16 @@ import {
 import { partySeed, partyShare } from './people';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
-/** Camera distance (m) beyond which tuk-tuks use the simple model and extras are dropped. */
+/** Distance (m) from the camera beyond which a tuk-tuk uses the simple model and drops its extras. */
 const LOD_DIST = 900;
 /** Camera distance (m) beyond which riders and passengers are not drawn. */
 const RIDERS_DIST = 1400;
+/**
+ * Distance from the camera (m, per unit of vehicle scale) beyond which a
+ * vehicle's riders are not drawn: a seated figure is then under about 4 px
+ * tall in a 1080 px view.
+ */
+const RIDER_SIGHT = 370;
 /** Camera distance (m) beyond which the cosmetic traffic is cleared. */
 const TRAFFIC_DIST = 1200;
 /** [est] Cosmetic vehicles around the camera at the busiest hours. */
@@ -85,6 +98,8 @@ interface Drawn {
   led: number;
   speed?: number;
   riders: Rider[];
+  /** The riders sit in the open (a scooter), with no roof to shade them. */
+  open: boolean;
   fleetId: number;
 }
 
@@ -92,6 +107,7 @@ const _m = new Matrix4();
 const _seat = new Matrix4();
 const _size = new Matrix4();
 const _cone = new Matrix4();
+const _blob = new Matrix4();
 const _q = new Quaternion();
 const _up = new Vector3(0, 1, 0);
 const _p = new Vector3();
@@ -130,11 +146,14 @@ export class VehicleLayer implements WorldLayer {
   private readonly clearMaterial = vehicleMaterial({ transparent: true });
   private readonly batches = new Map<string, VehicleBatch>();
   private readonly people: PersonBatch;
+  /** Shadows of riders in the open. */
+  private readonly blobs: BlobShadows;
   private readonly cones: InstancedMesh;
   private readonly kin = new Map<number, KinState>();
   private readonly proxies = new Map<number, Group>();
   private readonly shifts = new Map<number, number>();
   private readonly pose = new Float32Array(POSE_SIZE);
+  private readonly simPose: Pose = { x: 0, y: 0, heading: 0 };
   private traffic: CosmeticTraffic | null = null;
   private lastTime = -1;
   private frameNo = 0;
@@ -151,7 +170,8 @@ export class VehicleLayer implements WorldLayer {
 
   constructor(ctx: ViewContext) {
     this.ctx = ctx;
-    this.people = new PersonBatch(ctx.scene, personGeometry(), personMaterials(), 128);
+    this.people = new PersonBatch(ctx.scene, personMaterial(), 128);
+    this.blobs = new BlobShadows(ctx.scene, 64);
     this.cones = new InstancedMesh(headlightConeGeometry(), lightPoolMaterial(), 256);
     this.cones.frustumCulled = false;
     this.cones.count = 0;
@@ -174,7 +194,8 @@ export class VehicleLayer implements WorldLayer {
     const night = this.ctx.envState().night;
     const env = lookEnvAt(game);
     const scale = this.ctx.vehicleScale();
-    const lod: 0 | 1 = rig.dist > LOD_DIST ? 1 : 0;
+    const fog = this.ctx.scene.fog;
+    const fogFar = fog instanceof Fog ? fog.far : Infinity;
 
     const items: Drawn[] = [];
     this.collectFleet(items, env.rain === true);
@@ -189,11 +210,18 @@ export class VehicleLayer implements WorldLayer {
 
     for (const b of this.batches.values()) b.begin();
     this.people.begin();
+    this.blobs.begin();
     let cones = 0;
     const graph = game.world.graph;
     const showRiders = rig.dist < RIDERS_DIST;
     const now = frame.now / 1000;
     for (const it of items) {
+      // Distance from the camera, taking the eye as rig.dist above the target.
+      const at = graph.poseAt(it.ref.arc, it.ref.s, this.simPose);
+      const view = Math.hypot(rig.dist, at.x - rig.tx, at.y - rig.ty);
+      const hidden = view > fogFar;
+      // Other traffic beyond the fog is dropped; its motion restarts when it comes back into view.
+      if (hidden && it.fleetId < 0) continue;
       let st = this.kin.get(it.key);
       if (!st) this.kin.set(it.key, (st = newKinState(hash01(it.key, 5) * Math.PI * 2)));
       st.seen = this.frameNo;
@@ -209,6 +237,8 @@ export class VehicleLayer implements WorldLayer {
         engineOn: it.engineOn,
         speed: it.speed,
       });
+      if (it.fleetId >= 0) this.syncProxy(it.fleetId, st, scale);
+      if (hidden) continue;
       _q.setFromAxisAngle(_up, st.yaw);
       _p.set(st.x, ROAD_SURFACE_Y, -st.y);
       _s.setScalar(scale);
@@ -216,20 +246,24 @@ export class VehicleLayer implements WorldLayer {
       const lit = it.lights && night > 0.25;
       const light = [lit ? 1 : 0, Math.max(lit ? 0.35 : 0, st.brake), it.sign * (0.3 + 0.7 * night), it.led * night];
       const motion = [st.spin, st.roll, st.pitch, st.heave];
-      const geoKey = it.tuk && lod ? `tuk-lod1:${it.tuk}` : it.geo;
+      const far = view > LOD_DIST;
+      const geoKey = it.tuk && far ? `tuk-lod1:${it.tuk}` : it.geo;
       this.batch(geoKey, it).add(_m, it.paint, motion, light);
-      if (!lod) for (const acc of it.accessories) this.batch(`acc:${acc}:${it.tuk}`, it, acc).add(_m, it.paint, motion, light);
+      if (!far) for (const acc of it.accessories) this.batch(`acc:${acc}:${it.tuk}`, it, acc).add(_m, it.paint, motion, light);
       if (lit && cones < 256) {
         const k = CONE_SIZE[it.tuk ? 'tuk' : it.geo.slice(4)] ?? 1;
         this.cones.setMatrixAt(cones, _cone.copy(_m).multiply(_size.makeScale(k, 1, k)));
         this.cones.setColorAt(cones, _c.setRGB(0.42, 0.36, 0.24).multiplyScalar(Math.min(1, (night - 0.25) * 2)));
         cones++;
       }
-      if (showRiders) this.placeRiders(it, env, now);
-      if (it.fleetId >= 0) this.syncProxy(it.fleetId, st, scale);
+      if (showRiders && view < RIDER_SIGHT * scale && it.riders.length) {
+        this.placeRiders(it, env, now, view, scale);
+        if (it.open) this.riderBlob(it.riders.length);
+      }
     }
     for (const b of this.batches.values()) b.flush();
     this.people.flush();
+    this.blobs.flush(blobOpacity(1 - night));
     this.cones.count = cones;
     this.cones.visible = cones > 0;
     if (cones) {
@@ -292,6 +326,7 @@ export class VehicleLayer implements WorldLayer {
         led: extra === 'ledStrips' || extra === 'lanterns' || v.upgrades.includes('led') ? (onDuty ? 1.2 : 0) : 0,
         speed: v.speed,
         riders,
+        open: false,
         fleetId: v.id,
       });
     }
@@ -326,7 +361,7 @@ export class VehicleLayer implements WorldLayer {
           const type: PersonType = (['tourist_west', 'tourist_cn', 'backpacker', 'tourist_kr', 'thai_tourist'] as const)[Math.floor(hash01(i, 7) * 5)];
           seatOrder(n, false).forEach((seat, k) => base.riders.push({ type, seed: 7000 + i * 3 + k, share: 7000 + i, anim: ANIM.sit, at: seats.seats[seat] }));
         }
-        items.push({ ...base, len: TUK_LEN[tuk], halfWidth: 0.72, kerbward: 0, geo: `tuk:${tuk}:${extra}`, tuk, paint: tukPaint(paint, tuk), wheelR: TUK_WHEEL_R, lpg: tuk !== 'ev', engineOn: true, sign: 1, led: 0 });
+        items.push({ ...base, len: TUK_LEN[tuk], halfWidth: 0.72, kerbward: 0, geo: `tuk:${tuk}:${extra}`, tuk, paint: tukPaint(paint, tuk), wheelR: TUK_WHEEL_R, lpg: tuk !== 'ev', engineOn: true, sign: 1, led: 0, open: false });
         continue;
       }
       const amb: AmbientKind =
@@ -384,6 +419,7 @@ export class VehicleLayer implements WorldLayer {
       lpg: false,
       sign: kind === 'taxi' ? 1 : 0,
       led: 0,
+      open: kind === 'scooter' || kind === 'scooterBox',
     };
   }
 
@@ -412,8 +448,8 @@ export class VehicleLayer implements WorldLayer {
     return b;
   }
 
-  /** Seated figures in the vehicle's frame: the matrix _m holds the vehicle transform. */
-  private placeRiders(it: Drawn, env: LookEnv, now: number): void {
+  /** Seated figures in the vehicle's frame: the matrix _m holds the vehicle transform, `view` its distance from the camera and `scale` its drawing scale. */
+  private placeRiders(it: Drawn, env: LookEnv, now: number, view: number, scale: number): void {
     for (const r of it.riders) {
       const look = seatedLook(personLook(r.type, r.seed, env, r.share));
       const ps = look.scale;
@@ -421,8 +457,15 @@ export class VehicleLayer implements WorldLayer {
       if (ps !== 1) _seat.multiply(_size.makeScale(ps, ps, ps));
       _seat.premultiply(_m);
       posePerson(r.anim, now, hash01(r.seed, 9) * 6.28, look, this.pose);
-      this.people.add(_seat, look, this.pose);
+      this.people.add(_seat, look, this.pose, personLod(view, scale * ps));
     }
+  }
+
+  /** Blob shadow under a scooter's riders, in the vehicle's frame held in _m. */
+  private riderBlob(riders: number): void {
+    const [x, halfLength, halfWidth] = SCOOTER_RIDER_BLOB[Math.min(riders, SCOOTER_RIDER_BLOB.length) - 1];
+    _blob.makeTranslation(x, 0, 0).multiply(_size.makeScale(halfLength, 1, halfWidth)).premultiply(_m);
+    this.blobs.addShaped(_blob);
   }
 
   private syncProxy(id: number, st: KinState, scale: number): void {
@@ -443,6 +486,7 @@ export class VehicleLayer implements WorldLayer {
     for (const b of this.batches.values()) b.dispose();
     this.batches.clear();
     this.people.dispose();
+    this.blobs.dispose();
     scene.remove(this.cones);
     (this.cones.material as MeshBasicMaterial).dispose();
     for (const g of this.proxies.values()) scene.remove(g);

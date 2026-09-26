@@ -45,6 +45,7 @@ import { PeopleLayer } from './layers/people';
 import { SignalLayer } from './layers/signals';
 import type { FrameInfo, ViewContext, WorldLayer } from './layers/types';
 import { VehicleLayer } from './layers/vehicles';
+import { ShaderWarmup } from './shaderWarmup';
 
 export interface World3DOptions {
   base: string;
@@ -169,6 +170,8 @@ export class World3DView implements GameView, ViewContext {
   private active = true;
   readonly stats: FrameStats;
   private cityLayer: CityLayer | null = null;
+  /** Compiles the shader variants the view switches between before they are drawn. */
+  private readonly shaders: ShaderWarmup;
   private tiltOffset = 0;
   private fly: { fromX: number; fromY: number; toX: number; toY: number; fromD: number; toD: number; t: number } | null = null;
   private raf = 0;
@@ -201,6 +204,8 @@ export class World3DView implements GameView, ViewContext {
 
     applyCutaway(this.modelMat, this.cutaway);
     this.env = new Environment(this);
+    this.shaders = new ShaderWarmup(this.renderer, this.scene, this.camera, this.env.sun, this.cutaway);
+    this.cleanups.push(() => this.shaders.dispose());
     this.vehicles = new VehicleLayer(this);
     this.layers.push(this.env, this.vehicles, new PeopleLayer(this), new MarkerLayer(this));
     this.layers.push(new CrowdLayer(this));
@@ -230,6 +235,7 @@ export class World3DView implements GameView, ViewContext {
       this.env.setCityMaterials(city.materials);
       this.env.onLight = (light) => city.setNight(1 - light);
       city.setNight(1 - this.env.light);
+      this.shaders.warmAll();
     });
     this.raf = requestAnimationFrame(this.frame);
     // Dev builds expose the view for console debugging and automated play-testing.
@@ -621,6 +627,8 @@ export class World3DView implements GameView, ViewContext {
     const info: FrameInfo = { now, dt, hour: calendar(this.game.state.time).hour, ui: ui.get() };
     for (const l of this.layers) l.update(info);
     this.updateCutaway();
+    // After the layers' update, so what they added this frame is compiled before it is drawn.
+    this.shaders.run();
     this.renderer.render(this.scene, this.camera);
     this.hud.draw(info, this.width, this.height, this.dpr);
     this.driveHud.draw(info, this.width, this.height, this.dpr);

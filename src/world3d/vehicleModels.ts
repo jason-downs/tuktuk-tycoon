@@ -477,6 +477,18 @@ export const SCOOTER_SEATS: V3[] = [
   [-0.56, 0.84, 0],
 ];
 
+/**
+ * Blob shadow on the road under a scooter's riders, for a rider alone and with
+ * a pillion: centre along the scooter, half-length, half-width (m). It covers
+ * the riders from the pillion's back to the rider's hands on the bars, drawn
+ * about half as large again because a blob fades out towards its rim, as the
+ * blob under a pedestrian is.
+ */
+export const SCOOTER_RIDER_BLOB: readonly (readonly [number, number, number])[] = [
+  [0.02, 0.65, 0.4],
+  [-0.16, 0.85, 0.4],
+];
+
 function songthaew(): Kit {
   const k = new Kit();
   for (const x of [1.75, -1.35]) for (const side of [-1, 1]) wheel(k, x, side * 0.8, 0.36, 0.22, '#c9ccd0', false);

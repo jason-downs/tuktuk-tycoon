@@ -108,10 +108,12 @@ export class MapView implements GameView {
     this.raf = requestAnimationFrame(this.frame);
   }
 
+  /** Tear down the map and the overlay canvas: the container can host the next MapView. */
   destroy(): void {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
     this.map.remove();
+    this.overlay.remove();
   }
 
   /** Centre the camera on a game-space point. */

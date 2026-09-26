@@ -20,6 +20,7 @@ scope.onmessage = async (e) => {
     for (const id of LAYERS) {
       for (const m of built.layers[id]) transfer.push(m.position.buffer, m.normal.buffer, m.color.buffer, m.index.buffer);
     }
+    for (const index of built.farBuildings) transfer.push(index.buffer);
     scope.postMessage({ ok: true, built, play: city.play, keep: city.keep }, transfer);
   } catch (err) {
     scope.postMessage({ ok: false, error: String(err) }, []);

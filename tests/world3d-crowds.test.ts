@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
 import type { GraphJSON } from '../src/sim/graph';
@@ -198,5 +198,49 @@ describe('crowd simulation', () => {
       return sim.walkers.map((w) => `${w.type}:${w.x.toFixed(2)},${w.y.toFixed(2)}`).join('|');
     };
     expect(run()).toBe(run());
+  });
+
+  it('does no candidate work while no one is shown, and lets the crowd fade out', () => {
+    const gate = landmark('tha_phae_gate');
+    const sim = new CrowdSim(net, world.places, 4);
+    const f = frameAt(gate, timeOf(2026, 10, 4, 18), 600);
+    for (let i = 0; i < 60; i++) sim.update(f);
+    expect(sim.walkers.length).toBeGreaterThan(20);
+    let asked = 0;
+    const query = vi.spyOn(net, 'segmentsNear');
+    try {
+      // Zoomed out: the camera still moves, but the crowd is capped at zero.
+      for (let i = 0; i < 120; i++) sim.update({ ...f, x: gate.x + i * 40, cap: 0, activity: () => (asked++, 1) });
+      expect(query).not.toHaveBeenCalled();
+    } finally {
+      query.mockRestore();
+    }
+    expect(asked).toBe(0);
+    expect(sim.walkers).toHaveLength(0);
+  });
+
+  it('finds the pavement around each place once, and refreshes only after the camera moves a good part of the radius', () => {
+    const gate = landmark('tha_phae_gate');
+    const sim = new CrowdSim(net, world.places, 6);
+    const base = frameAt(gate, timeOf(2026, 10, 4, 18), 600);
+    // A camera following a tuk-tuk at 8× moves about 30 m a frame.
+    const glide = (steps: number) => {
+      for (let i = 0; i < steps; i++) sim.update({ ...base, x: gate.x - 1500 + i * 30, y: gate.y + Math.sin(i / 40) * 200 });
+    };
+    glide(200);
+    const query = vi.spyOn(net, 'segmentsNear');
+    try {
+      glide(200);
+      const aroundCamera = query.mock.calls.filter(([, , r]) => r === base.radius).length;
+      const aroundPlaces = query.mock.calls.length - aroundCamera;
+      console.log(`crowd follow: ${aroundCamera} refreshes in 200 frames, ${aroundPlaces} place queries`);
+      // Places and pavements are fixed: the second pass over the same streets looks nothing up again.
+      expect(aroundPlaces).toBe(0);
+      // 30 m steps at a 600 m radius refresh every third frame, not every frame.
+      expect(aroundCamera).toBeGreaterThan(40);
+      expect(aroundCamera).toBeLessThan(80);
+    } finally {
+      query.mockRestore();
+    }
   });
 });

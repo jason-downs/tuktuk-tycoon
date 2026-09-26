@@ -455,6 +455,77 @@ export function clipMeshToTiles(m: PackedMesh, size: number): PackedMesh[] {
     });
 }
 
+/**
+ * A coarser triangle list over a mesh's own vertices, for viewing it from
+ * afar. Vertices are grouped by `cell`-metre cube and by facing (normals
+ * rounded to steps of 0.5 per axis); each group is stood in for by its member
+ * nearest the group's mean. Triangles that collapse, or turn to face away from
+ * their normals, are dropped, so parts smaller than a cell disappear. Faces
+ * facing different ways never share a stand-in, so flat shading holds, and
+ * the result indexes the mesh's existing vertex buffers.
+ */
+export function simplifyIndex(m: PackedMesh, cell: number): Uint32Array {
+  const P = m.position;
+  const N = m.normal;
+  const n = P.length / 3;
+  const groupOf = new Int32Array(n);
+  const ids = new Map<number, number>();
+  const sums: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const ix = Math.floor(P[i * 3] / cell) + 8192;
+    const iy = Math.floor(P[i * 3 + 1] / cell) + 256;
+    const iz = Math.floor(P[i * 3 + 2] / cell) + 8192;
+    const facing = (Math.round(N[i * 3] * 2) + 2) * 25 + (Math.round(N[i * 3 + 1] * 2) + 2) * 5 + (Math.round(N[i * 3 + 2] * 2) + 2);
+    const key = ((ix * 16384 + iz) * 512 + iy) * 128 + facing;
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = sums.length / 4;
+      ids.set(key, id);
+      sums.push(0, 0, 0, 0);
+    }
+    groupOf[i] = id;
+    sums[id * 4] += P[i * 3];
+    sums[id * 4 + 1] += P[i * 3 + 1];
+    sums[id * 4 + 2] += P[i * 3 + 2];
+    sums[id * 4 + 3]++;
+  }
+  // Each group's stand-in: the member nearest the mean.
+  const groups = sums.length / 4;
+  const rep = new Int32Array(groups).fill(-1);
+  const best = new Float64Array(groups).fill(Infinity);
+  for (let i = 0; i < n; i++) {
+    const g = groupOf[i];
+    const c = sums[g * 4 + 3];
+    const d = (P[i * 3] - sums[g * 4] / c) ** 2 + (P[i * 3 + 1] - sums[g * 4 + 1] / c) ** 2 + (P[i * 3 + 2] - sums[g * 4 + 2] / c) ** 2;
+    if (d < best[g]) {
+      best[g] = d;
+      rep[g] = i;
+    }
+  }
+  const out: number[] = [];
+  for (let t = 0; t < m.index.length; t += 3) {
+    const i0 = m.index[t];
+    const i1 = m.index[t + 1];
+    const i2 = m.index[t + 2];
+    const a = rep[groupOf[i0]];
+    const b = rep[groupOf[i1]];
+    const c = rep[groupOf[i2]];
+    if (a === b || b === c || a === c) continue;
+    const ux = P[b * 3] - P[a * 3];
+    const uy = P[b * 3 + 1] - P[a * 3 + 1];
+    const uz = P[b * 3 + 2] - P[a * 3 + 2];
+    const vx = P[c * 3] - P[a * 3];
+    const vy = P[c * 3 + 1] - P[a * 3 + 1];
+    const vz = P[c * 3 + 2] - P[a * 3 + 2];
+    const nx = N[i0 * 3] + N[i1 * 3] + N[i2 * 3];
+    const ny = N[i0 * 3 + 1] + N[i1 * 3 + 1] + N[i2 * 3 + 1];
+    const nz = N[i0 * 3 + 2] + N[i1 * 3 + 2] + N[i2 * 3 + 2];
+    if (!((uy * vz - uz * vy) * nx + (uz * vx - ux * vz) * ny + (ux * vy - uy * vx) * nz > 1e-9)) continue;
+    out.push(a, b, c);
+  }
+  return new Uint32Array(out);
+}
+
 /** A mesh as uploaded to the GPU: normals packed into signed bytes, and 16-bit indices where they fit. */
 export interface GpuMesh {
   position: Float32Array;
@@ -466,8 +537,12 @@ export interface GpuMesh {
 export function gpuMesh(m: PackedMesh): GpuMesh {
   const normal = new Int8Array(m.normal.length);
   for (let i = 0; i < normal.length; i++) normal[i] = Math.round(Math.max(-1, Math.min(1, m.normal[i])) * 127);
-  const index = m.position.length / 3 <= 65536 ? Uint16Array.from(m.index) : m.index;
-  return { position: m.position, normal, color: m.color, index };
+  return { position: m.position, normal, color: m.color, index: gpuIndex(m.index, m.position.length / 3) };
+}
+
+/** An index buffer as uploaded to the GPU: 16-bit when the mesh has few enough vertices. */
+export function gpuIndex(index: Uint32Array, vertices: number): Uint16Array | Uint32Array {
+  return vertices <= 65536 ? Uint16Array.from(index) : index;
 }
 
 // ------------------------------------------------------------------ colour

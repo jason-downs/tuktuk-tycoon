@@ -24,6 +24,13 @@ export const WALK_LINK_PROP = 'walk_link';
 const GRID = 48;
 /** Cell size (m) of the place index. */
 const PLACE_CELL = 250;
+/** A place's pull on the pavement reaches this many times its spread radius. */
+const PULL_REACH = 2.2;
+/** Monks start their alms round within this distance (m) of a temple. */
+const TEMPLE_REACH = 300;
+/** The spawn candidates are rebuilt once the camera target has moved this far (m), or this share of the crowd radius. */
+const REFRESH_MOVE = 30;
+const REFRESH_MOVE_SHARE = 0.15;
 
 /** Pavement runs as a flat vertex list: vertex i joins i+1 when len[i] > 0. */
 export class WalkNet {
@@ -188,6 +195,18 @@ const WIDE_PLACES: Record<string, number> = {
 
 const inHours = (h: number, a: number, b: number) => h >= a && h < b;
 
+/** Radius (m) over which a place's pull on the pavement falls off. */
+const spreadOf = (p: Place): number => WIDE_PLACES[p.id] ?? (p.landmark ? 160 : 70);
+
+/** Pavement segments (start vertices) a place reaches, the falloff of its pull on each, and for a temple those monks start from. */
+interface PlaceReach {
+  segs: Int32Array;
+  falloff: Float64Array;
+  temple: Int32Array;
+}
+
+const NO_SEGMENTS = new Int32Array(0);
+
 /** Is a walking-street run open (stalls out, traffic off) at this time? */
 export function walkingStreetOpen(kind: number, cal: CalendarInfo): boolean {
   if (kind === WALK_KIND.sunday) return cal.weekday === 0 && inHours(cal.hour, 16, 23);
@@ -221,11 +240,16 @@ export class CrowdSim {
   private candTotal = 0;
   private candCat: (string | null)[] = [];
   private candAt = { x: NaN, y: NaN, r: 0, hour: -1, day: -1 };
+  /** Candidate slot of each segment start vertex while it is a candidate, else −1. */
+  private readonly slotOf: Int32Array;
+  /** Per place (by index), filled on first use: the pavement it pulls on, and for temples the pavement monks start from. */
+  private readonly reach: (PlaceReach | undefined)[] = [];
 
   constructor(net: WalkNet, places: Place[], seed = 1) {
     this.net = net;
     this.places = places;
     this.n = seed * 104_729;
+    this.slotOf = new Int32Array(net.n).fill(-1);
     for (const p of places) {
       const key = (Math.floor(p.x / PLACE_CELL) + 10_000) * 100_000 + (Math.floor(p.y / PLACE_CELL) + 10_000);
       let list = this.placeGrid.get(key);
@@ -244,7 +268,8 @@ export class CrowdSim {
   }
 
   update(f: CrowdFrame): void {
-    this.refreshCandidates(f);
+    // With no one to show (zoomed out), the candidates are not needed until the crowd returns.
+    if (f.cap > 0) this.refreshCandidates(f);
     const target = Math.min(f.cap, Math.round(this.demand()));
     const keep = f.radius * 1.2;
     let alive = 0;
@@ -257,11 +282,13 @@ export class CrowdSim {
     }
     // Too many: fade out the farthest leaders (their groups go with them).
     if (alive > target + 6) {
+      const followers = new Map<Walker, number>();
+      for (const w of this.walkers) if (w.leader && !w.dying) followers.set(w.leader, (followers.get(w.leader) ?? 0) + 1);
       const leaders = this.walkers.filter((w) => !w.dying && !w.leader).sort((a, b) => Math.hypot(b.x - f.x, b.y - f.y) - Math.hypot(a.x - f.x, a.y - f.y));
       for (let k = 0; k < leaders.length && alive > target; k++) {
         const w = leaders[k];
         w.dying = true;
-        alive -= 1 + this.walkers.filter((o) => o.leader === w).length;
+        alive -= 1 + (followers.get(w) ?? 0);
       }
     }
     for (let k = 0; k < 6 && alive < target && this.candTotal > 0; k++) alive += this.spawn(f, target - alive);
@@ -276,42 +303,41 @@ export class CrowdSim {
   private refreshCandidates(f: CrowdFrame): void {
     const at = this.candAt;
     const hour = Math.floor(f.cal.hour * 4) / 4;
-    if (Math.hypot(f.x - at.x, f.y - at.y) < 30 && Math.abs(f.radius - at.r) < at.r * 0.15 && hour === at.hour && f.cal.day === at.day) return;
+    const move = Math.max(REFRESH_MOVE, f.radius * REFRESH_MOVE_SHARE);
+    if (Math.hypot(f.x - at.x, f.y - at.y) < move && Math.abs(f.radius - at.r) < at.r * 0.15 && hour === at.hour && f.cal.day === at.day) return;
     this.candAt = { x: f.x, y: f.y, r: f.radius, hour, day: f.cal.day };
     const net = this.net;
+    const slot = this.slotOf;
+    for (const seg of this.cand) slot[seg] = -1;
     const segs = net.segmentsNear(f.x, f.y, f.radius, []).filter((i) => walkingStreetOpen(net.kind[i], f.cal));
-    const slot = new Map<number, number>();
-    segs.forEach((seg, j) => slot.set(seg, j));
+    segs.forEach((seg, j) => (slot[seg] = j));
     const pull = new Float32Array(segs.length);
     const bestPull = new Float32Array(segs.length).fill(0.05);
     const cats: (string | null)[] = new Array(segs.length).fill(null);
     const temple: boolean[] = new Array(segs.length).fill(false);
     // Spread each nearby place's pull over the pavement around it.
-    const reach = f.radius + 2.2 * 420;
+    const reach = f.radius + PULL_REACH * 420;
     const c0x = Math.floor((f.x - reach) / PLACE_CELL);
     const c1x = Math.floor((f.x + reach) / PLACE_CELL);
     const c0y = Math.floor((f.y - reach) / PLACE_CELL);
     const c1y = Math.floor((f.y + reach) / PLACE_CELL);
-    const near: number[] = [];
     for (let cx = c0x; cx <= c1x; cx++) {
       for (let cy = c0y; cy <= c1y; cy++) {
         for (const idx of this.placeGrid.get((cx + 10_000) * 100_000 + (cy + 10_000)) ?? []) {
           const p = this.places[idx];
-          const R = WIDE_PLACES[p.id] ?? (p.landmark ? 160 : 70);
-          if (Math.hypot(p.x - f.x, p.y - f.y) > f.radius + 2.2 * R) continue;
-          if (p.cat === 'temple') {
-            for (const seg of net.segmentsNear(p.x, p.y, 300, near)) {
-              const j = slot.get(seg);
-              if (j !== undefined) temple[j] = true;
-            }
+          const R = spreadOf(p);
+          if (Math.hypot(p.x - f.x, p.y - f.y) > f.radius + PULL_REACH * R) continue;
+          const r = this.placeReach(idx);
+          for (let n = 0; n < r.temple.length; n++) {
+            const j = slot[r.temple[n]];
+            if (j >= 0) temple[j] = true;
           }
           const a = Math.min(40, Math.max(0, f.activity(p)));
           if (a <= 0) continue;
-          for (const seg of net.segmentsNear(p.x, p.y, 2.2 * R, near)) {
-            const j = slot.get(seg);
-            if (j === undefined) continue;
-            const d = Math.hypot((net.x[seg] + net.x[seg + 1]) / 2 - p.x, (net.y[seg] + net.y[seg + 1]) / 2 - p.y);
-            const k = (a / 8) * Math.exp(-((d / R) ** 2)) * 0.5;
+          for (let n = 0; n < r.segs.length; n++) {
+            const j = slot[r.segs[n]];
+            if (j < 0) continue;
+            const k = (a / 8) * r.falloff[n] * 0.5;
             pull[j] += k;
             if (k > bestPull[j]) {
               bestPull[j] = k;
@@ -333,6 +359,25 @@ export class CrowdSim {
       this.candW[j] = total;
     }
     this.candTotal = total;
+  }
+
+  /** The pavement a place pulls on (with its falloff) and, for a temple, the pavement near it; both fixed, so found once. */
+  private placeReach(idx: number): PlaceReach {
+    let r = this.reach[idx];
+    if (r) return r;
+    const net = this.net;
+    const p = this.places[idx];
+    const R = spreadOf(p);
+    const segs = net.segmentsNear(p.x, p.y, PULL_REACH * R, []);
+    const falloff = new Float64Array(segs.length);
+    segs.forEach((seg, n) => {
+      const d = Math.hypot((net.x[seg] + net.x[seg + 1]) / 2 - p.x, (net.y[seg] + net.y[seg + 1]) / 2 - p.y);
+      falloff[n] = Math.exp(-((d / R) ** 2));
+    });
+    const temple = p.cat === 'temple' ? Int32Array.from(net.segmentsNear(p.x, p.y, TEMPLE_REACH, [])) : NO_SEGMENTS;
+    r = { segs: Int32Array.from(segs), falloff, temple };
+    this.reach[idx] = r;
+    return r;
   }
 
   private pickCandidate(filter?: (k: number) => boolean): number {
