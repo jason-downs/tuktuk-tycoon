@@ -15,6 +15,7 @@ import {
   GarageSystem,
   PAINT_HOURS,
   SERVICE_THB_PER_POINT,
+  WORN_WARNING,
   canConvertToEv,
   canInstall,
   canRepaint,
@@ -309,6 +310,34 @@ describe('service & repair', () => {
     expect(worn.condition).toBe(100);
     expect(worn.task.kind).toBe('offduty');
   });
+
+  it('warns once when a tuk-tuk wears out, unless the service policy will send it in', () => {
+    const game = garageGame();
+    const warnings = () => game.state.notices.filter((n) => n.text.includes('worn out')).map((n) => n.text);
+    const own = game.playerVehicle()!;
+    const hired = game.spawnVehicle('lpg_used', landmark('maya').node, { condition: 90 });
+    hire(game, hired, 'night');
+    own.condition = WORN_WARNING + 1;
+    run(game, 2 * MINUTE);
+    expect(warnings()).toEqual([]);
+    own.condition = WORN_WARNING - 1;
+    hired.condition = WORN_WARNING - 1;
+    run(game, 5 * MINUTE);
+    // Both warn (the policy is off), each once.
+    expect(warnings().length).toBe(2);
+    expect(warnings()[0]).toContain(own.name);
+    // Serviced back up, then worn down again: a fresh warning for the player's own tuk-tuk only,
+    // since the hired one is now covered by the policy.
+    setAutoService(game, 40);
+    own.condition = 100;
+    hired.condition = 100;
+    run(game, 2 * MINUTE);
+    own.condition = WORN_WARNING - 5;
+    hired.condition = WORN_WARNING - 5;
+    run(game, 2 * MINUTE);
+    expect(warnings().length).toBe(3);
+    expect(warnings()[2]).toContain(own.name);
+  });
 });
 
 describe('paint shop', () => {
@@ -443,7 +472,8 @@ describe('saves', () => {
     delete state.systems[GARAGE_ID];
     const loaded = Game.load(world, state);
     installSystems(loaded);
-    expect(garageState(loaded)).toEqual({ jobs: [], autoService: null });
+    // The same defaults a brand-new game starts with.
+    expect(garageState(loaded)).toEqual(garageState(garageGame()));
     run(loaded, 10 * MINUTE);
     expect(loaded.state.time).toBeGreaterThan(game.state.time);
   });

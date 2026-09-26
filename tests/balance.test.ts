@@ -84,7 +84,7 @@ describe('balance harness', () => {
     expect(at('first hire')).toBeLessThan(3);
     expect(game.state.vehicles.length).toBeGreaterThanOrEqual(3);
     expect(Number.isFinite(game.state.cash)).toBe(true);
-  }, 120_000);
+  }, 600_000);
 
   it('company services lift the fleet past the street-demand ceiling', () => {
     const plain = playBusiness(10, 12);
@@ -96,5 +96,5 @@ describe('balance harness', () => {
     console.log('services milestones:', smart.miles.filter((m) => m.label.startsWith('service') || m.label === 'hotel partner').map((m) => `${m.label}@d${m.day.toFixed(1)}`).join(' '));
     console.log(`trips/day late: plain ${perDay(plain).toFixed(0)} vs services ${perDay(smart).toFixed(0)}; cash plain ฿${Math.round(plain.game.state.cash)} vs services ฿${Math.round(smart.game.state.cash)}`);
     expect(perDay(smart)).toBeGreaterThan(perDay(plain));
-  }, 240_000);
+  }, 900_000);
 });

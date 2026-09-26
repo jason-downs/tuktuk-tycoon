@@ -8,6 +8,7 @@ const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', impor
 
 describe('3D city generation', () => {
   const built = buildCity(city);
+  const tiled = tileCity(built);
 
   it('produces every layer with sane buffers', () => {
     for (const id of LAYERS) {
@@ -40,7 +41,6 @@ describe('3D city generation', () => {
   });
 
   it('splits the static layers into tiles without losing or moving a triangle', () => {
-    const tiled = tileCity(built);
     for (const id of LAYERS) {
       const whole = built.layers[id];
       const pieces = tiled.layers[id];
@@ -69,7 +69,7 @@ describe('3D city generation', () => {
   });
 
   it('cuts the painter-ordered roads layer at tile edges: no tile reaches into another, and no area is lost', () => {
-    const pieces = tileCity(built).layers.roads;
+    const pieces = tiled.layers.roads;
     const eps = 1e-3;
     let area = 0;
     for (const p of pieces) {

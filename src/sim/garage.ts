@@ -41,6 +41,10 @@ export const PAINT_HOURS = 2;
 export const MIN_REPAINT = 1_500;
 /** Condition thresholds offered for the fleet's automatic service policy. */
 export const AUTO_SERVICE_OPTIONS = [40, 60, 80] as const;
+/** Condition % at which the owner is told a tuk-tuk needs a service, before passengers mark it down (below 30 %). */
+export const WORN_WARNING = 35;
+/** Condition % a warned tuk-tuk climbs back above (after a service) before it can warn again. */
+const WORN_REARM = 60;
 /** [pacing] Upgrades with night effects count trips that start 19:00–04:00. */
 export const NIGHT_FROM_HOUR = 19;
 export const NIGHT_TO_HOUR = 4;
@@ -61,6 +65,8 @@ export interface GarageState {
   jobs: WorkshopJob[];
   /** Hired drivers' tuk-tuks below this condition % go in for a service when their shift ends; null = off. */
   autoService: number | null;
+  /** Tuk-tuks the owner has been warned about as worn out (ids). */
+  warnedWorn: number[];
 }
 
 /** The garage's saved state, with missing fields defaulted (older saves). */
@@ -72,6 +78,7 @@ export function garageState(game: Game): GarageState {
   }
   if (!Array.isArray(s.jobs)) s.jobs = [];
   if (typeof s.autoService !== 'number') s.autoService = null;
+  if (!Array.isArray(s.warnedWorn)) s.warnedWorn = [];
   return s as GarageState;
 }
 
@@ -381,7 +388,31 @@ export class GarageSystem implements GameSystem {
         v.task = { kind: 'idle' };
       }
     }
-    // The policy is checked once per game minute, on minute boundaries so reloaded games match.
-    if (s.autoService !== null && Math.floor(now / MINUTE) !== Math.floor((now - dt) / MINUTE)) autoService(game, s.autoService);
+    // The policy and the wear warnings are checked once per game minute, on minute boundaries so reloaded games match.
+    if (Math.floor(now / MINUTE) === Math.floor((now - dt) / MINUTE)) return;
+    if (s.autoService !== null) autoService(game, s.autoService);
+    warnWorn(game, s);
   }
+}
+
+/**
+ * Tell the owner once when a tuk-tuk wears down to WORN_WARNING, unless the fleet service policy will send it in
+ * anyway (hired drivers' tuk-tuks with a policy set). The warning re-arms once the tuk-tuk is back above WORN_REARM.
+ */
+function warnWorn(game: Game, s: GarageState): void {
+  for (const v of game.state.vehicles) {
+    const warned = s.warnedWorn.includes(v.id);
+    if (v.condition > WORN_REARM) {
+      if (warned) s.warnedWorn = s.warnedWorn.filter((id) => id !== v.id);
+      continue;
+    }
+    if (warned || v.condition >= WORN_WARNING || vehicleJob(game, v)) continue;
+    const driver = v.driverId !== null ? game.driver(v.driverId) : undefined;
+    if (driver && !driver.isPlayer && s.autoService !== null) continue;
+    s.warnedWorn.push(v.id);
+    const pose = game.vehiclePose(v);
+    game.notify(`🔧 ${v.name} is worn out (${Math.round(v.condition)}%). Below 30% passengers mark it down and it breaks down more: book a service in the Garage.`, 'bad', pose.x, pose.y);
+  }
+  // Tuk-tuks that left the fleet.
+  if (s.warnedWorn.some((id) => !game.vehicle(id))) s.warnedWorn = s.warnedWorn.filter((id) => game.vehicle(id));
 }
