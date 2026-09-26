@@ -4,7 +4,7 @@
 import { BufferAttribute, BufferGeometry, Color, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Quaternion, Vector3 } from 'three';
 import type { PackedMesh } from '../build/mesh';
 import { LAYERS, TREE_KINDS, type BuiltCity, type LayerId } from '../build/world';
-import { treeGeometry } from '../models';
+import { treeGeometry } from '../treeModels';
 import { PROP_MODELS } from '../propModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
@@ -34,12 +34,14 @@ export function geometryOf(m: PackedMesh): BufferGeometry {
 
 export class CityLayer implements WorldLayer {
   readonly id = 'city';
+  readonly built: BuiltCity;
   readonly materials: Partial<Record<LayerId, MeshLambertMaterial>> = {};
   private readonly ctx: ViewContext;
   private readonly meshes: Mesh[] = [];
 
   constructor(ctx: ViewContext, built: BuiltCity) {
     this.ctx = ctx;
+    this.built = built;
     const { scene } = ctx;
     for (const id of LAYERS) {
       const packed = built.layers[id];

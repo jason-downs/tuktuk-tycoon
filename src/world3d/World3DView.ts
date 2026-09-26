@@ -90,7 +90,7 @@ export class World3DView implements GameView, ViewContext {
   private readonly vehicles: VehicleLayer;
   private readonly layers: WorldLayer[] = [];
   private readonly hud: Hud;
-  private city: CityLayer | null = null;
+  private cityLayer: CityLayer | null = null;
   private tiltOffset = 0;
   private fly: { fromX: number; fromY: number; toX: number; toY: number; fromD: number; toD: number; t: number } | null = null;
   private raf = 0;
@@ -139,10 +139,10 @@ export class World3DView implements GameView, ViewContext {
     loadCityMeshes(opts.base).then(
       (res) => {
         if (this.destroyed) return;
-        this.city = new CityLayer(this, res.built);
-        this.layers.push(this.city);
-        if (this.city.materials.backdrop) this.env.setBackdropMaterial(this.city.materials.backdrop);
-        const city = this.city;
+        const city = new CityLayer(this, res.built);
+        this.cityLayer = city;
+        this.layers.push(city);
+        if (city.materials.backdrop) this.env.setBackdropMaterial(city.materials.backdrop);
         this.env.onLight = (light) => city.setNight(1 - light);
         city.setNight(1 - this.env.light);
         this.hud.loading = false;
@@ -227,6 +227,14 @@ export class World3DView implements GameView, ViewContext {
 
   vehicleMesh(id: number): Mesh | undefined {
     return this.vehicles.meshOf(id);
+  }
+
+  city(): BuiltCity | null {
+    return this.cityLayer?.built ?? null;
+  }
+
+  addLayer(layer: WorldLayer): void {
+    this.layers.push(layer);
   }
 
   // ---------------------------------------------------------------- setup

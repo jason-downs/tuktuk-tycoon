@@ -2,13 +2,13 @@
 // primitives with vertex colours. Models face +X (the sim heading 0 = east);
 // Y is up; the origin is on the ground under the model's centre.
 
-import { BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, IcosahedronGeometry, Matrix4, SphereGeometry, ConeGeometry } from 'three';
+import { BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Float32BufferAttribute, Matrix4, SphereGeometry } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARCHETYPES } from '../content/archetypes';
 import { PAINTS } from '../content/paints';
 import type { Archetype } from '../sim/types';
 
-type Part = { geo: BufferGeometry; color: string };
+export type Part = { geo: BufferGeometry; color: string };
 
 function painted(geo: BufferGeometry, color: string): BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -25,13 +25,13 @@ function painted(geo: BufferGeometry, color: string): BufferGeometry {
   return g;
 }
 
-function boxAt(w: number, h: number, d: number, x: number, y: number, z: number, color: string, rotY = 0): Part {
+export function boxAt(w: number, h: number, d: number, x: number, y: number, z: number, color: string, rotY = 0): Part {
   const g = new BoxGeometry(w, h, d);
   g.applyMatrix4(new Matrix4().makeRotationY(rotY).setPosition(x, y, z));
   return { geo: g, color };
 }
 
-function cylAt(r: number, h: number, x: number, y: number, z: number, color: string, axis: 'x' | 'y' | 'z' = 'y', seg = 8, rTop = r): Part {
+export function cylAt(r: number, h: number, x: number, y: number, z: number, color: string, axis: 'x' | 'y' | 'z' = 'y', seg = 8, rTop = r): Part {
   const g = new CylinderGeometry(rTop, r, h, seg);
   const m = new Matrix4();
   if (axis === 'z') m.makeRotationX(Math.PI / 2);
@@ -41,7 +41,7 @@ function cylAt(r: number, h: number, x: number, y: number, z: number, color: str
   return { geo: g, color };
 }
 
-function build(parts: Part[]): BufferGeometry {
+export function build(parts: Part[]): BufferGeometry {
   const merged = mergeGeometries(parts.map((p) => painted(p.geo, p.color)));
   merged.computeBoundingSphere();
   return merged;
@@ -210,47 +210,4 @@ let armGeo: BufferGeometry | null = null;
 export function armGeometry(): BufferGeometry {
   if (!armGeo) armGeo = build([boxAt(0.1, 0.5, 0.1, 0, -0.25, 0, '#ffffff')]);
   return armGeo;
-}
-
-/** Tree geometries per kind, ~30–60 triangles each, trunk base at the origin. */
-export function treeGeometry(kind: string): BufferGeometry {
-  const trunk = '#5b4a3a';
-  switch (kind) {
-    case 'rain': {
-      const crown = new IcosahedronGeometry(1, 1);
-      crown.scale(7.5, 2.8, 7.5);
-      crown.translate(0, 7, 0);
-      return build([cylAt(0.35, 6, 0, 3, 0, trunk, 'y', 6, 0.25), { geo: crown, color: '#4a7a37' }]);
-    }
-    case 'palm': {
-      const parts: Part[] = [cylAt(0.18, 9, 0, 4.5, 0, '#8a7b66', 'y', 5, 0.14)];
-      for (let i = 0; i < 7; i++) {
-        const leaf = new BoxGeometry(3.4, 0.08, 0.7);
-        leaf.translate(1.6, 0, 0);
-        leaf.applyMatrix4(new Matrix4().makeRotationZ(-0.35));
-        leaf.applyMatrix4(new Matrix4().makeRotationY((i / 7) * Math.PI * 2));
-        leaf.translate(0, 9, 0);
-        parts.push({ geo: leaf, color: '#6a9a3a' });
-      }
-      return build(parts);
-    }
-    case 'yang': {
-      const crown = new IcosahedronGeometry(1, 0);
-      crown.scale(5, 3.5, 5);
-      crown.translate(0, 21, 0);
-      return build([cylAt(0.45, 20, 0, 10, 0, '#7d746a', 'y', 6, 0.3), { geo: crown, color: '#557d3a' }]);
-    }
-    case 'bodhi': {
-      const crown = new IcosahedronGeometry(1, 1);
-      crown.scale(6.5, 4.5, 6.5);
-      crown.translate(0, 7.5, 0);
-      return build([cylAt(0.55, 5.5, 0, 2.75, 0, trunk, 'y', 6, 0.4), { geo: crown, color: '#5d8f3c' }]);
-    }
-    default: {
-      const crown = new IcosahedronGeometry(1, 0);
-      crown.scale(3.4, 3.4, 3.4);
-      crown.translate(0, 5.2, 0);
-      return build([cylAt(0.25, 3.6, 0, 1.8, 0, trunk, 'y', 5, 0.18), { geo: crown, color: '#5f8f3c' }]);
-    }
-  }
 }
