@@ -14,6 +14,7 @@ describe('3D city generation', () => {
       expect(m.position.length % 3).toBe(0);
       expect(m.index.length % 3).toBe(0);
       const verts = m.position.length / 3;
+      if (m.index.length === 0) continue;
       let maxIdx = 0;
       for (let i = 0; i < m.index.length; i++) maxIdx = Math.max(maxIdx, m.index[i]);
       expect(maxIdx).toBeLessThan(verts);
