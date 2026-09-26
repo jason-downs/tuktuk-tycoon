@@ -56,6 +56,16 @@ export class CityLayer implements WorldLayer {
       m.receiveShadow = id !== 'backdrop';
       m.castShadow = id === 'buildings' || id === 'structures';
       m.renderOrder = id === 'ground' ? -3 : id === 'water' ? -2 : id === 'roads' ? -1 : 0;
+      // The roads layer is the ground paint: it draws in painter's order without depth
+      // writes, so its overlapping flat pieces never z-fight. Sunken water draws after it
+      // and shows through the ground's holes, over any paint that strays across them; its
+      // steep banks take no polygon offset, which would pull their top edges up through
+      // bridge decks.
+      if (id === 'roads') mat.depthWrite = false;
+      if (id === 'water') {
+        m.renderOrder = -0.5;
+        mat.polygonOffset = false;
+      }
       scene.add(m);
       this.meshes.push(m);
     }
