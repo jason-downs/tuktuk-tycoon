@@ -9,6 +9,7 @@ import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { ui } from '../ui/store';
+import { OVERLAY_PAINTERS, type PaintContext } from './painters';
 import { buildStyle } from './style';
 import { TUKTUK_SPRITE_H, TUKTUK_SPRITE_W, emojiImage, onewayArrow, passengerBadge, tuktukSprite } from './sprites';
 
@@ -320,6 +321,17 @@ export class MapView {
     const night = daylight(calendar(game.state.time).hour) < 0.5;
     const player = game.playerVehicle();
 
+    const pc: PaintContext = {
+      ctx,
+      game,
+      width: w / this.dpr,
+      height: h / this.dpr,
+      zoom: this.map.getZoom(),
+      now,
+      toScreen: (x, y) => this.screenOf(x, y),
+    };
+    for (const p of OVERLAY_PAINTERS) if (p.layer === 'under') p.paint(pc);
+
     // Routes: player's (or selected vehicle's) remaining route.
     const routeVehicle = s.selectedVehicle !== null ? game.vehicle(s.selectedVehicle) : player;
     if (routeVehicle?.route) this.drawRoute(routeVehicle, routeVehicle === player ? '#e0457b' : '#3d6fb6');
@@ -347,6 +359,7 @@ export class MapView {
       if (sp.x < -60 || sp.y < -60 || sp.x > w / this.dpr + 60 || sp.y > h / this.dpr + 60) continue;
       this.drawTukTuk(v, sp.x, sp.y, pose.heading, len, night, v === player, v.id === s.selectedVehicle);
     }
+    for (const p of OVERLAY_PAINTERS) if (p.layer === 'over') p.paint(pc);
   }
 
   private drawRoute(v: Vehicle, color: string): void {

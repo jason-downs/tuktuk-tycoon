@@ -134,6 +134,7 @@ function rateTrip(game: Game, v: Vehicle, trip: Trip, driver: Driver | null): nu
   const charm = driver ? (driver.charm - 50) / 100 : 0;
   let rating = 4.2 + speedScore + priceScore + charm + game.rng.gauss() * 0.3;
   for (const up of v.upgrades) rating += game.upgradeComfort(up);
+  for (const m of game.ratingModifiers) rating += m(v, trip);
   if (v.condition < 30) rating -= 0.4;
   return Math.max(1, Math.min(5, rating));
 }

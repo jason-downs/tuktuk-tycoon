@@ -9,7 +9,7 @@ import { EconomySystem } from './economy';
 import type { Pose } from './graph';
 import { sendTo } from './movement';
 import { Rng } from './rng';
-import type { Driver, GameState, Notice, Place, RideRequest, Vehicle } from './types';
+import type { Driver, GameState, Notice, Place, RideRequest, Trip, Vehicle } from './types';
 import { VehicleSystem } from './vehicles';
 
 export const SAVE_VERSION = 1;
@@ -24,6 +24,10 @@ export interface GameSystem {
 
 export type SpeedModifier = (roadClass: number, cal: CalendarInfo) => number;
 export type FareModifier = (origin: Place, cal: CalendarInfo) => number;
+/** Added to a finished trip's 1–5 rating (paint jobs, events, weather…). */
+export type RatingModifier = (vehicle: Vehicle, trip: Trip) => number;
+/** Extra reasons a vehicle may notice a request (dispatch radio, hotel desks…); return true to reveal it. */
+export type SightRule = (vehicle: Vehicle, req: RideRequest) => boolean;
 
 type Listener = (payload: any) => void;
 
@@ -45,6 +49,10 @@ export class Game {
   readonly demandModifiers: DemandModifier[] = [];
   readonly fareModifiers: FareModifier[] = [];
   readonly speedModifiers: SpeedModifier[] = [];
+  readonly ratingModifiers: RatingModifier[] = [];
+  readonly sightRules: SightRule[] = [];
+  /** Extra EV charging places (e.g. company depots) beyond the public mall chargers. */
+  readonly extraChargers: (() => Place[])[] = [];
   readonly systems: GameSystem[] = [];
   private readonly demand = new DemandSystem();
   private readonly vehicleSystem = new VehicleSystem();
@@ -258,7 +266,8 @@ export class Game {
 
   /** Public chargers for EVs: the big malls (Central, Maya, Promenada…). */
   chargers(): Place[] {
-    return this.world.places.filter((p) => p.cat === 'mall' && p.landmark);
+    const extra = this.extraChargers.flatMap((f) => f());
+    return [...this.world.places.filter((p) => p.cat === 'mall' && p.landmark), ...extra];
   }
 
   baseOriginTotal(): number {
@@ -300,7 +309,8 @@ export class Game {
     if (req.channel !== 'street') return true;
     const from = this.world.places[req.from];
     const pose = this.vehiclePose(v);
-    return Math.hypot(from.x - pose.x, from.y - pose.y) <= this.sightRadius(v);
+    if (Math.hypot(from.x - pose.x, from.y - pose.y) <= this.sightRadius(v)) return true;
+    return this.sightRules.some((rule) => rule(v, req));
   }
 
   /** Requests the player can see on the map: anything any fleet tuk-tuk can see. */

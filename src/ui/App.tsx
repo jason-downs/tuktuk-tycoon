@@ -7,6 +7,7 @@ import type { Game } from '../sim/game';
 import type { Notice } from '../sim/types';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
+import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
 
@@ -63,6 +64,9 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
         <PlaceCard game={game} />
       </div>
       <PanelHost game={game} view={view} />
+      {OVERLAYS.map(({ id, component: Overlay }) => (
+        <Overlay key={id} game={game} view={view} />
+      ))}
       <Toasts game={game} view={view} />
       <HaggleDialog game={game} />
     </div>
