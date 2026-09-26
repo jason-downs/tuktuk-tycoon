@@ -11,8 +11,22 @@ import type { Ring } from './shapes';
 export type LayerId = 'ground' | 'water' | 'roads' | 'buildings' | 'structures' | 'backdrop' | 'windows' | 'glow';
 export const LAYERS: LayerId[] = ['backdrop', 'ground', 'water', 'roads', 'structures', 'buildings', 'windows', 'glow'];
 
-/** Tree kinds used by the instanced tree models. */
-export const TREE_KINDS = ['rain', 'round', 'palm', 'yang', 'bodhi'] as const;
+/** Tree kinds used by the instanced tree models (src/world3d/treeModels.ts); 'round' is a generic yard tree, 'palm' a coconut. */
+export const TREE_KINDS = [
+  'rain',
+  'round',
+  'palm',
+  'yang',
+  'bodhi',
+  'banyan',
+  'teak',
+  'sugar_palm',
+  'royal_palm',
+  'frangipani',
+  'bougainvillea',
+  'golden_shower',
+  'banana',
+] as const;
 export type TreeKind = (typeof TREE_KINDS)[number];
 
 /** Shared state threaded through the builders, in the order world.ts runs them. */
