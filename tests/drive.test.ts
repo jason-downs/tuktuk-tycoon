@@ -41,7 +41,7 @@ import {
 } from '../src/sim/manual';
 import { installSystems } from '../src/sim/systems';
 import type { Place, RideRequest, Vehicle } from '../src/sim/types';
-import { applyMode, initialMode } from '../src/ui/mode';
+import { applyMode, initialMode, setMode } from '../src/ui/mode';
 import { ui } from '../src/ui/store';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
@@ -431,9 +431,22 @@ describe('picking up by hand', () => {
 describe('drive and manage modes', () => {
   it('opens in Drive with one tuk-tuk and in Manage with a fleet', () => {
     const game = newGame();
+    game.state.stats.trips = 12;
     expect(initialMode(game)).toBe('drive');
     rentVehicle(game);
     expect(initialMode(game)).toBe('manage');
+  });
+
+  it('opens a new company at the wheel, whatever mode was last chosen this session', () => {
+    const fresh = newGame();
+    expect(setMode(fresh, 'manage')).toBe(true);
+    const next = newGame();
+    rentVehicle(next);
+    expect(initialMode(next)).toBe('drive');
+    // Once it has given rides, the session's choice applies again.
+    next.state.stats.trips = 1;
+    expect(initialMode(next)).toBe('manage');
+    setMode(next, 'drive');
   });
 
   it('Manage hands your tuk-tuk to autopilot; Drive puts it back in your hands; neither during a haggle', () => {

@@ -34,8 +34,12 @@ function rememberMode(mode: PlayMode): void {
   }
 }
 
-/** The mode a game opens in: the last one chosen this session, else Drive while the fleet is a single tuk-tuk. */
+/**
+ * The mode a game opens in: Drive for a company that has yet to give a ride (the tutorial starts at the wheel);
+ * otherwise the last one chosen this session, else Drive while the fleet is a single tuk-tuk.
+ */
 export function initialMode(game: Game): PlayMode {
+  if (game.state.stats.trips === 0) return 'drive';
   return readSessionMode() ?? (game.state.vehicles.length <= 1 ? 'drive' : 'manage');
 }
 
