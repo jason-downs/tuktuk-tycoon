@@ -43,6 +43,7 @@ import { PeopleLayer } from './layers/people';
 import { SignalLayer } from './layers/signals';
 import type { FrameInfo, ViewContext, WorldLayer } from './layers/types';
 import { VehicleLayer } from './layers/vehicles';
+import { compileShaderVariants } from './shaderWarmup';
 
 export interface World3DOptions {
   base: string;
@@ -125,6 +126,8 @@ export class World3DView implements GameView, ViewContext {
   private active = true;
   readonly stats: FrameStats;
   private cityLayer: CityLayer | null = null;
+  /** Set once the city has loaded: the next frame compiles every shader variant the view can switch to. */
+  private warmShaders = false;
   private tiltOffset = 0;
   private fly: { fromX: number; fromY: number; toX: number; toY: number; fromD: number; toD: number; t: number } | null = null;
   private raf = 0;
@@ -188,6 +191,7 @@ export class World3DView implements GameView, ViewContext {
         this.env.setCityMaterials(city.materials);
         this.env.onLight = (light) => city.setNight(1 - light);
         city.setNight(1 - this.env.light);
+        this.warmShaders = true;
         this.hud.loading = false;
       },
       (err: unknown) => game.notify(`Could not build the 3D city: ${String(err)}`, 'bad'),
@@ -541,6 +545,11 @@ export class World3DView implements GameView, ViewContext {
     const info: FrameInfo = { now, dt, hour: calendar(this.game.state.time).hour, ui: ui.get() };
     for (const l of this.layers) l.update(info);
     this.updateCutaway();
+    if (this.warmShaders) {
+      // After the layers' update, so the parts the environment adds once the city is in are compiled too.
+      this.warmShaders = false;
+      compileShaderVariants(this.renderer, this.scene, this.camera, this.env.sun, this.cutaway);
+    }
     this.renderer.render(this.scene, this.camera);
     this.hud.draw(info, this.width, this.height, this.dpr);
     this.driveHud.draw(info, this.width, this.height, this.dpr);

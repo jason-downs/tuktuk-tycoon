@@ -8,15 +8,17 @@
 // - Alighting: at the end of a trip the party stands for a moment on the
 //   tuk-tuk's left (the side passengers use): Thai passengers wai, monks only
 //   nod, everyone else simply stands, then they fade away.
+// Each figure has a soft blob shadow at its feet.
 
 import { Matrix4, Quaternion, Vector3 } from 'three';
+import { daylight } from '../../sim/clock';
 import type { TripResult } from '../../sim/dispatch';
 import type { Archetype } from '../../sim/types';
-import { PersonBatch, personMaterials } from '../batches';
+import { BlobShadows, blobOpacity, PersonBatch, personLod, personMaterial, PERSON_BLOB_RADIUS } from '../batches';
 import { hash01 } from '../build/mesh';
 import { lookEnvAt } from '../crowd';
 import { PAVEMENT_Y } from '../kinematics';
-import { ANIM, personGeometry, personLook, posePerson, POSE_SIZE, type PersonType } from '../personModels';
+import { ANIM, personLook, posePerson, POSE_SIZE, type PersonType } from '../personModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
 /** Metres within which the first of a party hails your tuk-tuk. */
@@ -27,6 +29,12 @@ const APPROACH_RADIUS = 150;
 const PARTY_SPACING = 0.7;
 /** Real seconds alighting passengers stay in view. */
 const ALIGHT_SECONDS = 3.5;
+/**
+ * Distance from the camera (m, per unit of figure scale) beyond which waiting
+ * and alighting passengers are not drawn: a standing figure is then under
+ * about 4 px tall in a 1080 px view (the HUD badge still marks a request).
+ */
+const STANDING_SIGHT = 630;
 /** Passengers who thank the driver with a wai as they step out (culture.md §4; monks do not wai laypeople). */
 const WAI: ReadonlySet<Archetype> = new Set(['thai_tourist', 'student', 'vendor', 'elder']);
 
@@ -60,6 +68,7 @@ export class PeopleLayer implements WorldLayer {
   readonly id = 'people';
   private readonly ctx: ViewContext;
   private readonly batch: PersonBatch;
+  private readonly blobs: BlobShadows;
   private readonly pose = new Float32Array(POSE_SIZE);
   private readonly alighting: Alighting[] = [];
   private readonly unsubscribe: () => void;
@@ -67,7 +76,8 @@ export class PeopleLayer implements WorldLayer {
 
   constructor(ctx: ViewContext) {
     this.ctx = ctx;
-    this.batch = new PersonBatch(ctx.scene, personGeometry(), personMaterials(), 32);
+    this.batch = new PersonBatch(ctx.scene, personMaterial(), 32);
+    this.blobs = new BlobShadows(ctx.scene, 32);
     this.unsubscribe = ctx.game.on('trip', (r) => this.onTrip(r as TripResult));
   }
 
@@ -87,9 +97,11 @@ export class PeopleLayer implements WorldLayer {
     const now = (this.now = frame.now / 1000);
     const g = game.world.graph;
     this.batch.begin();
+    this.blobs.begin();
     for (const r of game.visibleRequests()) {
       if (r.claimedBy !== null && r.claimedBy !== player?.id) continue;
       const k = this.ctx.kerbOf(r);
+      if (!this.inSight(k.x, k.y, scale)) continue;
       const place = game.place(r.from);
       const face = Math.atan2(g.nodeY[place.node] - k.y, g.nodeX[place.node] - k.x) || 0;
       const dist = pp ? Math.hypot(pp.x - k.x, pp.y - k.y) : Infinity;
@@ -123,6 +135,7 @@ export class PeopleLayer implements WorldLayer {
         this.alighting.splice(i, 1);
         continue;
       }
+      if (!this.inSight(a.x, a.y, scale)) continue;
       // On the tuk-tuk's left, strung out along it, turned to face the driver.
       const fade = Math.min(1, (ALIGHT_SECONDS - age) / 0.5);
       const lx = -Math.sin(a.yaw);
@@ -138,20 +151,31 @@ export class PeopleLayer implements WorldLayer {
       }
     }
     this.batch.flush();
+    this.blobs.flush(blobOpacity(daylight(frame.hour)));
+  }
+
+  /** Would a figure of this scale standing at (x, y) be big enough to see? */
+  private inSight(x: number, y: number, scale: number): boolean {
+    const { rig } = this.ctx;
+    return Math.hypot(rig.dist, x - rig.tx, y - rig.ty) < STANDING_SIGHT * scale;
   }
 
   private add(type: Archetype, seed: number, share: number | undefined, anim: number, x: number, y: number, yaw: number, scale: number, env: ReturnType<typeof lookEnvAt>, now: number): void {
     const look = personLook(type, seed, env, share);
     posePerson(anim, now, hash01(seed, 3) * Math.PI * 2, look, this.pose);
+    const size = Math.max(0.01, scale * look.scale);
     _p.set(x, PAVEMENT_Y, -y);
     _q.setFromAxisAngle(_up, yaw);
-    _s.setScalar(Math.max(0.01, scale * look.scale));
+    _s.setScalar(size);
     _m.compose(_p, _q, _s);
-    this.batch.add(_m, look, this.pose);
+    const { rig } = this.ctx;
+    this.batch.add(_m, look, this.pose, personLod(Math.hypot(rig.dist, x - rig.tx, y - rig.ty), size));
+    this.blobs.add(x, PAVEMENT_Y, -y, PERSON_BLOB_RADIUS * size);
   }
 
   dispose(): void {
     this.unsubscribe();
     this.batch.dispose();
+    this.blobs.dispose();
   }
 }

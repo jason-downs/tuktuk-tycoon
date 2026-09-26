@@ -7,7 +7,9 @@
 //
 // A person stands about 1.65 m tall at scale 1, faces +X, left side −Z. Looks
 // follow docs/3d/world.md §4.3 (the 12 archetypes plus ambient locals); skin
-// tones span #8d5a3b–#f0cfb0.
+// tones span #8d5a3b–#f0cfb0. A distant model (lod 1) carries the same tags
+// and colour slots with coarser rounds and without the small details (hands,
+// shoes, cups, cameras, straps), for figures a few dozen pixels tall.
 
 import { BoxGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, type BufferGeometry } from 'three';
 import type { Archetype } from '../sim/types';
@@ -397,16 +399,27 @@ function leftArmPose(sh: number, el: number, roll: number): number[] {
   return p;
 }
 
-let personGeo: BufferGeometry | null = null;
+const personGeos: [BufferGeometry | null, BufferGeometry | null] = [null, null];
 
-/** The rigged person geometry with every part (cached; ~1k triangles, a person shows 200–320). */
-export function personGeometry(): BufferGeometry {
-  if (personGeo) return personGeo;
+/**
+ * The rigged person geometry with every part (cached). Lod 0 is the full
+ * figure (~1k triangles, a person shows 200–320); lod 1 the distant one.
+ */
+export function personGeometry(lod: 0 | 1 = 0): BufferGeometry {
+  const cached = personGeos[lod];
+  if (cached) return cached;
+  const far = lod === 1;
   const parts: TaggedPart[] = [];
   const add = (geo: BufferGeometry, limb: number, part: number, slot: number, color = '#ffffff') =>
     parts.push({ geo, color, tags: { aRig: [limb, part, slot] } });
   const box = (w: number, h: number, d: number, x: number, y: number, z: number, limb: number, part: number, slot: number, color?: string, rx = 0, ry = 0, rz = 0) =>
     add(place(new BoxGeometry(w, h, d), x, y, z, rx, ry, rz), limb, part, slot, color);
+  /** Small details, left off the distant model. */
+  const detail = (draw: () => void) => {
+    if (!far) draw();
+  };
+  /** Segments around a round part: fewer on the distant model. */
+  const seg = (n: number) => (far ? Math.max(5, Math.round(n * 0.6)) : n);
   const J = JOINT;
   const P = PART;
   const S = CSLOT;
@@ -414,82 +427,93 @@ export function personGeometry(): BufferGeometry {
   // Body: hips, tapered torso, head, arms, legs, shoes.
   box(0.2, 0.14, 0.3, 0, J.hipY, 0, LIMB.root, P.body, S.bottom);
   add(deformedBox((sx, sy, sz) => [sx * (sy < 0 ? 0.1 : 0.11), sy < 0 ? 0.84 : J.neckY, sz * (sy < 0 ? 0.15 : 0.2)]), LIMB.torso, P.body, S.top);
-  add(place(new IcosahedronGeometry(0.11, 0).scale(1, 1.1, 0.95), 0.005, 1.56, 0), LIMB.head, P.body, S.skin);
+  if (far) box(0.2, 0.23, 0.19, 0.005, 1.56, 0, LIMB.head, P.body, S.skin);
+  else add(place(new IcosahedronGeometry(0.11, 0).scale(1, 1.1, 0.95), 0.005, 1.56, 0), LIMB.head, P.body, S.skin);
   for (const side of [-1, 1]) {
     const [ua, fa, th, sh] = side < 0 ? [LIMB.upperArmL, LIMB.forearmL, LIMB.thighL, LIMB.shinL] : [LIMB.upperArmR, LIMB.forearmR, LIMB.thighR, LIMB.shinR];
     box(0.09, 0.3, 0.09, 0, 1.24, side * J.shoulderZ, ua, P.body, S.top);
     box(0.08, 0.24, 0.08, 0, 0.98, side * J.shoulderZ, fa, P.body, S.skin);
-    box(0.07, 0.09, 0.05, 0.005, 0.815, side * J.shoulderZ, fa, P.body, S.skin);
+    detail(() => box(0.07, 0.09, 0.05, 0.005, 0.815, side * J.shoulderZ, fa, P.body, S.skin));
     box(0.13, 0.42, 0.13, 0, 0.655, side * J.hipZ, th, P.body, S.bottom);
     box(0.11, 0.4, 0.11, 0, 0.27, side * J.hipZ, sh, P.body, S.shin);
-    box(0.2, 0.06, 0.1, 0.045, 0.03, side * J.hipZ, sh, P.body, S.fixed, '#2b2b2b');
+    detail(() => box(0.2, 0.06, 0.1, 0.045, 0.03, side * J.hipZ, sh, P.body, S.fixed, '#2b2b2b'));
   }
 
   // Hair and hats.
   box(0.235, 0.07, 0.225, -0.01, 1.645, 0, LIMB.head, P.hairShort, S.hair);
-  box(0.06, 0.14, 0.2, -0.095, 1.57, 0, LIMB.head, P.hairShort, S.hair);
+  detail(() => box(0.06, 0.14, 0.2, -0.095, 1.57, 0, LIMB.head, P.hairShort, S.hair));
   box(0.23, 0.06, 0.22, -0.01, 1.645, 0, LIMB.head, P.hairBun, S.hair);
-  add(place(new IcosahedronGeometry(0.06, 0), -0.1, 1.66, 0), LIMB.head, P.hairBun, S.hair);
+  detail(() => add(place(new IcosahedronGeometry(0.06, 0), -0.1, 1.66, 0), LIMB.head, P.hairBun, S.hair));
   box(0.235, 0.07, 0.225, -0.01, 1.645, 0, LIMB.head, P.hairLong, S.hair);
   box(0.05, 0.3, 0.22, -0.1, 1.5, 0, LIMB.head, P.hairLong, S.hair);
-  add(place(new CylinderGeometry(0.105, 0.125, 0.1, 8), 0, 1.69, 0), LIMB.head, P.bucketHat, S.hat);
-  add(place(new CylinderGeometry(0.17, 0.19, 0.025, 8), 0, 1.64, 0), LIMB.head, P.bucketHat, S.hat);
-  add(place(new CylinderGeometry(0.1, 0.115, 0.1, 8), 0, 1.7, 0), LIMB.head, P.sunHat, S.hat);
-  add(place(new CylinderGeometry(0.24, 0.25, 0.018, 10), 0, 1.655, 0), LIMB.head, P.sunHat, S.hat);
+  add(place(new CylinderGeometry(0.105, 0.125, 0.1, seg(8)), 0, 1.69, 0), LIMB.head, P.bucketHat, S.hat);
+  add(place(new CylinderGeometry(0.17, 0.19, 0.025, seg(8)), 0, 1.64, 0), LIMB.head, P.bucketHat, S.hat);
+  add(place(new CylinderGeometry(0.1, 0.115, 0.1, seg(8)), 0, 1.7, 0), LIMB.head, P.sunHat, S.hat);
+  add(place(new CylinderGeometry(0.24, 0.25, 0.018, seg(10)), 0, 1.655, 0), LIMB.head, P.sunHat, S.hat);
   box(0.23, 0.07, 0.22, -0.005, 1.66, 0, LIMB.head, P.cap, S.hat);
-  box(0.12, 0.015, 0.16, 0.15, 1.635, 0, LIMB.head, P.cap, S.hat);
-  add(place(new ConeGeometry(0.28, 0.17, 10), 0, 1.745, 0), LIMB.head, P.conicalHat, S.hat);
-  add(place(new IcosahedronGeometry(0.135, 0).scale(1.05, 0.95, 1), -0.005, 1.6, 0), LIMB.head, P.helmet, S.hat);
-  box(0.03, 0.08, 0.2, 0.13, 1.58, 0, LIMB.head, P.helmet, S.fixed, '#22262e');
-  box(0.05, 0.03, 0.26, -0.01, 1.69, 0, LIMB.head, P.headphones, S.fixed, '#1e1e1e');
-  for (const side of [-1, 1]) box(0.07, 0.08, 0.04, 0, 1.56, side * 0.12, LIMB.head, P.headphones, S.accent2);
-  box(0.05, 0.06, 0.13, 0.1, 1.52, 0, LIMB.head, P.mask, S.fixed, '#e8eef2');
+  detail(() => box(0.12, 0.015, 0.16, 0.15, 1.635, 0, LIMB.head, P.cap, S.hat));
+  add(place(new ConeGeometry(0.28, 0.17, seg(10)), 0, 1.745, 0), LIMB.head, P.conicalHat, S.hat);
+  if (far) box(0.28, 0.26, 0.27, -0.005, 1.6, 0, LIMB.head, P.helmet, S.hat);
+  else add(place(new IcosahedronGeometry(0.135, 0).scale(1.05, 0.95, 1), -0.005, 1.6, 0), LIMB.head, P.helmet, S.hat);
+  detail(() => {
+    box(0.03, 0.08, 0.2, 0.13, 1.58, 0, LIMB.head, P.helmet, S.fixed, '#22262e');
+    box(0.05, 0.03, 0.26, -0.01, 1.69, 0, LIMB.head, P.headphones, S.fixed, '#1e1e1e');
+    for (const side of [-1, 1]) box(0.07, 0.08, 0.04, 0, 1.56, side * 0.12, LIMB.head, P.headphones, S.accent2);
+    box(0.05, 0.06, 0.13, 0.1, 1.52, 0, LIMB.head, P.mask, S.fixed, '#e8eef2');
+  });
 
   // Worn on the body.
   box(0.22, 0.62, 0.3, -0.2, 1.3, 0, LIMB.torso, P.backpack, S.accent);
-  box(0.2, 0.1, 0.34, -0.2, 1.64, 0, LIMB.torso, P.backpack, S.accent2);
+  detail(() => box(0.2, 0.1, 0.34, -0.2, 1.64, 0, LIMB.torso, P.backpack, S.accent2));
   box(0.07, 0.2, 0.24, 0.0, 0.9, 0.2, LIMB.root, P.bag, S.accent2);
-  box(0.02, 0.62, 0.05, 0.115, 1.2, 0, LIMB.torso, P.bag, S.accent2, undefined, -0.55);
-  box(0.06, 0.08, 0.12, 0.13, 1.2, 0.03, LIMB.torso, P.camera, S.fixed, '#1e1e1e');
-  box(0.04, 0.05, 0.05, 0.17, 1.2, 0.03, LIMB.torso, P.camera, S.fixed, '#555555');
+  detail(() => {
+    box(0.02, 0.62, 0.05, 0.115, 1.2, 0, LIMB.torso, P.bag, S.accent2, undefined, -0.55);
+    box(0.06, 0.08, 0.12, 0.13, 1.2, 0.03, LIMB.torso, P.camera, S.fixed, '#1e1e1e');
+    box(0.04, 0.05, 0.05, 0.17, 1.2, 0.03, LIMB.torso, P.camera, S.fixed, '#555555');
+  });
   box(0.23, 0.07, 0.3, 0, 1.43, 0, LIMB.torso, P.scarf, S.accent2);
-  box(0.03, 0.26, 0.07, 0.115, 1.3, 0.06, LIMB.torso, P.scarf, S.accent2);
+  detail(() => box(0.03, 0.26, 0.07, 0.115, 1.3, 0.06, LIMB.torso, P.scarf, S.accent2));
   box(0.02, 0.5, 0.26, 0.115, 1.0, 0, LIMB.torso, P.apron, S.accent2);
-  add(place(new CylinderGeometry(0.17, 0.21, 0.66, 8, 1, true), 0, 0.55, 0), LIMB.root, P.skirt, S.bottom);
-  add(place(new CylinderGeometry(0.213, 0.215, 0.08, 8, 1, true), 0, 0.26, 0), LIMB.root, P.skirt, S.accent2);
+  add(place(new CylinderGeometry(0.17, 0.21, 0.66, seg(8), 1, true), 0, 0.55, 0), LIMB.root, P.skirt, S.bottom);
+  detail(() => add(place(new CylinderGeometry(0.213, 0.215, 0.08, 8, 1, true), 0, 0.26, 0), LIMB.root, P.skirt, S.accent2));
   add(deformedBox((sx, sy, sz) => [sx * (sy < 0 ? 0.115 : 0.125), sy < 0 ? 0.83 : 1.46, sz * (sy < 0 ? 0.165 : 0.215)]), LIMB.torso, P.robe, S.top);
-  box(0.24, 0.1, 0.3, 0, 1.42, -0.14, LIMB.torso, P.robe, S.top);
-  add(place(new CylinderGeometry(0.19, 0.23, 0.72, 8, 1, true), 0, 0.5, 0), LIMB.root, P.robe, S.top);
+  detail(() => box(0.24, 0.1, 0.3, 0, 1.42, -0.14, LIMB.torso, P.robe, S.top));
+  add(place(new CylinderGeometry(0.19, 0.23, 0.72, seg(8), 1, true), 0, 0.5, 0), LIMB.root, P.robe, S.top);
 
   // Carried: placed where the hand is in the pose that holds them.
   const handUp = rigPoint(HAND_L, LIMB.forearmL, leftArmPose(...HOLD_POSE[HOLD.up]));
-  box(0.02, 2.05 - handUp[1] + 0.1, 0.02, handUp[0], (2.05 + handUp[1] - 0.1) / 2, handUp[2], LIMB.torso, P.parasol, S.fixed, '#5a4632');
-  add(place(new ConeGeometry(0.5, 0.22, 10), handUp[0], 2.1, handUp[2]), LIMB.torso, P.parasol, S.accent);
-  const dir: V3 = [Math.sin(0.35), Math.cos(0.35), 0];
-  box(0.015, 0.8, 0.015, handUp[0] + dir[0] * 0.4, handUp[1] + dir[1] * 0.4, handUp[2], LIMB.torso, P.selfie, S.fixed, '#3a3a3a', 0, 0, -0.35);
-  box(0.02, 0.12, 0.07, handUp[0] + dir[0] * 0.82, handUp[1] + dir[1] * 0.82, handUp[2], LIMB.torso, P.selfie, S.fixed, '#1c1c1c', 0, 0, -0.35);
-  // The cup is tilted back by the hold's arm angle so it stands upright in the hand.
-  const [cupSh, cupEl] = HOLD_POSE[HOLD.cup];
-  const cup = new CylinderGeometry(0.035, 0.03, 0.12, 6).translate(0, 0.03, 0).rotateZ(-(cupSh + cupEl));
-  add(place(cup, HAND_L[0] + 0.02, HAND_L[1], HAND_L[2]), LIMB.forearmL, P.cup, S.accent);
-  const straw = new BoxGeometry(0.008, 0.06, 0.008).translate(0, 0.12, 0).rotateZ(-(cupSh + cupEl));
-  add(place(straw, HAND_L[0] + 0.02, HAND_L[1], HAND_L[2]), LIMB.forearmL, P.cup, S.fixed, '#f4f4f4');
+  detail(() => box(0.02, 2.05 - handUp[1] + 0.1, 0.02, handUp[0], (2.05 + handUp[1] - 0.1) / 2, handUp[2], LIMB.torso, P.parasol, S.fixed, '#5a4632'));
+  add(place(new ConeGeometry(0.5, 0.22, seg(10)), handUp[0], 2.1, handUp[2]), LIMB.torso, P.parasol, S.accent);
+  detail(() => {
+    const dir: V3 = [Math.sin(0.35), Math.cos(0.35), 0];
+    box(0.015, 0.8, 0.015, handUp[0] + dir[0] * 0.4, handUp[1] + dir[1] * 0.4, handUp[2], LIMB.torso, P.selfie, S.fixed, '#3a3a3a', 0, 0, -0.35);
+    box(0.02, 0.12, 0.07, handUp[0] + dir[0] * 0.82, handUp[1] + dir[1] * 0.82, handUp[2], LIMB.torso, P.selfie, S.fixed, '#1c1c1c', 0, 0, -0.35);
+    // The cup is tilted back by the hold's arm angle so it stands upright in the hand.
+    const [cupSh, cupEl] = HOLD_POSE[HOLD.cup];
+    const cup = new CylinderGeometry(0.035, 0.03, 0.12, 6).translate(0, 0.03, 0).rotateZ(-(cupSh + cupEl));
+    add(place(cup, HAND_L[0] + 0.02, HAND_L[1], HAND_L[2]), LIMB.forearmL, P.cup, S.accent);
+    const straw = new BoxGeometry(0.008, 0.06, 0.008).translate(0, 0.12, 0).rotateZ(-(cupSh + cupEl));
+    add(place(straw, HAND_L[0] + 0.02, HAND_L[1], HAND_L[2]), LIMB.forearmL, P.cup, S.fixed, '#f4f4f4');
+  });
   box(1.3, 0.03, 0.03, 0.05, 1.47, -0.2, LIMB.torso, P.pole, S.fixed, '#c8a664');
   for (const end of [-1, 1]) {
-    box(0.012, 0.3, 0.012, 0.05 + end * 0.58, 1.31, -0.2, LIMB.torso, P.pole, S.fixed, '#8a7a5a');
-    add(place(new CylinderGeometry(0.17, 0.12, 0.2, 8), 0.05 + end * 0.58, 1.06, -0.2), LIMB.torso, P.pole, S.accent);
+    detail(() => box(0.012, 0.3, 0.012, 0.05 + end * 0.58, 1.31, -0.2, LIMB.torso, P.pole, S.fixed, '#8a7a5a'));
+    add(place(new CylinderGeometry(0.17, 0.12, 0.2, seg(8)), 0.05 + end * 0.58, 1.06, -0.2), LIMB.torso, P.pole, S.accent);
   }
   box(0.2, 0.46, 0.34, -0.05, 0.28, 0.38, LIMB.root, P.suitcase, S.accent2);
-  box(0.02, 0.36, 0.02, -0.05, 0.69, 0.38, LIMB.root, P.suitcase, S.fixed, '#555555');
-  const alms = new Array(POSE_SIZE).fill(0);
-  [alms[0], alms[4], alms[8], alms[12]] = ALMS_ARM;
-  [alms[1], alms[5], alms[9], alms[13]] = ALMS_ARM;
-  const hl = rigPoint(HAND_L, LIMB.forearmL, alms);
-  const hr = rigPoint([HAND_L[0], HAND_L[1], -HAND_L[2]], LIMB.forearmR, alms);
-  add(place(new CylinderGeometry(0.13, 0.09, 0.12, 8), (hl[0] + hr[0]) / 2, (hl[1] + hr[1]) / 2 + 0.08, 0), LIMB.torso, P.bowl, S.fixed, '#1b1b1b');
+  detail(() => {
+    box(0.02, 0.36, 0.02, -0.05, 0.69, 0.38, LIMB.root, P.suitcase, S.fixed, '#555555');
+    const alms = new Array(POSE_SIZE).fill(0);
+    [alms[0], alms[4], alms[8], alms[12]] = ALMS_ARM;
+    [alms[1], alms[5], alms[9], alms[13]] = ALMS_ARM;
+    const hl = rigPoint(HAND_L, LIMB.forearmL, alms);
+    const hr = rigPoint([HAND_L[0], HAND_L[1], -HAND_L[2]], LIMB.forearmR, alms);
+    add(place(new CylinderGeometry(0.13, 0.09, 0.12, 8), (hl[0] + hr[0]) / 2, (hl[1] + hr[1]) / 2 + 0.08, 0), LIMB.torso, P.bowl, S.fixed, '#1b1b1b');
+  });
 
-  personGeo = buildTagged(parts);
-  return personGeo;
+  const geo = buildTagged(parts);
+  personGeos[lod] = geo;
+  return geo;
 }
 
 // ------------------------------------------------------------------- looks

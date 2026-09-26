@@ -6,21 +6,24 @@
 // - vehicles: livery paint per slot, spinning wheels, sprung body roll, pitch
 //   and heave, and lamp glow (headlamps, brake lamps, the lit TAXI box, LEDs);
 // - people: colours per slot, hidden parts collapsed, limbs posed by the rig.
+// Vehicles cast shadow-map shadows. People only receive them: a figure on
+// foot has a soft blob on the ground for its shadow (docs/3d/architecture.md
+// §8), and a seated rider sits in its vehicle's shadow.
 
 import {
   AdditiveBlending,
   BufferGeometry,
   DynamicDrawUsage,
+  Float32BufferAttribute,
   InstancedBufferAttribute,
   InstancedMesh,
+  Matrix4,
   MeshBasicMaterial,
-  MeshDepthMaterial,
   MeshLambertMaterial,
   type Material,
-  type Matrix4,
   type Scene,
 } from 'three';
-import { RIG_GLSL, type PersonLook } from './personModels';
+import { personGeometry, RIG_GLSL, type PersonLook } from './personModels';
 
 /** Colours travel as packed 24-bit sRGB integers in a float; this decodes one to linear RGB. */
 const UNPACK_GLSL = /* glsl */ `
@@ -105,8 +108,8 @@ bool rigHidden() {
 const PERSON_POSE = /* glsl */ `#include <begin_vertex>
 	transformed = rigHidden() ? vec3(0.0) : rigPoint(transformed, int(aRig.x + 0.5), iPoseA, iPoseB, iPoseC, iPoseD);`;
 
-/** Material (and matching shadow-depth material) for person batches. */
-export function personMaterials(): { material: MeshLambertMaterial; depth: MeshDepthMaterial } {
+/** Material for person batches. */
+export function personMaterial(): MeshLambertMaterial {
   const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -131,11 +134,30 @@ export function personMaterials(): { material: MeshLambertMaterial; depth: MeshD
       )
       .replace('#include <begin_vertex>', PERSON_POSE);
   };
-  const depth = new MeshDepthMaterial();
-  depth.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${PERSON_PARS}`).replace('#include <begin_vertex>', PERSON_POSE);
-  };
-  return { material, depth };
+  return material;
+}
+
+let blobGeo: BufferGeometry | null = null;
+
+/** A unit disc on the ground, dark and opaque-ish at the centre fading to clear at the rim (vertex alpha). */
+function blobGeometry(): BufferGeometry {
+  if (blobGeo) return blobGeo;
+  const SEGMENTS = 10;
+  const pos: number[] = [0, 0, 0];
+  const col: number[] = [0, 0, 0, 1];
+  for (let i = 0; i < SEGMENTS; i++) {
+    const a = (i / SEGMENTS) * Math.PI * 2;
+    pos.push(Math.cos(a), 0, -Math.sin(a));
+    col.push(0, 0, 0, 0);
+  }
+  const idx: number[] = [];
+  for (let i = 0; i < SEGMENTS; i++) idx.push(0, 1 + i, 1 + ((i + 1) % SEGMENTS));
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new Float32BufferAttribute(col, 4));
+  g.setIndex(idx);
+  blobGeo = g;
+  return g;
 }
 
 /** Additive material for headlight pools on the road (vertex colour × instance colour). */
@@ -295,17 +317,115 @@ export class VehicleBatch {
   }
 }
 
-/** People drawn from the shared rigged geometry. The batch owns (and disposes) the materials it is given. */
-export class PersonBatch {
-  private readonly batch: Batch;
-  private readonly mats: { material: MeshLambertMaterial; depth: MeshDepthMaterial };
+/**
+ * Distance from the camera (m, per unit of figure scale) beyond which a person
+ * is drawn with the distant model: a standing figure is then under about 40 px
+ * tall in a 1080 px view.
+ */
+export const PERSON_DETAIL_SIGHT = 63;
 
-  constructor(scene: Scene, base: BufferGeometry, mats: { material: MeshLambertMaterial; depth: MeshDepthMaterial }, capacity = 64) {
-    this.mats = mats;
-    this.batch = new Batch(scene, base, mats.material, { iColA: 4, iColB: 4, iPoseA: 4, iPoseB: 4, iPoseC: 4, iPoseD: 4 }, capacity, (m) => {
-      m.castShadow = true;
+/** Person model for a figure of this scale at this distance (m) from the camera. */
+export function personLod(view: number, scale: number): 0 | 1 {
+  return view > PERSON_DETAIL_SIGHT * scale ? 1 : 0;
+}
+
+const PERSON_LAYOUT = { iColA: 4, iColB: 4, iPoseA: 4, iPoseB: 4, iPoseC: 4, iPoseD: 4 };
+
+/**
+ * People drawn from the shared rigged geometry, one draw per model in use: the
+ * full figure near the camera, the distant one (made on first use) further
+ * off. They receive shadows but cast none. The batch owns (and disposes) the
+ * material it is given.
+ */
+export class PersonBatch {
+  private readonly lods: [Batch, Batch | null];
+  private readonly scene: Scene;
+  private readonly material: MeshLambertMaterial;
+  private readonly capacity: number;
+
+  constructor(scene: Scene, material: MeshLambertMaterial, capacity = 64) {
+    this.scene = scene;
+    this.material = material;
+    this.capacity = capacity;
+    this.lods = [this.makeBatch(0), null];
+  }
+
+  private makeBatch(lod: 0 | 1): Batch {
+    return new Batch(this.scene, personGeometry(lod), this.material, PERSON_LAYOUT, this.capacity, (m) => {
+      m.castShadow = false;
       m.receiveShadow = true;
-      m.customDepthMaterial = mats.depth;
+    });
+  }
+
+  /** People added this frame, both models together. */
+  get count(): number {
+    return this.lods[0].count + (this.lods[1]?.count ?? 0);
+  }
+
+  begin(): void {
+    for (const b of this.lods) b?.begin();
+  }
+
+  /** Add a person: its transform, look, a pose of POSE_SIZE joint angles (personModels.ts), and the model to draw it with. */
+  add(matrix: Matrix4, look: PersonLook, pose: ArrayLike<number>, lod: 0 | 1 = 0): void {
+    const batch = lod ? (this.lods[1] ??= this.makeBatch(1)) : this.lods[0];
+    const i = batch.next(matrix);
+    const a = batch.attr('iColA');
+    const b = batch.attr('iColB');
+    for (let k = 0; k < 4; k++) {
+      a[i * 4 + k] = look.colA[k];
+      b[i * 4 + k] = look.colB[k];
+    }
+    const pa = batch.attr('iPoseA');
+    const pb = batch.attr('iPoseB');
+    const pc = batch.attr('iPoseC');
+    const pd = batch.attr('iPoseD');
+    for (let k = 0; k < 4; k++) {
+      pa[i * 4 + k] = pose[k];
+      pb[i * 4 + k] = pose[4 + k];
+      pc[i * 4 + k] = pose[8 + k];
+      pd[i * 4 + k] = pose[12 + k];
+    }
+  }
+
+  flush(): void {
+    for (const b of this.lods) b?.flush();
+  }
+
+  dispose(): void {
+    for (const b of this.lods) b?.dispose();
+    this.material.dispose();
+  }
+}
+
+const _blob = new Matrix4();
+
+/** Blob shadow radius (m) under a standing figure of scale 1. */
+export const PERSON_BLOB_RADIUS = 0.36;
+
+/** Darkness at a blob's centre: strongest in daylight, a faint contact shadow at night. */
+export function blobOpacity(daylight: number): number {
+  return 0.22 + 0.23 * daylight;
+}
+
+/** Soft contact shadows under figures on foot: one small dark disc on the ground per figure, in one draw. */
+export class BlobShadows {
+  private readonly batch: Batch;
+  private readonly material: MeshBasicMaterial;
+
+  constructor(scene: Scene, capacity = 64) {
+    this.material = new MeshBasicMaterial({
+      color: 0x000000,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.batch = new Batch(scene, blobGeometry(), this.material, {}, capacity, (m) => {
+      m.renderOrder = 2;
     });
   }
 
@@ -317,35 +437,20 @@ export class PersonBatch {
     this.batch.begin();
   }
 
-  /** Add a person: its transform, look and a pose of POSE_SIZE joint angles starting at pose[o] (personModels.ts). */
-  add(matrix: Matrix4, look: PersonLook, pose: ArrayLike<number>, o = 0): void {
-    const i = this.batch.next(matrix);
-    const a = this.batch.attr('iColA');
-    const b = this.batch.attr('iColB');
-    for (let k = 0; k < 4; k++) {
-      a[i * 4 + k] = look.colA[k];
-      b[i * 4 + k] = look.colB[k];
-    }
-    const pa = this.batch.attr('iPoseA');
-    const pb = this.batch.attr('iPoseB');
-    const pc = this.batch.attr('iPoseC');
-    const pd = this.batch.attr('iPoseD');
-    for (let k = 0; k < 4; k++) {
-      pa[i * 4 + k] = pose[o + k];
-      pb[i * 4 + k] = pose[o + 4 + k];
-      pc[i * 4 + k] = pose[o + 8 + k];
-      pd[i * 4 + k] = pose[o + 12 + k];
-    }
+  /** A blob of the given radius (m) on the ground at world position (x, y, z), three.js axes. */
+  add(x: number, y: number, z: number, radius: number): void {
+    this.batch.next(_blob.makeScale(radius, 1, radius).setPosition(x, y, z));
   }
 
-  flush(): void {
+  /** Upload this frame's blobs; `opacity` is the darkness at a blob's centre (weaker when the light is flat). */
+  flush(opacity: number): void {
+    this.material.opacity = opacity;
     this.batch.flush();
   }
 
   dispose(): void {
     this.batch.dispose();
-    this.mats.material.dispose();
-    this.mats.depth.dispose();
+    this.material.dispose();
   }
 }
 

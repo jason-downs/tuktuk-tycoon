@@ -8,7 +8,7 @@ import { mountains } from './backdrop';
 import { LAYERS, type BuildContext, type LayerId } from './context';
 import { buildEffectAnchors } from './effects';
 import { buildGround } from './ground';
-import { clipMeshToTiles, gpuMesh, MeshWriter, splitMesh, type GpuMesh, type PackedMesh } from './mesh';
+import { clipMeshToTiles, gpuIndex, gpuMesh, MeshWriter, simplifyIndex, splitMesh, type GpuMesh, type PackedMesh } from './mesh';
 import { Occupancy } from './occupancy';
 import { buildProps } from './props';
 import { buildRoads } from './roads';
@@ -28,27 +28,35 @@ export interface BuiltCity {
 
 /** Side (m) of the square tiles the static layers are split into for culling. */
 export const TILE_SIZE = 800;
+/** Layers kept whole: each is small and spans the map, so tiles would only add draw calls. */
+export const WHOLE_LAYERS: readonly LayerId[] = ['ground', 'backdrop', 'water'];
+/** Cell (m) the distant buildings are simplified to: two or three pixels across where they are drawn (layers/city.ts). */
+export const FAR_BUILDING_CELL = 3;
 
 /** The city as the view holds it: each static layer split into tiles the renderer can cull one by one, packed for the GPU. */
 export interface TiledCity extends Omit<BuiltCity, 'layers'> {
   layers: Record<LayerId, GpuMesh[]>;
+  /** For each buildings tile (same order), a coarser triangle list over its vertices, drawn in its place when the tile is far from the camera. */
+  farBuildings: (Uint16Array | Uint32Array)[];
 }
 
 /**
- * Split the static layers into tiles; the ground and the mountain backdrop
- * stay whole (they are small and span everything). The roads layer is drawn
- * in painter's order, so its triangles are cut at the tile edges rather than
- * handed whole to one tile, which would let a neighbouring tile's paint
- * cover or show through it depending on which tile draws last.
+ * Split the static layers into tiles, apart from WHOLE_LAYERS. The roads
+ * layer is drawn in painter's order, so its triangles are cut at the tile
+ * edges rather than handed whole to one tile, which would let a neighbouring
+ * tile's paint cover or show through it depending on which tile draws last.
+ * Each buildings tile also gets a coarse triangle list for distant views.
  */
 export function tileCity(built: BuiltCity, size = TILE_SIZE): TiledCity {
   const layers = {} as Record<LayerId, GpuMesh[]>;
+  let farBuildings: (Uint16Array | Uint32Array)[] = [];
   for (const id of LAYERS) {
     const m = built.layers[id];
-    const pieces = id === 'ground' || id === 'backdrop' ? (m.index.length ? [m] : []) : id === 'roads' ? clipMeshToTiles(m, size) : splitMesh(m, size);
+    const pieces = WHOLE_LAYERS.includes(id) ? (m.index.length ? [m] : []) : id === 'roads' ? clipMeshToTiles(m, size) : splitMesh(m, size);
     layers[id] = pieces.map(gpuMesh);
+    if (id === 'buildings') farBuildings = pieces.map((p) => gpuIndex(simplifyIndex(p, FAR_BUILDING_CELL), p.position.length / 3));
   }
-  return { ...built, layers };
+  return { ...built, layers, farBuildings };
 }
 
 export function buildCity(city: CityData): BuiltCity {

@@ -3,22 +3,27 @@
 // Checks what each layer would draw and that nothing throws or goes NaN.
 
 import { readFileSync } from 'node:fs';
-import { InstancedMesh, MeshLambertMaterial, PerspectiveCamera, Scene } from 'three';
+import { Fog, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, type BufferGeometry, type Material } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
+import { rivalsOf } from '../src/sim/rivals';
 import { installSystems } from '../src/sim/systems';
 import type { RideRequest } from '../src/sim/types';
 import { ui } from '../src/ui/store';
+import { PERSON_DETAIL_SIGHT } from '../src/world3d/batches';
 import type { CityData } from '../src/world3d/city';
 import { buildCity, tileCity } from '../src/world3d/build/world';
 import { edgeLanes } from '../src/world3d/kinematics';
 import { CrowdLayer } from '../src/world3d/layers/crowds';
+import { MarkerLayer } from '../src/world3d/layers/markers';
 import { PeopleLayer } from '../src/world3d/layers/people';
 import type { ViewContext, WorldLayer } from '../src/world3d/layers/types';
 import { VehicleLayer } from '../src/world3d/layers/vehicles';
+import { personGeometry } from '../src/world3d/personModels';
+import { tuktukGeometry } from '../src/world3d/vehicleModels';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
@@ -62,15 +67,16 @@ function setup(time: number) {
     const info = { now, dt, hour: calendar(game.state.time).hour, ui: ui.get() };
     for (const l of layers) l.update(info);
   };
-  /** Instanced meshes in the scene, split by kind (vehicle batches carry iPaint, people iColA). */
+  /** Instanced meshes in the scene, split by kind (vehicle batches carry iPaint, people iColA, blob shadows RGBA colours). */
   const drawn = () => {
-    const out = { vehicles: 0, people: 0, cones: 0, meshes: [] as InstancedMesh[] };
+    const out = { vehicles: 0, people: 0, blobs: 0, cones: 0, meshes: [] as InstancedMesh[] };
     scene.traverse((o) => {
       const m = o as InstancedMesh;
       if (!m.isInstancedMesh || !m.visible) return;
       out.meshes.push(m);
       if (m.geometry.getAttribute('iPaint')) out.vehicles += m.count;
       else if (m.geometry.getAttribute('iColA')) out.people += m.count;
+      else if (m.geometry.getAttribute('color')?.itemSize === 4) out.blobs += m.count;
       else out.cones += m.count;
     });
     return out;
@@ -179,5 +185,130 @@ describe('3D layers, headless', () => {
       if ((o as InstancedMesh).isInstancedMesh) left++;
     });
     expect(left).toBe(0);
+  });
+
+  it('redraws the route ribbon in place as the tuk-tuk drives, keeping its material and shader', () => {
+    const t = setup(timeOf(2026, 10, 3, 10));
+    const markers = new MarkerLayer(t.ctx);
+    t.layers.push(markers);
+    const far = world.landmarks.find((l) => l.id === 'cnx_airport')!;
+    expect(t.game.playerDriveTo(far.x, far.y)).toBe(true);
+    t.game.setSpeed(5);
+    // Every material or geometry the scene holds, and how many of them were disposed.
+    const seen = new Set<Material | BufferGeometry>();
+    let disposed = 0;
+    const watch = () =>
+      t.scene.traverse((o) => {
+        const m = o as Mesh;
+        if (!m.isMesh) return;
+        for (const r of [m.material as Material, m.geometry]) {
+          if (seen.has(r)) continue;
+          seen.add(r);
+          r.addEventListener('dispose', () => disposed++);
+        }
+      });
+    const ribbon = () => {
+      let found: Mesh | undefined;
+      t.scene.traverse((o) => {
+        if ((o as Mesh).isMesh && o.renderOrder === 4 && o.visible) found = o as Mesh;
+      });
+      return found;
+    };
+    const idx0 = t.game.playerVehicle()!.routeIdx;
+    t.frame();
+    watch();
+    const first = ribbon();
+    expect(first).toBeDefined();
+    const material = first!.material;
+    for (let i = 0; i < 90; i++) {
+      t.frame();
+      watch();
+    }
+    const v = t.game.playerVehicle()!;
+    // The tuk-tuk moved along its route (and is still on it), so the ribbon was rebuilt many times over.
+    expect(v.route).not.toBeNull();
+    expect(v.routeIdx - idx0).toBeGreaterThan(10);
+    expect(ribbon()!.material).toBe(material);
+    expect(disposed).toBe(0);
+    // It starts at the tuk-tuk and follows the road ahead of it.
+    const pos = ribbon()!.geometry.getAttribute('position');
+    const pose = t.game.vehiclePose(v);
+    expect(Math.hypot((pos.getX(0) + pos.getX(1)) / 2 - pose.x, -(pos.getZ(0) + pos.getZ(1)) / 2 - pose.y)).toBeLessThan(5);
+    markers.dispose();
+    expect(ribbon()).toBeUndefined();
+  });
+
+  it('draws each vehicle and figure in the detail its own distance calls for, and people cast no shadow-map shadows', () => {
+    const t = setup(timeOf(2026, 10, 3, 18));
+    const fogFar = t.ctx.rig.dist * 4.5 + 1600;
+    t.scene.fog = new Fog(0xffffff, 100, fogFar);
+    for (let i = 0; i < 120; i++) t.frame();
+    const { rig } = t.ctx;
+    const scale = t.ctx.vehicleScale();
+    const m = new Matrix4();
+    const at = new Vector3();
+    /** Each instance's distance from the camera (the eye taken as rig.dist above the target) and its scale. */
+    const instances = (mesh: InstancedMesh) =>
+      Array.from({ length: mesh.count }, (_, i) => {
+        mesh.getMatrixAt(i, m);
+        at.setFromMatrixPosition(m);
+        return { view: Math.hypot(rig.dist, at.x - rig.tx, -at.z - rig.ty), size: new Vector3().setFromMatrixColumn(m, 0).length() };
+      });
+    const tris = (geo: BufferGeometry) => geo.index!.count / 3;
+    type Lods = { lods: ({ mesh: InstancedMesh } | null)[] };
+    const meshesOf = (b: Lods) => b.lods.flatMap((l) => (l && l.mesh.visible ? [l.mesh] : []));
+    const riders = meshesOf((t.vehicles as unknown as { people: Lods }).people);
+    const waiting = meshesOf((t.layers[1] as unknown as { batch: Lods }).batch);
+    const walkers = meshesOf((t.layers[2] as unknown as { batch: Lods }).batch);
+    const personFar = tris(personGeometry(1));
+    expect(personFar).toBeLessThan(tris(personGeometry(0)) * 0.6);
+    const tukNear = tris(tuktukGeometry('lpg'));
+    const tukFar = tris(tuktukGeometry('lpg', 'none', 1));
+
+    const d = t.drawn();
+    let farTuks = 0;
+    let beyondRiders = 0;
+    let farPeople = 0;
+    for (const mesh of d.meshes) {
+      if (mesh.geometry.getAttribute('iColA')) {
+        // People only receive shadows: blob decals stand in for theirs.
+        expect(mesh.castShadow).toBe(false);
+        expect(mesh.customDepthMaterial).toBeUndefined();
+        // The full figure only while it is big on screen (15 m of slack for riders queued at a rank).
+        const far = tris(mesh.geometry) === personFar;
+        for (const p of instances(mesh)) {
+          if (far) expect(p.view).toBeGreaterThan(PERSON_DETAIL_SIGHT * p.size - 15);
+          else expect(p.view).toBeLessThan(PERSON_DETAIL_SIGHT * p.size + 15);
+        }
+        if (far) farPeople += mesh.count;
+      } else if (mesh.geometry.getAttribute('iPaint')) {
+        for (const v of instances(mesh)) {
+          // Nothing past the fog; the full tuk-tuk only near the camera (100 m of slack for queues).
+          expect(v.view).toBeLessThan(fogFar + 100);
+          if (tris(mesh.geometry) >= tukNear * 0.9) expect(v.view).toBeLessThan(900 + 100);
+          if (v.view > 370 * scale + 100) beyondRiders++;
+        }
+        if (tris(mesh.geometry) === tukFar) farTuks += mesh.count;
+      }
+    }
+    const blobs = d.blobs;
+    console.log(`street level at 18:00: ${d.vehicles} vehicles (${farTuks} simple tuk-tuks), ${d.people} people (${farPeople} simple), ${blobs} blob shadows`);
+    // At street level the rival tuk-tuks across town are drawn simple, and so are most figures.
+    expect(rivalsOf(t.game)!.count).toBeGreaterThan(0);
+    expect(farTuks).toBeGreaterThan(0);
+    expect(farPeople).toBeGreaterThan(0);
+    // Riders are left out once they would be a few pixels tall, though their vehicles are drawn.
+    expect(beyondRiders).toBeGreaterThan(0);
+    for (const mesh of riders) for (const p of instances(mesh)) expect(p.view).toBeLessThan(370 * scale + 15);
+    // So are waiting passengers; everyone on foot has a blob shadow.
+    for (const mesh of waiting) for (const p of instances(mesh)) expect(p.view).toBeLessThan(630 * scale + 5);
+    expect(blobs).toBe([...waiting, ...walkers].reduce((n, mesh) => n + mesh.count, 0));
+    // Every fleet vehicle still has its stand-in, drawn or not.
+    for (const v of t.game.state.vehicles) if (v.task.kind !== 'away') expect(t.ctx.vehicleMesh(v.id)).toBeDefined();
+    // Down at the kerb, the walkers nearby are drawn in full.
+    (t.ctx.rig as { dist: number }).dist = 25;
+    for (let i = 0; i < 30; i++) t.frame();
+    const close = t.drawn().meshes.filter((mesh) => mesh.geometry.getAttribute('iColA') && tris(mesh.geometry) !== personFar);
+    expect(close.reduce((n, mesh) => n + mesh.count, 0)).toBeGreaterThan(0);
   });
 });
