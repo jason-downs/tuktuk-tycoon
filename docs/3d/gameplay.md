@@ -1,0 +1,365 @@
+# Plan: gameplay, controls and integration for the 3D Chiang Mai
+
+> Reference design report behind [docs/plan-3d.md](../plan-3d.md), the approved plan. Where they differ, plan-3d.md wins: the playable area shrinks to the central box with edge portals and save format v2 (so graph.json is rebuilt), the driving clock is 4 game s per real s, and saves start fresh.
+
+## 0. Key findings
+
+- **The central box is already in `data-raw/`.** No Overpass refetch is needed except one small query for traffic signals. `data-raw/` covers 98.90–99.055 / 18.73–18.85.
+- **Size of the new area** (98.950–99.020 × 18.762–18.808):
+  - 7.38 × 5.09 km = 37.6 km², which is 17 % of today's 217 km².
+  - 8,076 of 28,546 nodes, 9,781 edges and 597 km of road (313 km residential, 153 km service).
+  - 3,313 of 4,386 POIs, and 78 % of the total origin weight.
+  - Only **5 of the 16 LPG pumps**.
+- **Trips get shorter.** In a Monte-Carlo run of the current demand kernel:
+  - The mean road trip falls from 4.67 km to 3.31 km, and the mean street fare from about ฿124 to about ฿100.
+  - Trips over 5 km fall from ~37 % to ~6 %.
+- **20 of the 88 landmarks fall outside:**
+  - Just outside (under ~350 m): CMU main gate, Kad Na Mor, Wat Chet Yot, Ang Kaew, Baan Kang Wat.
+  - Further out: Zoo, Huay Kaew waterfall, Khruba monument, National Museum, Doi Suthep, Wat Pha Lat, Bhubing Palace, Night Safari, Royal Park Rajapruek, Wat Doi Kham, Promenada, Bangkok Hospital, Stadium 700.
+  - Grand Canyon and Huay Tung Tao are already silently dropped today, because they lie outside even the wide box.
+  - Several places sit almost on the edge: Central Festival (65 m inside), Jing Jai (10 m), CMU Rajabhat (80 m) and Arcade 2/3 (~250 m).
+- **Two worktrees depend on places that will be off-map:**
+  - B's `src/sim/mountain.ts` climb rule tests a place's real lon/lat against `DOI_SUTHEP_SLOPES`. Without off-map destinations it becomes dead code.
+  - D's `src/sim/events.ts` `toPoint` (Bo Sang) looks for the nearest place within 5 km. Nothing is that close on the new map, so the pool resolves to null and the event's inbound rides silently switch off.
+- **The game loop lives inside `MapView.frame()`**, which calls `game.update(dt)`. `view: MapView | null` is threaded through `panels.tsx`, `overlays.tsx` and `App.tsx`.
+- **Traffic data:** `lanes` is tagged on 48 % of raw road ways but is dropped by `build-map.mjs`. Signal nodes are not in the raw data.
+
+## 1. Shrinking the playable area
+
+### 1.1 Data pipeline
+- **`scripts/bbox.mjs`**: split it into two boxes.
+  - `FETCH_BBOX` keeps today's values; it is what `fetch-osm.mjs` uses.
+  - `PLAY_BBOX = { south: 18.762, west: 98.950, north: 18.808, east: 99.020 }`.
+  - `ORIGIN` becomes the centre of `PLAY_BBOX` (18.785, 98.985). That keeps 3D float32 vertices within ±4 km.
+- **`scripts/build-map.mjs`**:
+  1. Build the **full** graph as today. Then run a Dijkstra from each portal (see below) to each off-map landmark's nearest node, and write `extraM`. Off-map distances then come from the data instead of guesses.
+  2. **Clip** the edges: drop edges with both ends outside the box. Cut crossing edges at the boundary with a synthetic boundary node. For dual carriageways (outbound and inbound stubs within 60 m of each other), add a hidden **virtual turnaround** edge (`virtual: 1`), so each pair stays in the strongly connected component and becomes a portal. Then run the strongly-connected-component pass. Log the in-box road km retained; the target is at least 97 %.
+  3. Append `lanes` (and `bridge`/`layer` for the renderer) to the edge tuple: `[a, b, cls, oneway, name, len, inner, lanes]`. `RoadGraph` ignores the extra field until `lanes.ts` reads it.
+  4. **Portals**: add `portals: [{ id, name, outNode, inNode, lon, lat }]` to `graph.json`. The candidates below come from the actual boundary crossings of tertiary-or-bigger roads:
+
+     | Portal | Boundary point | Off-map destinations |
+     |---|---|---|
+     | `huay_kaew` (NW) | 18.8078, 98.9559 | Zoo, Huay Kaew waterfall, Khruba monument, **Doi Suthep** (climb), **Wat Pha Lat** (climb), **Bhubing** (climb) |
+     | `canal_w` | 18.769, 98.950 | Night Safari, Royal Park Rajapruek |
+     | `hang_dong_s` | 18.7624, 98.9727 | Wat Doi Kham, Grand Canyon (optional) |
+     | `superhighway_n` / `canal_n` | 18.808, 98.962–98.973 | National Museum, Stadium 700, Mae Jo (for D's Yi Peng charters, calendar.md §8) |
+     | `superhighway_e` / `charoen_muang_e` | 18.80 / 18.785, 99.020 | Bangkok Hospital, Promenada, **Bo Sang** (D's `toPoint`) |
+
+  5. **Snap-in rule**: a landmark up to 350 m outside the box snaps to an in-box kerb and stays a normal place. This covers CMU main gate, Kad Na Mor, Wat Chet Yot, Ang Kaew and Baan Kang Wat. Anything further out is off-map.
+  6. Filter POIs with `inPlay` instead of `inBbox`.
+  7. Write a **backdrop ring**, `public/data/backdrop.geojson`: roads with `cls ≤ 3`, water and green, 2–2.5 km out from the box. It is scenery only and not drivable. Recommendation: keep it. It is cheap, it avoids a "floating island" look, and it makes portals and the Doi Suthep silhouette (7 km west) read correctly from the overview camera.
+- **`scripts/fetch-osm.mjs`**: add a `signals` query, `node["highway"="traffic_signals"](FETCH)`. It is cached like the other queries.
+- **Decision to confirm:** instead of the snap-in rule, nudge the box to north 18.8125 and west 98.947 (+18 % area). That would put the CMU/Zoo cluster properly inside. The default is the user's box plus the snap-in rule.
+
+### 1.2 Off-map destinations (keep them all; drop none)
+- **`src/content/offmap.ts`**: `{ landmark, portal, fair?, roundTrip?, waitMin?, climb? }`.
+  - Doi Suthep is `fair: 400, roundTrip: true, waitMin: 60` [research, economics.md trip catalogue: "400 return"].
+  - Other destinations use `streetFare(inMapRoute + extraM)`.
+- **`Place.offmap?: { portal: string; extraM: number; roundTrip: boolean; waitS: number }`** in `types.ts`.
+  - The place keeps its real `x`/`y`. That means `distanceKernel`, B's `isUpDoiSuthep` and D's `toPoint` all keep working unchanged.
+  - Its `node` is the portal's `outNode`.
+  - `buildWorld()` in `src/data/world.ts` attaches them instead of dropping them (today `nearestNode(…, 500) < 0` means the place is skipped).
+- **New `VehicleTask`**: `{ kind: 'away'; until: number; trip: Trip | null; portal: number }`.
+  - In `vehicles.ts` `arrive()`, the `'trip'` case checks `dest.offmap`. If set, it calls `goAway()` instead of `completeTrip()`.
+  - A small `offmap` GameSystem (registered in `systems.ts`) finishes the trip when `time >= until`: it calls `completeTrip` so the rating covers the whole ride. It then starts an empty return leg, and finally sets the vehicle idle on `inNode`.
+  - Off-map time is `extraM` at 32 km/h (18 km/h for climbs) plus `waitS` [pacing].
+  - For off-map trips, `rateTrip`'s speed term is neutral.
+- **Filters to add** (all one-liners):
+  - `originWeight` returns 0 for off-map places (they are destination-only for street demand).
+  - `pickRank` in `ai.ts` excludes off-map candidates.
+  - `game.chargers()` excludes Promenada. Aside: `chargers()` also includes Kad Suan Kaew, which has been closed since 2022.
+  - D's event `from`-pool gets `if (p.offmap) continue` after D merges.
+  - `measureRequest` adds `extraM`.
+  - `FleetAI.update` skips vehicles that are `away`.
+  - `taskText` shows "Up Doi Suthep · back ~14:20".
+- **Presentation**: off-map places appear as signposts at their portal ("⛰️ Wat Phra That Doi Suthep · 13 km"). When the player goes away, the camera parks at the portal facing the mountain backdrop, and the clock fast-forwards (§2.5).
+
+### 1.3 Demand and balance retune (`balance.ts`, `ai.ts`)
+- **`streetPerHour` stays at 150 for now.** `baseOriginTotal()` normalises to the world's own places, so the citywide rate is unchanged, which means about 28 % higher hail density per km². That helps "drive first". Let the harness choose between 120 and 150 once D's rivals are competing.
+- **`sightRadius` 1,600 → 1,200 m** [pacing]. The old radius covers a fifth of the new map and clutters street level. With the phone mount (×1.25) it becomes 1,500 m.
+- **`typicalTripMetres` stays at 3,200 and `minTripMetres` at 700.** The box already truncates the kernel.
+- **`detourFactor`**: replace 1.3 with a value measured on the new graph (median of route length ÷ straight line over 300 place pairs, computed in a test). The one-way moat probably pushes it to about 1.35–1.45.
+- **New `BALANCE.offmap = { destWeight: 0.6, kmh: 32, climbKmh: 18 }`** [pacing]. Target 3–5 % of trips going off-map.
+- **`pickRank` decay**: `Math.exp(-d / 3000)` → `2000`.
+- **Expected money effect**: the mean fare drops about 19 %, but rides per hour rise because trips are shorter and the flag fall weighs more (~30 vs ~27 THB/km). Per-hour gross should end up roughly flat. C's `business.test.ts` band ("a tuk-tuk grossing ~฿11–12k per game day") is the canary: rerun it right after the shrink.
+- **Tests**: `tests/sim.test.ts` currently expects more than 70 landmarks, more than 3,000 places and more than 5 LPG stations. These become ≥ 68 landmarks in-map plus off-map, > 2,500 places and ≥ 4 LPG stations. Only 5 pumps remain, so check they are spread out. Consider snapping edge pumps on the Superhighway in via the 350 m rule.
+
+### 1.4 Zones (`src/content/zones.ts`, all inside the box)
+
+| id | Name | Centre (lat, lon) | Radius |
+|---|---|---|---|
+| `old_city` | Old City | 18.7875, 98.9860 | 1,050 |
+| `tha_phae` | Tha Phae & Night Bazaar | 18.7855, 98.9990 | 700 |
+| `riverside` | Riverside, Warorot & Wat Ket | 18.7915, 99.0045 | 700 |
+| `nimman` | Nimman & Maya | 18.7985, 98.9680 | 800 |
+| `wualai` (new) | Wua Lai & Chiang Mai Gate | 18.7790, 98.9870 | 700 |
+| `airport` | Airport & Central Airport Plaza | 18.7690, 98.9710 | 900 |
+| `chang_phueak` | Chang Phueak & Jing Jai | 18.8020, 98.9880 | 800 |
+| `suthep_cmu` (was `cmu`) | Suthep Rd, Wat Umong, CMU gate | 18.7960, 98.9580 | 900 |
+| `arcade_station` (was `arcade`) | Arcade, Central Festival, railway | 18.7950, 99.0160 | 1,000 |
+
+### 1.5 Saves
+- Bump `SAVE_VERSION` to 2, because arc, node and place indices all change.
+- Add `version` to `SaveInfo`. As written, `readSaveInfo` still offers "Continue" for a v1 save, and then `loadGame` silently returns null. Show "Saved on an older map" instead.
+
+## 2. Driving feel in 3D ("drive first")
+
+### 2.1 Control model: on rails, with freedom to move within the lane
+- **Recommendation**: keep E's graph model (`manual.ts`: throttle plus turn choice at junctions). The vehicle is always at `(arc, s)`, so routing, claims, arrival, closures and one-ways work unchanged.
+- **Free steering is not recommended.** It would need mapping positions back onto the graph, one-way enforcement, collisions and pickup snapping. It is a lot more work and diverges from E.
+- **A presentation-only lateral offset `d`** gives the steering feel:
+  - On straights, A/D slides the tuk-tuk within its half of the road (kerb ↔ centreline) or across lanes on multi-lane one-ways.
+  - In the **junction decision zone** (last `max(20 m, 1.2 s × speed)` of an arc), the same input picks the exit:
+    - A → leftmost exit with turn angle > +30°.
+    - D → rightmost exit (on divided roads the sharp-right median connector *is* the Thai U-turn slot).
+    - No input → straightest exit.
+    - Being in the left lane biases toward a left turn.
+  - The chosen exit is previewed from about 40 m out as an arrow on the road and in the HUD.
+- **This makes the one-way moat a real navigation puzzle**, which is what the title screen promises ("learn the one-way moat"). `outgoing()` only offers legal arcs, so wrong-way driving cannot happen.
+
+### 2.2 Key map
+
+| Key | Action |
+|---|---|
+| W/↑ | Throttle |
+| S/↓ | Brake. Held for 0.5 s at a standstill: U-turn (two-way roads only, 4 game s animation). Dead-end stubs auto-U-turn. |
+| A/D, ←/→ | Steer (lane position, exit choice) |
+| E / Enter | Interact: pick up nearby passenger, refuel when stopped at a pump |
+| H | Horn: waiting passengers within 60 m wave harder; an ambient car ahead on a multi-lane road moves over. Small rating hit near temples, monks and elders [pacing, no research]. |
+| G | GPS autodrive on/off |
+| Tab | Drive ↔ Manage |
+| C | Cycle camera preset |
+| M | City map (MapLibre planner) |
+| Space, 1–5, F, Esc | As today |
+
+- Mouse: wheel zooms, right-drag orbits, left-click selects, right-click on the ground is "drive here" (the existing `playerDriveTo`). In Manage mode WASD pans the camera.
+- The haggle dialog captures keys: 1–4 pick a preset, Enter quotes, Esc declines. The global 1–5 speed keys must be ignored while it is open.
+
+### 2.3 Speed model (in game units)
+- Top speed = `targetSpeed(game, v) × 1.15`. It inherits rush hour, weather, closures, upgrades and driver skill; no new cap tables.
+- Accelerate 1.6 m/s², brake 5 m/s², coast −0.8 m/s² [pacing].
+- Rating needs no change: `rateTrip` already weighs speed by archetype `thrill` (backpacker +0.8, elder −0.9). Add HUD speech bubbles: "faster!" or "slow down, na!"
+
+### 2.4 Driving on the LEFT (`src/sim/lanes.ts`, pure and shared by renderer, manual and signals)
+- Left normal of heading θ: `(-sin θ, cos θ)`. Lane width W = 3.0 m [pacing].
+- `lanesPerDir`:
+  - One-way roads: `lanes`.
+  - Two-way roads: `max(1, floor(lanes / 2))`.
+  - Untagged defaults: trunk and primary 2; secondary 2 if one-way, else 1; everything else 1. Service roads and living streets use W = 2.5.
+- Kerb-lane centre offset (lane 0 is the left-most lane):
+  - Two-way: `(n − 0.5) × W` left of the centreline.
+  - One-way: `((n − 1) / 2) × W`.
+- `lanePose(graph, arc, s, prevArc, nextArc, lane, out)` blends lane offsets across junctions with a quadratic Bézier over the last and first `min(8 m, len / 2)`. It needs `nextArc = route.arcs[routeIdx + 1]` or manual's chosen exit.
+- `kerbPoint(place)` is where passengers stand: the incoming arc whose kerb is nearest the POI, 6 m before the node, at half the road width + 1 m.
+
+### 2.5 Time scale: yes, 1× is about 10× too fast for street level
+- **Today**: a tuk-tuk at 24–50 km/h moves 6.7–13.9 m/s in game time. At 30 game s per real s that is 200–420 m/s on screen, roughly 900 km/h or 85 tuk-tuk lengths per second.
+- **Recommendation: one clock, varied by mode — not a separate clock just for motion.**
+  - A GTA-style split between the clock and motion would need a second `dt` in every system (demand Poisson, patience, `busyUntil`, breakdowns). It would break the per-game-day economy between modes and collide with all five workstreams.
+  - With a single clock the simulation and the per-game-day economy stay identical. Only the real time per game day changes.
+- **`clock.ts`**:
+  - `DRIVE_TIME_SCALE = 4` [pacing]; offer 3/4/5 as a "Driving pace" setting.
+  - `DRIVE_IDLE_TIME_SCALE = 30`.
+  - `AWAY_TIME_SCALE = 240`.
+- **`Game`** gets:
+
+  ```ts
+  /** Drive mode sets this; return null to use the speed buttons. Ignored when paused. */
+  clockOverride: ((g: Game) => number | null) | null = null;
+  ```
+
+  `timeScale` uses it only when `state.speed > 0` and there are no pauses.
+- **Adaptive drive clock** (eased over about 0.4 real s by the drive controller):
+  - 4× while the player's tuk-tuk moves under manual control.
+  - 30× while `busyUntil > now` (boarding 60 s, alighting 45 s, refuelling 6 min) or while parked with no hail in sight.
+  - 240× while `away`.
+  - The haggle still pauses the game.
+- **What this gives**:
+
+  | Mode | Game s per real s | 1 game hour | 1 game day | On-screen speed |
+  |---|---|---|---|---|
+  | Drive, steering | 4 | 15 min | 6 h (pure driving) | avg ~26 m/s (~95 km/h); primary up to 42 m/s |
+  | Drive, parked / boarding | 30 | 2 min | – | – |
+  | Drive, GPS autodrive | 30 (1×) | 2 min | – | camera lifts to ≥ 250 m |
+  | Manage ½×–8× | 15–240 | 4 min – 15 s | 96–6 min | overview |
+
+- **Real-time cost of a ride**: about 4 km driven (0.7 km pickup + 3.3 km trip) at about 6.5 m/s is 615 game s. At 4× that is about 154 real s, plus about 4 s of fast-forwarded boarding and about 10 s of haggling: **≈ 2.8 real minutes per hand-driven ride**, versus about 24 s on autopilot at 1×. Patience windows (10–28 game min) become 2.5–7 real min; a 1.2 km pickup takes about 50 s.
+- **Economy**: per game day nothing changes (rent 350/day, wages and settlement are untouched). Real-time pacing slows when you drive yourself. That creates the "manage later" pull naturally: every fleet tuk-tuk earns about 7× more per real minute in Manage mode.
+- **Rewrite the pacing table in `docs/design.md`**:
+  - First ride < 1 min, via a scripted hail 80 m from the start.
+  - Garland (฿40) after ride 1.
+  - Phone mount or cushions (฿900–1,200) after about 10 rides, which is 25–30 min driving or 10–15 min using autodrive for the trip leg.
+  - First hire at about 45–60 min.
+  - Manage-mode milestones as before.
+- **Optional "smooth motion" clamp in Manage mode**: effective scale ≤ 0.3 × camera distance in metres, so 8× only applies when zoomed out beyond about 800 m.
+
+### 2.6 Camera (the user's ~50° pitch)
+- **Drive chase**:
+  - Distance `clamp(45 + 1.2 s × on-screen speed, 35, 120)` m, vertical FOV 45°.
+  - Look-ahead of 0.8 s × on-screen speed (at most 30 m).
+  - Yaw follows the heading from `lanePose` with a 0.35 s time constant; a U-turn swings 180° over 0.8 s.
+  - A right-drag orbit re-centres after 2.5 s (with a north-up lock toggle). Zoom is free out to overview.
+- **Kerbside** (during haggle): 14 m distance, 28° pitch, yaw = heading + 70°, slow 3°/s orbit.
+- **Autodrive or fast-forward**: 250–400 m distance, 55° pitch.
+- **Manage**: 60 m – 5 km. Pitch may ease from 50° to 62° beyond 1.5 km for legibility; about 5 km frames the whole 7.4 km width.
+- The camera target is clamped to the box plus 500 m, and fog hides the end of the backdrop.
+
+### 2.7 GPS and autodrive
+- Whenever there is a target (pickup, destination or pump), show a route ribbon on the road, turn arrows, and a HUD line such as "120 m · left onto Moon Muang Rd" (`graph.edgeName`).
+- If the player takes a different exit, reroute with `sendTo` at most once per junction.
+- **G, clicking a passenger, or right-clicking the map** hands the wheel to route-following. This is today's 2D click-to-go model, so it stays first-class (and is the best touch control).
+- Pressing a speed button while driving engages autodrive and lifts the camera. Any WASD input takes control back and returns to the drive clock.
+
+### 2.8 Hail → pickup → haggle → drop-off in 3D
+1. **Spawn**: the passenger figure appears at `kerbPoint(place)` (party figures by `party`). Beyond about 150 m it shows as a billboard badge with a patience ring and fare hint, reusing `passengerBadge()` from `sprites.ts` as a texture. Screen-edge arrows point to the nearest 3–5 hails in sight. In drive mode the HUD shows only `game.visibleTo(playerVehicle)`, a new helper, plus company channels.
+2. **Within 60 m**: the passenger waves and a speech bubble shows `req.line`.
+3. **Stop within 25 m at < 1.5 m/s**: the tuk-tuk eases to the kerb and the passenger walks over (about 1 real s, animated in real time while the sim is paused). Far-kerb passengers cross the road; there is no penalty.
+   - Sim: extract the `'pickup'` case of `VehicleSystem.arrive()` into `dispatch.ts` as `beginKerbside(game, v, req)` (claim → `measureRequest` → fixed fare starts the trip, otherwise `task = 'haggle'`, `pause('haggle')`, `emit('haggle')`). Both autodrive arrival and `manual.ts` proximity call it.
+4. **Haggle**: keep `HaggleDialog.tsx` logic but restyle it as a bottom-right sheet so the passenger stays visible, with the kerbside camera. Its existing 700/1100 ms timeouts line up with the climb-in and walk-away animations.
+5. **Drop-off**: stop within 30 m of the destination kerb (or reach the end of the route). Passengers climb out and walk into the building.
+   - The `trip` event (`TripResult`) drives the effects: a coin burst of fare + tip flying to `.stat.cash` in the top bar, stars popping above the passenger, and "+฿120 · tip ฿20 · ★★★★½".
+   - Fleet trips get a small floating "+฿" only when on screen.
+6. **App bookings** (fixed fare): the passenger holds a phone and boards without haggling.
+
+### 2.9 Contract to send E now
+E's `manual.ts` must expose:
+- `setDriveInput(game, { throttle, steer, uturn })`, `manualActive(game, v)`, `manualNextExit(game, v)`.
+- A `VehicleSystem` skip for manually driven vehicles.
+- Proximity pickup and drop-off through `beginKerbside` / `completeTrip`.
+- A `game.manualSpeedCap: ((v) => number) | null` hook that the 3D traffic layer sets, so ambient cars and signals can block the player.
+- Any time-scale logic goes through `clockOverride` only.
+
+## 3. Traffic realism: worth doing vs not
+
+**Do:**
+1. **Left-lane offset and junction curves** (`lanes.ts`, presentation only). Cheap, and a big win for the Thai look.
+2. **Rank and kerb slots**: idle vehicles and waiting passengers at the same node get slot i at `kerbPoint − heading × 3.6 m × i`. This fixes the most visible overlap (stacks at Tha Phae Gate).
+3. **U-turn animation** when an arc flips to `reverseArc` mid-arc (AI route starts).
+4. **Ambient traffic** (D) as instanced meshes, with IDM car-following among ambient vehicles only. Ambient cars treat simulated vehicles as leaders, and give way or fade out when a simulated vehicle closes from behind. Headless AI therefore stays deterministic. Motorbikes should make up about half the mix.
+5. **Player-only blocking**: `manualSpeedCap` from the leader in the same lane (simulated or ambient). Bumps match speed; there is no damage.
+6. **Signals at clustered OSM signal junctions** (expect about 25–50), in `src/sim/signals.ts`:
+   - Stateless phases: `phase = (time + offset) mod cycle`. Cycle 90 s (Rincome 150 s: calendar.md cites "the longest wait for a green light") [pacing].
+   - Approaches split into two groups by the junction axis.
+   - A generic `game.stopRules` hook in `movement.ts` makes *all* simulated vehicles stop at the line 6 m before the node. Seeing fleet tuk-tuks run reds in 3D would look wrong.
+   - The player may run a red, with a rating hit and a chance of a police-checkpoint fine [pacing]. Research mentions checkpoints on the Superhighway, Huay Kaew and Old City exits, but not a fine amount.
+   - Recheck rush-hour factors in the harness. Average added delay is about 11 s per signalised passage.
+
+**Don't:**
+- Car-following between fleet vehicles in the simulation. Overlaps on roads are rare (slots fix the ranks), and it would put balance and determinism at risk and conflict with D.
+- AI lane changes, and gap acceptance at unsignalised junctions.
+- Pedestrian crossings (keep only waiting passengers plus a few flavour monks and pedestrians).
+- Physics, damage and parking manoeuvres.
+
+## 4. Management mode in 3D
+
+- **Mode semantics**:
+  - Tab into Manage turns `state.autopilot` on (remembering the previous value), switches to the speed buttons and allows free camera pan.
+  - Tab back turns autopilot off, snaps the camera to the player and restores the drive clock.
+  - Switching is disabled during a haggle. A mid-trip handover works because `v.route` is kept.
+  - Zoom is free in both modes.
+- **Level of detail by camera distance**:
+  - ≤ 150 m (street): full models.
+  - 150–900 m (district): simpler models plus screen-space badges — status emoji from `MapView.statusIcon()`, passenger badges with patience ring and fare, landmark icons and names.
+  - > 900 m (city): fleet as coloured dots (player `#e0457b`, fleet `#3d6fb6`, rivals grey), passengers capped or clustered, ambient traffic hidden, zone labels shown.
+- **Picking**: project vehicle and request positions to the screen and take the nearest within 20 px — the same approach as `MapView.vehicleAt()` / `requestAt()`. This works at every zoom and needs no raycasting against instanced meshes.
+- **Selection visuals**: ground ring, blue route ribbon, curved arc to the destination pin.
+- **New management action**: a "Dispatch nearest free tuk-tuk" button on `RequestCard`, calling `claimRequest(game, v, id)`.
+- **Minimap** (`src/ui/Minimap.tsx`, registered in `OVERLAYS`):
+  - Pre-render `graph.edges` once to an offscreen canvas at about 4 m/px (about 1,850 × 1,275 px).
+  - Drive mode: a round radar, 500 m radius, rotating with heading, showing hails, the destination arrow and fleet.
+  - Manage mode: north-up map of the whole area with the camera outline; click to fly there, right-click for "drive here".
+- **Keep the MapLibre map as the optional "City map" planner (M)**:
+  - Lazy-load it with `import()` so the 3D build doesn't pay ~800 KB up front.
+  - Use it for zones, closures, events, depots, and as the fallback when WebGL2 is unavailable.
+  - Update `maxBounds` to the box plus 1 km.
+  - Weather, lantern and traffic painters become 3D-only.
+- **Existing UI mapping**:
+  - Add a `WorldView` interface, `{ flyTo(x, y, zoom?), focusVehicle(id), screenOf(x, y, z?), mode }`, implemented by both `MapView` and the 3D view. `PanelProps`, `OverlayProps` and `App` switch from `MapView` to it.
+  - `flyTo` zoom converts as distance = 1,250 m × 2^(16 − z). The existing `flyTo(x, y, 16)` calls from `FleetPanel` and `PlayerCard` therefore land at district scale.
+  - Any left-drag pan sets `ui.follow = false`, like today's `dragstart`.
+  - Toasts with `x`/`y` keep working through `flyTo`.
+  - Add `mode: 'drive' | 'manage'` and `planner: boolean` to `UIState`.
+  - Replace the `PlayerCard` hint with "WASD drive · E pick up · G autodrive · Tab manage".
+  - The top bar gets a Drive/Manage toggle and a "Drive clock" chip next to the speed buttons.
+
+## 5. Integration and merge order
+
+**Main principle — least rework.** The 3D view implements the existing `PaintContext`:
+- A transparent 2D overlay canvas on top of the WebGL canvas.
+- `toScreen(x, y)` projects ground points through the 3D camera.
+- `zoom` is the map-zoom equivalent, `16 − log2(d / 1250)`.
+- An optional `toScreen3(x, y, z)` and `lod` are added.
+
+Every 2D painter from A–E then works in 3D on day one — flat, but in the right place. The ones that look wrong get ported to meshes afterwards.
+
+**Order:**
+1. **Merge A → B → C → D → E** into main (C and D can swap). After each merge, run `npm run typecheck && npm test` and a 10-minute 2D smoke test with `window.__game`. Expected conflicts are in `systems.ts`, `types.ts`, `panels.tsx` and `game.ts` (B's climb check, D's `edgePenalty`). E goes last because `manual.ts` builds on D's `movement.ts`/`routing.ts`. Tag a 2D baseline.
+2. **Seams refactor (no behaviour change)**:
+   - Game loop out of `MapView.frame` into `src/ui/loop.ts`.
+   - `WorldView`.
+   - `clockOverride`, `stopRules`, `manualSpeedCap`, `visibleTo`.
+   - `beginKerbside`.
+   - The `PaintContext` extensions.
+3. **Map shrink**: portals, off-map destinations, `'away'` task, zones, lanes in the graph, retune, `SAVE_VERSION` 2. The 2D game must still pass here. F's balance harness runs now.
+4. **3D renderer behind `?view=3d`**: implements `WorldView` and the `PaintContext` overlay. Parity checklist: vehicles, passengers, selection, follow, `flyTo`, routes, haggle, toasts.
+5. **Drive mode**: `src/drive/DriveController.ts` (input → manual API, `clockOverride` easing, camera presets), `lanes.ts`, rank slots, kerbside flow and effects.
+6. **Painter ports**, in this order:
+   - D rivals and ambient traffic → instanced meshes. Must port: flat sprites look wrong.
+   - D lanterns → rising additive emissive quads, plus krathongs on the Ping.
+   - D rain/storm/haze → particles, wet-road material, fog and lightning.
+   - D closures → barriers and "ถนนปิด" signs, plus walking-street stalls on Ratchadamnoen/Wua Lai when active.
+   - C depots → garage building plus company sign; hotel-partner badges stay as overlays.
+   - E turn indicator → road decal (the overlay stays for the HUD).
+   - B paints and upgrades → tuk-tuk materials (garland, LED strips glowing at night).
+   - Coach marks use `WorldView.screenOf`.
+7. **Signals** (fetch query, build clustering, stop rule, rendering) and ambient IDM.
+8. **Make 3D the default**; the planner map moves behind M; add the minimap.
+9. **F workstream**: balance and QA.
+
+**Tell D now** (it is still in progress): keep the ambient/rival *model* in a DOM-free module that returns `{ kind, arc, s, speed, lane, paint }[]`, so its painter only draws. Weather and lantern intensity should be read from `game.state.systems`. Also tell D about `p.offmap` for event pools.
+
+**Tests and checks:**
+- `tests/mapdata.test.ts`:
+  - All nodes inside the box plus margin.
+  - At least 97 % of in-box road km retained.
+  - Every in-box landmark snaps within 150 m.
+  - Every off-map landmark has a portal, and portals route both ways from Tha Phae Gate.
+  - `lanes` parsed.
+  - Measured `detourFactor`.
+- `tests/routing.test.ts`: keep the existing tests; add a portal round trip.
+- `tests/lanes.test.ts`:
+  - The offset is to the left of the heading (cross-product sign) on two-way roads, with the correct lane on one-ways.
+  - Pose is continuous across arc boundaries (< 0.5 m jump).
+- `tests/offmap.test.ts`:
+  - An EV Doi Suthep trip goes portal → away → paid ฿400 → returns idle.
+  - An LPG tuk-tuk is blocked by B's `climbBlocked`.
+  - D's Bo Sang `toPoint` resolves.
+- `tests/drive.test.ts` (headless manual driving):
+  - Throttle, exit choice, U-turns only on two-way roads.
+  - Stopping within 25 m emits `haggle`; drop-off completes the trip.
+  - The `clockOverride` returns 4 / 30 / 240 in the right states and respects pause.
+- `tests/signals.test.ts`: deterministic phases; stops at red and goes on green; trips per day within 10 % of the no-signal baseline.
+- `tests/balance.test.ts` (F):
+  - One autopilot tuk-tuk's gross per game day is inside C's band.
+  - Mean trip about 3.3 km.
+  - A scripted drive-mode bot's real time, Σ dt ÷ scale, meets the new pacing table.
+- All workstream tests (for example `fleet.test.ts`, `business.test.ts`) pass on the new map.
+- **In the browser** (dev server, `window.__game`):
+  - Scripted key events advance `arc`/`s` with a left offset.
+  - The kerbside pickup opens the sheet; Tab toggles autopilot.
+  - v2 saves round-trip; a v1 save shows the incompatibility message.
+  - The planner shares the selection.
+  - About 60 fps with 50 fleet + 300 ambient vehicles at district level, and ≥ 30 fps at city level on an integrated GPU.
+
+**Risks:**
+- Strongly-connected-component clipping eating one-way systems near the edges. Mitigated by the virtual turnarounds and the 97 % check.
+- Only 5 LPG pumps.
+- Real-time pacing when driving by hand. Tune `DRIVE_TIME_SCALE` 3–5 in play-testing.
+- The `CLAUDE.md` Commands/Conventions update, which should mention `DRIVE_TIME_SCALE`, `WorldView` and off-map places. A local hook blocks editing that file without the user's explicit OK, so ask the user first.
+
+### Critical Files for Implementation
+- /Users/jason/coderepos/tuktuk/scripts/build-map.mjs (plus /Users/jason/coderepos/tuktuk/scripts/bbox.mjs)
+- /Users/jason/coderepos/tuktuk/src/sim/game.ts (`clockOverride`, `stopRules`, `visibleTo`, `timeScale`)
+- /Users/jason/coderepos/tuktuk/src/sim/vehicles.ts and /Users/jason/coderepos/tuktuk/src/sim/dispatch.ts (`'away'` task, `beginKerbside`)
+- /Users/jason/coderepos/tuktuk/src/data/world.ts (off-map places, portals, snap-in rule)
+- /Users/jason/coderepos/tuktuk/src/map/MapView.ts together with /Users/jason/coderepos/tuktuk/src/map/painters.ts (loop extraction, `WorldView`, the `PaintContext` overlay that the 3D view must implement)
