@@ -341,6 +341,22 @@ describe('rivals', () => {
     for (let i = 0; i < b.count; i++) if (b.routes[i]) routed++;
     expect(routed).toBeGreaterThan(b.count * 0.8);
   });
+
+  it('carries on exactly where it was saved, rivals, passengers and all', () => {
+    const game = gameAt(timeOf(2026, 10, 4, 9));
+    game.state.autopilot = true;
+    // Save mid-minute, with rivals part-way along their legs.
+    for (let t = 0; t < 2 * HOUR + 22; t += 2) game.step(2);
+    const copy = Game.load(world, JSON.parse(game.serialize()));
+    installSystems(copy);
+    for (let t = 0; t < HOUR; t += 2) {
+      game.step(2);
+      copy.step(2);
+    }
+    expect(JSON.stringify(copy.state.systems.rivals)).toBe(JSON.stringify(game.state.systems.rivals));
+    expect(copy.state.requests.map((r) => r.id)).toEqual(game.state.requests.map((r) => r.id));
+    expect(copy.state.cash).toBe(game.state.cash);
+  });
 });
 
 describe('world systems', () => {

@@ -28,6 +28,8 @@ export interface GraphJSON {
   portals?: PortalJSON[];
   /** Out-of-town landmarks: the portal to use and the road metres beyond it. */
   offmap?: { id: string; portal: number; extraM: number }[];
+  /** Junction nodes controlled by traffic signals (OSM highway=traffic_signals), ascending. */
+  signals?: number[];
 }
 
 export interface PortalJSON {
@@ -84,6 +86,8 @@ export class RoadGraph {
   readonly outArcs: Int32Array;
   readonly nodeCount: number;
   readonly portals: PortalJSON[];
+  /** Junction nodes controlled by traffic signals, ascending. */
+  readonly signals: number[];
   private readonly edgeGrid = new Map<number, number[]>();
   private readonly nodeGrid = new Map<number, number[]>();
 
@@ -98,6 +102,7 @@ export class RoadGraph {
       this.nodeY[i] = json.nodes[2 * i + 1];
     }
     this.portals = json.portals ?? [];
+    this.signals = json.signals ?? [];
     this.edges = json.edges.map(([a, b, cls, oneway, name, , inner, lanes, virtual]) => {
       const pts = new Float64Array(inner.length + 4);
       pts[0] = this.nodeX[a];

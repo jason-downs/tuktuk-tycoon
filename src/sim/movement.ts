@@ -69,7 +69,8 @@ export function driveVehicle(game: Game, v: Vehicle, dt: number): boolean {
   if (remaining < ARRIVAL_SLOWDOWN_M) target = Math.min(target, 3 + remaining / 5);
   const dv = target - v.speed;
   v.speed += Math.max(-DECEL * dt, Math.min(ACCEL * dt, dv));
-  let dist = Math.max(0.2, v.speed) * dt;
+  // A slow crawl keeps vehicles from stalling short of their target; a cap of zero (a red light) stops them.
+  let dist = (target > 0 ? Math.max(0.2, v.speed) : v.speed) * dt;
   const moved = dist;
 
   let arrived = false;

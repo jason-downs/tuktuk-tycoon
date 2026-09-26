@@ -2,7 +2,7 @@
 // player rents from, a Chiang Mai man who drops Kham Mueang words (culture.md §5:
 // pho = look, bo pen yang = no problem, jai yen yen = keep calm, aew hue muan
 // noe = have fun out there). The rent and the 04:00 settlement come from
-// src/sim/balance.ts; a day lasts 48 minutes at 1× (docs/design.md).
+// src/sim/balance.ts; the moat's one-way directions from culture.md §2.
 
 import type { TutorialStep } from '../sim/tutorial';
 
@@ -34,26 +34,29 @@ export const COACH: Record<TutorialStep, CoachStep> = {
     anchor: '.card.player',
     action: 'Let’s go',
   },
-  select: {
+  drive: {
+    title: 'Take the handlebars',
+    body: [
+      'Hold W (or ↑) to go and S (or ↓) to brake. A and D pick your turn at the next junction — the arrow shows which way.',
+      'The moat roads are one-way: the inner ring runs anticlockwise, the outer ring clockwise. Jai yen yen — the GPS knows the way round.',
+    ],
+    anchor: '.card.player',
+    waitFor: 'Hold W to drive off',
+  },
+  find: {
     title: 'Find a passenger',
     body: [
-      'Pho — look at the map! People waving near you want a ride. The ring round each one shows how long they’ll wait.',
-      'Click a waving passenger to see where they’re going.',
+      'Pho — people waving at the kerb want a ride; the ring round each one shows how long they’ll wait. Arrows at the screen edge and dots on the radar point to them.',
+      'Pull up within 25 m, stop, and press E. Or click one and press Pick up to let the GPS drive you there.',
     ],
     lost: 'They walked off. Bo pen yang — plenty more where they came from.',
-    waitFor: 'Click a waving passenger',
+    waitFor: 'Stop beside a waving passenger and press E',
   },
-  pickup: {
-    title: 'Pick them up',
-    body: ['Their card shows the trip, the going rate and how long they’ll wait. Press Pick up and I’ll draw your route.'],
-    anchor: '.card.request',
-    waitFor: 'Press Pick up',
-  },
-  drive: {
-    title: 'Drive to the kerb',
+  approach: {
+    title: 'Pull up at the kerb',
     body: [
-      'Follow the pink line. Your tuk-tuk drives itself — or press M to take the handlebars.',
-      'Jai yen yen: the moat roads are one-way, so the route may go the long way round.',
+      'Follow the pink line. Stop within 25 m and press E and they’ll walk over — or let the GPS stop there for you.',
+      'Red lights stop the traffic. You can run one by hand, but your passengers won’t love it, and now and then the police are watching.',
     ],
     anchor: '.card.player',
     waitFor: 'On the way to the passenger…',
@@ -61,7 +64,7 @@ export const COACH: Record<TutorialStep, CoachStep> = {
   haggle: {
     title: 'Name your price',
     body: [
-      'The going rate is fair. Tourists often pay the Tourist price; locals haggle hard.',
+      'The going rate is fair. Tourists often pay the Tourist price; locals haggle hard. Keys 1–4 pick a price, Enter quotes, Esc lets them go.',
       'Ask too much and they counter or walk off — and overcharged riders give fewer stars (★). Stars bring passengers back.',
     ],
     anchor: '.dialog.haggle',
@@ -69,7 +72,10 @@ export const COACH: Record<TutorialStep, CoachStep> = {
   },
   dropoff: {
     title: 'Take them there',
-    body: ['Deal! Drive to the pin. They pay when you arrive, then rate the ride.'],
+    body: [
+      'Deal! Drive to the pink pin; they pay when you arrive, then rate the ride.',
+      'Tired hands? G hands the wheel to the GPS, and G or W takes it back.',
+    ],
     anchor: '.card.player',
     waitFor: 'On the way to the drop-off…',
   },
@@ -77,31 +83,24 @@ export const COACH: Record<TutorialStep, CoachStep> = {
     title: 'Your first fare',
     body: [
       'You earned ฿{fare}{tip} and ★{rating}.',
-      'Now watch the LPG bar on your card. When it runs low press ⛽ Refuel, or right-click a green ⛽ pump on the map. An empty tank means pushing her there!',
+      'Now watch the LPG bar on your card. When it runs low, stop beside a ⛽ pump and press E, or press ⛽ Refuel and the GPS takes you to one. An empty tank means pushing her there!',
     ],
     anchor: '.card.player',
     action: 'Got it',
   },
-  speed: {
-    title: 'Time is yours',
-    body: ['Use the speed buttons, or keys 1–5; Space pauses. A day passes in 48 minutes at 1×, and rent is due at 04:00.'],
-    anchor: '.topbar .speed',
-    below: true,
-    action: 'Next',
-  },
-  autopilot: {
-    title: 'Let her drive',
+  manage: {
+    title: 'Drive now, manage later',
     body: [
-      'Tired hands? Tick Autopilot on your card and she finds passengers and haggles at your company fare by herself.',
-      'Untick it to drive again. Manual driving (M) and Autopilot can’t both be on.',
+      'One tuk-tuk is a job; a fleet is a business. Tab switches to Manage: your tuk-tuk drives itself, the speed buttons (1–5, Space pauses) run the clock, and you can dispatch any free tuk-tuk to a passenger.',
+      'M opens the flat city map for planning. Tab again puts you back at the wheel.',
     ],
-    anchor: '.card.player',
-    highlight: '.card.player .toggle',
+    anchor: '.topbar .mode-toggle',
+    below: true,
     action: 'Next',
   },
   panels: {
     title: 'Your office',
-    body: ['One tuk-tuk is a job; a fleet is a business. These panels run your company — open a few:'],
+    body: ['These panels run your company — open a few:'],
     anchor: '.topbar .panels-nav',
     below: true,
     action: 'Done',

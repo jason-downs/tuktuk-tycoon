@@ -1,27 +1,35 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ARCHETYPES } from '../content/archetypes';
 import { spokenName } from '../content/dialogue';
 import { VEHICLE_MODELS } from '../content/vehicles';
-import { MapView } from '../map/MapView';
+import type { MapView } from '../map/MapView';
 import { World3DView } from '../world3d/World3DView';
 import type { GameView } from './view';
 import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
+import { DriveClock } from '../sim/driveClock';
 import type { Game } from '../sim/game';
 import { bookingTag } from '../sim/business';
-import { setManual } from '../sim/manual';
+import { dispatchNearest, freeVehiclesFor } from '../sim/manage';
+import { setAutodrive, setManual } from '../sim/manual';
 import { climbBlocked, requestClimbs } from '../sim/mountain';
 import type { Notice } from '../sim/types';
 import { ClimbNotice } from './ClimbNotice';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
 import { startGameLoop } from './loop';
+import { applyMode, initialMode } from './mode';
 import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
 import { SoundControls } from './audio/SoundControls';
+import { useDriveKeys } from './drive/DriveKeys';
+import { DriveClockChip, ModeToggle } from './drive/TopBarDrive';
 import { ManualStatus, ManualToggle } from './manual/ManualDrive';
 import { SpeechLine } from './SpeechLine';
 import './responsive.css';
+
+/** The flat MapLibre map, fetched the first time it is opened (it brings MapLibre with it). */
+const loadMapView = (): Promise<typeof MapView> => import('../map/MapView').then((m) => m.MapView);
 
 export interface AppProps {
   game: Game;
@@ -31,28 +39,90 @@ export interface AppProps {
 }
 
 export function App({ game, base, onSave, onQuit }: AppProps) {
-  const mapEl = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<GameView | null>(null);
+  const worldEl = useRef<HTMLDivElement>(null);
+  const plannerEl = useRef<HTMLDivElement>(null);
+  const [main, setMain] = useState<GameView | null>(null);
+  const [plan, setPlan] = useState<GameView | null>(null);
+  const planner = useUI((s) => s.planner);
+  // The 3D city is the main view; ?view=map shows the flat planning map instead.
+  const flat = useMemo(() => new URLSearchParams(window.location.search).get('view') === 'map', []);
 
   useEffect(() => bindGameTicks(game), [game]);
   useEffect(() => startGameLoop(game), [game]);
+  useEffect(() => new DriveClock(game, { mode: () => ui.get().mode, pace: () => ui.get().drivePace }).install(), [game]);
+  useEffect(() => {
+    ui.set({ planner: false, haggle: null });
+    applyMode(game, initialMode(game));
+  }, [game]);
+  useDriveKeys(game);
 
   useEffect(() => {
-    if (!mapEl.current) return;
-    // The 3D city is the main view; ?view=map shows the flat planning map instead.
-    const flat = new URLSearchParams(window.location.search).get('view') === 'map';
-    const mv: GameView = flat ? new MapView(mapEl.current, game, { base }) : new World3DView(mapEl.current, game, { base });
-    setView(mv);
+    const el = worldEl.current;
+    if (!el) return;
+    let cancelled = false;
+    let mv: GameView | null = null;
+    if (flat) {
+      loadMapView().then((Flat) => {
+        if (cancelled) return;
+        mv = new Flat(el, game, { base });
+        setMain(mv);
+      });
+    } else {
+      mv = new World3DView(el, game, { base });
+      setMain(mv);
+    }
     const offHaggle = game.on('haggle', (p: { vehicleId: number; requestId: number }) => ui.set({ haggle: p }));
     return () => {
+      cancelled = true;
       offHaggle();
-      mv.destroy();
+      mv?.destroy();
+      setMain(null);
     };
-  }, [game, base]);
+  }, [game, base, flat]);
+
+  // The city-map planner (M): the flat map takes the 3D view's place while it is open; only one of them renders.
+  useEffect(() => {
+    const el = plannerEl.current;
+    if (!planner || flat || !main || !el) return;
+    let cancelled = false;
+    let pv: MapView | null = null;
+    main.setActive?.(false);
+    loadMapView().then(
+      (Flat) => {
+        if (cancelled) return;
+        pv = new Flat(el, game, { base });
+        if (main instanceof World3DView) pv.flyTo(main.rig.tx, main.rig.ty, 15);
+        setPlan(pv);
+      },
+      (err: unknown) => {
+        game.notify(`Could not open the city map: ${String(err)}`, 'bad');
+        ui.set({ planner: false });
+      },
+    );
+    return () => {
+      cancelled = true;
+      if (pv) {
+        // Back in Manage mode, the 3D camera looks where the map was looking.
+        const c = pv.map.getCenter();
+        const [x, y] = game.world.graph.projection.toXY(c.lng, c.lat);
+        if (ui.get().mode === 'manage') {
+          ui.set({ follow: false });
+          main.flyTo(x, y);
+        }
+        pv.destroy();
+      }
+      setPlan(null);
+      main.setActive?.(true);
+    };
+  }, [planner, flat, main, game, base]);
+
+  const view = plan ?? main;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (ui.get().haggle !== null || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === ' ') {
         e.preventDefault();
         game.setSpeed(game.state.speed === 0 ? 2 : 0);
@@ -61,7 +131,7 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
       } else if (e.key === 'f' || e.key === 'F') {
         ui.set((s) => ({ follow: !s.follow }));
       } else if (e.key === 'Escape') {
-        ui.set({ selectedRequest: null, selectedPlace: null, selectedVehicle: null, panel: null });
+        ui.set({ selectedRequest: null, selectedPlace: null, selectedVehicle: null, panel: null, planner: false });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -70,7 +140,8 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
 
   return (
     <div className="app">
-      <div className="map" ref={mapEl} />
+      <div className={`map world-host ${planner && !flat ? 'hidden' : ''}`} ref={worldEl} />
+      {!flat && <div className={`map planner-host ${planner ? '' : 'hidden'}`} ref={plannerEl} />}
       <TopBar game={game} onSave={onSave} onQuit={onQuit} />
       <div className="left-stack">
         <PlayerCard game={game} view={view} />
@@ -99,6 +170,7 @@ function TopBar({ game, onSave, onQuit }: { game: Game; onSave: () => void; onQu
     fleet: g.state.vehicles.length,
   }));
   const panel = useUI((s) => s.panel);
+  const driving = useUI((s) => s.mode === 'drive');
   return (
     <header className="topbar">
       <div className="brand">
@@ -120,18 +192,20 @@ function TopBar({ game, onSave, onQuit }: { game: Game; onSave: () => void; onQu
         <div>{formatClock(d.time * 60)}</div>
         <div className="muted small">{formatDate(d.time * 60)}</div>
       </div>
-      <div className="speed" role="group" aria-label="Game speed">
+      <ModeToggle game={game} />
+      <div className={`speed ${driving ? 'dimmed' : ''}`} role="group" aria-label="Game speed">
         {SPEED_STEPS.map((s, i) => (
           <button
             key={i}
             className={`btn tiny ${d.speed === i ? 'on' : ''}`}
             onClick={() => game.setSpeed(i)}
-            title={i === 0 ? 'Pause (Space)' : `${s}× speed (${i})`}
+            title={i === 0 ? 'Pause (Space)' : driving ? `${s}× speed (${i}) — runs the clock in Manage mode (Tab)` : `${s}× speed (${i})`}
           >
             {i === 0 ? '❚❚' : `${s}×`}
           </button>
         ))}
       </div>
+      <DriveClockChip game={game} />
       <nav className="panels-nav">
         {PANELS.map((p) => (
           <button
@@ -191,6 +265,7 @@ function PlayerCard({ game, view }: { game: Game; view: GameView | null }) {
     };
   });
   const follow = useUI((s) => s.follow && s.selectedVehicle === null);
+  const driving = useUI((s) => s.mode === 'drive');
   if (!d.has) return null;
   return (
     <section className="card player">
@@ -238,8 +313,12 @@ function PlayerCard({ game, view }: { game: Game; view: GameView | null }) {
           Autopilot
         </label>
       </div>
-      <ManualStatus game={game} />
-      <p className="hint small">Click a waving passenger to pick them up. Right-click the map to drive somewhere.</p>
+      {!driving && <ManualStatus game={game} />}
+      <p className="hint small">
+        {driving
+          ? 'WASD drive · E pick up · G autodrive · Tab manage'
+          : 'Tab drive · click a passenger to pick up or dispatch · right-click the map to send your tuk-tuk'}
+      </p>
     </section>
   );
 }
@@ -293,8 +372,12 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
       busy: pv?.task.kind === 'trip' || pv?.task.kind === 'haggle',
       climb: requestClimbs(g.world, r),
       noClimb: pv ? climbBlocked(g, pv, r) : false,
+      claimed: r.claimedBy !== null && r.claimedBy !== pv?.id,
+      free: freeVehiclesFor(g, r).length,
+      hired: g.state.vehicles.some((v) => v !== pv && v.driverId !== null),
     };
   });
+  const managing = useUI((s) => s.mode === 'manage');
   if (!d) return null;
   const { r } = d;
   const info = ARCHETYPES[r.archetype];
@@ -333,13 +416,30 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
       {d.noClimb && <ClimbNotice />}
       <button
         className="btn primary wide"
-        disabled={d.mine || d.busy || d.noClimb}
+        disabled={d.mine || d.busy || d.noClimb || d.claimed}
         onClick={() => {
-          if (game.playerClaim(r.id)) ui.set({ follow: true, selectedVehicle: null });
+          if (!game.playerClaim(r.id)) return;
+          // In Drive mode the GPS takes the wheel to get there; W takes it back.
+          if (ui.get().mode === 'drive') setAutodrive(game, true);
+          ui.set({ follow: true, selectedVehicle: null });
         }}
       >
-        {d.mine ? 'On your way…' : d.busy ? 'Finish your trip first' : d.noClimb ? 'Can’t make the climb' : 'Pick up'}
+        {d.mine ? 'On your way…' : d.claimed ? 'A fleet tuk-tuk is on the way' : d.busy ? 'Finish your trip first' : d.noClimb ? 'Can’t make the climb' : 'Pick up'}
       </button>
+      {(managing || d.hired) && !d.mine && !d.claimed && (
+        <button
+          className="btn wide dispatch"
+          disabled={d.free === 0}
+          onClick={() => {
+            const v = dispatchNearest(game, r.id);
+            if (v) game.notify(`${v.name} is on the way to ${from.name}.`, 'info');
+            else game.notify('No free tuk-tuk can reach them.', 'bad');
+          }}
+          title="Send the closest idle tuk-tuk with a hired driver"
+        >
+          {d.free ? `Dispatch nearest free tuk-tuk (${d.free} free)` : 'No free tuk-tuk to dispatch'}
+        </button>
+      )}
     </section>
   );
 }

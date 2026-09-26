@@ -1,6 +1,8 @@
 // The 2.5-D world view: a three.js city generated from OpenStreetMap data, a
-// tilted follow camera, and layers for the environment, the static city,
-// vehicles, people and markers, with a 2D HUD canvas on top.
+// tilted camera, and layers for the environment, the static city, vehicles,
+// people and markers, with a 2D HUD canvas on top. In Drive mode the camera
+// chases the player's tuk-tuk (and drops to the kerb for the haggle); in
+// Manage mode it is free to follow, pan (drag or WASD) and zoom.
 
 import {
   MeshLambertMaterial,
@@ -21,16 +23,20 @@ import {
 import { calendar } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
+import { kerbPoint, manualControl, setAutodrive, whoDrives } from '../sim/manual';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import type { BuiltCity } from './build/world';
+import { DriveCamera, manageElevation, type CameraMode } from './camera';
+import { DriveHud } from './driveHud';
 import { Hud } from './hud';
 import { FrameStats } from './stats';
 import { CityLayer } from './layers/city';
 import { Environment } from './layers/environment';
 import { MarkerLayer } from './layers/markers';
 import { PeopleLayer } from './layers/people';
+import { SignalLayer } from './layers/signals';
 import type { FrameInfo, ViewContext, WorldLayer } from './layers/types';
 import { VehicleLayer } from './layers/vehicles';
 
@@ -74,6 +80,20 @@ const smooth = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
+/** Manage mode: the camera rises to at least this distance (m) when you leave Drive. */
+const MANAGE_MIN_DIST = 380;
+/** Manage mode keyboard pan, camera distances per real second. */
+const PAN_RATE = 1.1;
+const PAN_KEYS: Record<string, [number, number]> = {
+  w: [0, 1],
+  arrowup: [0, 1],
+  s: [0, -1],
+  arrowdown: [0, -1],
+  a: [-1, 0],
+  arrowleft: [-1, 0],
+  d: [1, 0],
+  arrowright: [1, 0],
+};
 
 export class World3DView implements GameView, ViewContext {
   readonly kind = '3d' as const;
@@ -82,8 +102,8 @@ export class World3DView implements GameView, ViewContext {
   readonly camera = new PerspectiveCamera(40, 1, 1, 40_000);
   readonly renderer: WebGLRenderer;
   readonly modelMat = new MeshLambertMaterial({ vertexColors: true });
-  /** Camera rig: target (sim metres), distance, compass yaw of the view direction. */
-  readonly rig = { tx: 0, ty: 0, dist: 220, yaw: 0 };
+  /** Camera rig: target (sim metres), distance, compass yaw of the view direction, elevation above the horizon. */
+  readonly rig = { tx: 0, ty: 0, dist: 220, yaw: 0, elev: 40 * DEG };
   hoverRequest: number | null = null;
 
   private readonly container: HTMLElement;
@@ -91,6 +111,12 @@ export class World3DView implements GameView, ViewContext {
   private readonly vehicles: VehicleLayer;
   private readonly layers: WorldLayer[] = [];
   private readonly hud: Hud;
+  private readonly driveHud: DriveHud;
+  private readonly driveCam = new DriveCamera();
+  /** Manage-mode pan keys held down. */
+  private readonly panKeys = new Set<string>();
+  /** Rendering runs while the view is shown (the city-map planner hides it). */
+  private active = true;
   readonly stats: FrameStats;
   private cityLayer: CityLayer | null = null;
   private tiltOffset = 0;
@@ -120,6 +146,7 @@ export class World3DView implements GameView, ViewContext {
     this.renderer.domElement.className = 'world-gl';
     container.appendChild(this.renderer.domElement);
     this.hud = new Hud(this, container);
+    this.driveHud = new DriveHud(this, container);
     this.stats = new FrameStats(container);
 
     this.env = new Environment(this);
@@ -138,6 +165,7 @@ export class World3DView implements GameView, ViewContext {
     ro.observe(container);
     this.cleanups.push(() => ro.disconnect());
     this.bindInput();
+    this.addLayer(new SignalLayer(this));
 
     loadCityMeshes(opts.base).then(
       (res) => {
@@ -172,6 +200,53 @@ export class World3DView implements GameView, ViewContext {
     this.fly = { fromX: this.rig.tx, fromY: this.rig.ty, toX: x, toY: y, fromD: this.rig.dist, toD, t: 0 };
   }
 
+  /** Pause rendering while another view (the city-map planner) is shown, and resume it. */
+  setActive(active: boolean): void {
+    if (active === this.active || this.destroyed) return;
+    this.active = active;
+    if (active) {
+      this.last = performance.now();
+      this.resize();
+      this.raf = requestAnimationFrame(this.frame);
+    } else {
+      cancelAnimationFrame(this.raf);
+    }
+  }
+
+  /** The ground the camera sees, as four corners in sim metres (clipped to a few camera distances towards the horizon). */
+  footprint(): { x: number; y: number }[] {
+    const max = this.rig.dist * 4;
+    const corners: [number, number][] = [
+      [0, 0],
+      [this.width, 0],
+      [this.width, this.height],
+      [0, this.height],
+    ];
+    return corners.map(([px, py]) => {
+      const ndc = new Vector2((px / this.width) * 2 - 1, -(py / this.height) * 2 + 1);
+      this.raycaster.setFromCamera(ndc, this.camera);
+      const hit = new Vector3();
+      const ray = this.raycaster.ray;
+      let x: number;
+      let y: number;
+      if (ray.intersectPlane(this.groundPlane, hit)) {
+        x = hit.x;
+        y = -hit.z;
+      } else {
+        x = this.rig.tx + ray.direction.x * max;
+        y = this.rig.ty - ray.direction.z * max;
+      }
+      const dx = x - this.rig.tx;
+      const dy = y - this.rig.ty;
+      const d = Math.hypot(dx, dy);
+      if (d > max) {
+        x = this.rig.tx + (dx / d) * max;
+        y = this.rig.ty + (dy / d) * max;
+      }
+      return { x, y };
+    });
+  }
+
   destroy(): void {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
@@ -187,6 +262,7 @@ export class World3DView implements GameView, ViewContext {
       }
     });
     this.hud.dispose();
+    this.driveHud.dispose();
     this.stats.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -217,16 +293,13 @@ export class World3DView implements GameView, ViewContext {
     return { x: (this.v3.x * 0.5 + 0.5) * this.width, y: (-this.v3.y * 0.5 + 0.5) * this.height };
   }
 
+  /** GameView: screen position of a sim point (the same as screenOf). */
+  screenPoint(x: number, y: number, h = 0): { x: number; y: number } | null {
+    return this.screenOf(x, y, h);
+  }
+
   kerbOf(req: RideRequest): { x: number; y: number } {
-    const place = this.game.place(req.from);
-    const g = this.game.world.graph;
-    const nx = g.nodeX[place.node];
-    const ny = g.nodeY[place.node];
-    const dx = place.x - nx;
-    const dy = place.y - ny;
-    const d = Math.hypot(dx, dy) || 1;
-    const off = Math.min(d, 6);
-    return { x: nx + (dx / d) * off, y: ny + (dy / d) * off };
+    return kerbPoint(this.game, this.game.place(req.from));
   }
 
   vehicleMesh(id: number): Mesh | undefined {
@@ -284,6 +357,12 @@ export class World3DView implements GameView, ViewContext {
       const dx = p.x - this.drag.x;
       const dy = p.y - this.drag.y;
       if (!this.drag.moved && Math.hypot(dx, dy) < 5) return;
+      if (this.driveCam.mode !== 'manage') {
+        // Drive mode: any drag looks around the tuk-tuk; the camera swings back behind it later.
+        this.drag.moved = true;
+        this.driveCam.orbit(e.movementX || 0, e.movementY || 0, performance.now());
+        return;
+      }
       if (!this.drag.moved) {
         this.drag.moved = true;
         if (this.drag.button === 0) ui.set({ follow: false });
@@ -310,20 +389,46 @@ export class World3DView implements GameView, ViewContext {
       if (d.button === 0) this.onClick(p.x, p.y);
       else if (d.button === 2) {
         const g = this.groundAt(p.x, p.y);
-        if (g && this.game.playerDriveTo(g.x, g.y)) this.game.notify('Heading there.', 'info');
+        if (g && this.game.playerDriveTo(g.x, g.y)) {
+          // In Drive mode the GPS takes the wheel to get there; W takes it back.
+          if (ui.get().mode === 'drive') setAutodrive(this.game, true);
+          this.game.notify('Heading there.', 'info');
+        }
       }
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (this.driveCam.mode !== 'manage') {
+        this.driveCam.wheel(Math.exp(e.deltaY * 0.0012));
+        return;
+      }
       this.rig.dist = clamp(this.rig.dist * Math.exp(e.deltaY * 0.0012), 22, 6000);
       this.fly = null;
     };
     const onContext = (e: Event) => e.preventDefault();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === '`' && !(e.target instanceof HTMLInputElement)) this.stats.toggle();
+    const typing = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (typing(e)) return;
+      if (e.key === '`') this.stats.toggle();
+      const k = e.key.toLowerCase();
+      if (PAN_KEYS[k] && !e.metaKey && !e.ctrlKey && !e.altKey && this.canPanWithKeys()) {
+        this.panKeys.add(k);
+        e.preventDefault();
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => this.panKeys.delete(e.key.toLowerCase());
+    const onBlur = () => this.panKeys.clear();
     window.addEventListener('keydown', onKey);
-    this.cleanups.push(() => window.removeEventListener('keydown', onKey));
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    this.cleanups.push(() => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    });
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
@@ -418,14 +523,15 @@ export class World3DView implements GameView, ViewContext {
 
   // ---------------------------------------------------------------- frame
   private frame = (now: number): void => {
-    if (this.destroyed) return;
+    if (this.destroyed || !this.active) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
-    this.updateCamera(dt);
+    this.updateCamera(dt, now);
     const info: FrameInfo = { now, dt, hour: calendar(this.game.state.time).hour, ui: ui.get() };
     for (const l of this.layers) l.update(info);
     this.renderer.render(this.scene, this.camera);
     this.hud.draw(info, this.width, this.height, this.dpr);
+    this.driveHud.draw(info, this.width, this.height, this.dpr);
     this.stats.record(now, this.renderer);
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -436,15 +542,73 @@ export class World3DView implements GameView, ViewContext {
     return this.game.playerVehicle();
   }
 
-  /** Camera elevation: ~40° above the horizon at follow distance, flatter close in, steeper far out. */
-  private elevation(): number {
-    const d = this.rig.dist;
-    const e = 28 + 12 * clamp(d / 160, 0, 1) + 26 * smooth(250, 3500, d);
-    return clamp(e * DEG + this.tiltOffset, 10 * DEG, 85 * DEG);
+  /** Which camera the frame uses: the chase or kerbside camera in Drive mode, else the free camera. */
+  private cameraMode(): CameraMode {
+    const s = ui.get();
+    const player = this.game.playerVehicle();
+    if (s.mode !== 'drive' || !player) return 'manage';
+    return s.haggle && s.haggle.vehicleId === player.id ? 'kerbside' : 'chase';
   }
 
-  private updateCamera(dt: number): void {
+  /** Manage-mode keyboard panning: not while you steer by hand or haggle. */
+  private canPanWithKeys(): boolean {
+    const s = ui.get();
+    return s.mode === 'manage' && !s.planner && s.haggle === null && !manualControl(this.game).on;
+  }
+
+  /** Where the passenger stands during the player's haggle. */
+  private haggleKerb(): { x: number; y: number } | null {
+    const h = ui.get().haggle;
+    const req = h ? this.game.state.requests.find((r) => r.id === h.requestId) : undefined;
+    return req ? this.kerbOf(req) : null;
+  }
+
+  private updateCamera(dt: number, now: number): void {
     const rig = this.rig;
+    const mode = this.cameraMode();
+    if (mode !== this.driveCam.mode) {
+      if (mode === 'manage') {
+        // Leaving Drive: rise to a district view over the same spot.
+        this.fly = { fromX: rig.tx, fromY: rig.ty, toX: rig.tx, toY: rig.ty, fromD: rig.dist, toD: Math.max(rig.dist, MANAGE_MIN_DIST), t: 0 };
+        this.tiltOffset = 0;
+      }
+      this.driveCam.setMode(mode, rig, now);
+    }
+    if (mode !== 'manage') {
+      const v = this.game.playerVehicle()!;
+      const p = this.game.vehiclePose(v, this.pose);
+      const off = this.laneOffset(v.arc);
+      this.driveCam.update(
+        rig,
+        {
+          x: p.x - Math.sin(p.heading) * off,
+          y: p.y + Math.cos(p.heading) * off,
+          heading: p.heading,
+          speed: v.speed,
+          timeScale: this.game.timeScale,
+          autodrive: whoDrives(this.game) !== 'hand',
+          kerb: mode === 'kerbside' ? this.haggleKerb() : null,
+        },
+        dt,
+        now,
+      );
+      this.placeCamera();
+      return;
+    }
+    if (this.panKeys.size && this.canPanWithKeys()) {
+      let fx = 0;
+      let fy = 0;
+      for (const k of this.panKeys) {
+        fx += PAN_KEYS[k][0];
+        fy += PAN_KEYS[k][1];
+      }
+      const step = rig.dist * PAN_RATE * dt;
+      // Forward is the view direction on the ground; right is 90° clockwise from it.
+      rig.tx += (Math.sin(rig.yaw) * fy + Math.cos(rig.yaw) * fx) * step;
+      rig.ty += (Math.cos(rig.yaw) * fy - Math.sin(rig.yaw) * fx) * step;
+      this.fly = null;
+      if (ui.get().follow) ui.set({ follow: false });
+    }
     if (this.fly) {
       this.fly.t = Math.min(1, this.fly.t + dt / 0.7);
       const k = smooth(0, 1, this.fly.t);
@@ -464,7 +628,14 @@ export class World3DView implements GameView, ViewContext {
         rig.ty += (gy - rig.ty) * k;
       }
     }
-    const el = this.elevation();
+    rig.elev += (manageElevation(rig.dist, this.tiltOffset) - rig.elev) * (1 - Math.exp(-dt / 0.25));
+    this.placeCamera();
+  }
+
+  /** Put the three.js camera where the rig says. */
+  private placeCamera(): void {
+    const rig = this.rig;
+    const el = rig.elev;
     const fx = Math.sin(rig.yaw);
     const fz = -Math.cos(rig.yaw);
     const horiz = Math.cos(el) * rig.dist;

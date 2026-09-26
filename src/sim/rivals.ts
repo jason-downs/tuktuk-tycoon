@@ -47,7 +47,9 @@ const NOTICE_GAP = 90 * 60;
 /** Metres from the player's tuk-tuk within which a lost passenger is worth a notice. */
 const NOTICE_RADIUS = 800;
 /** Values per rival in the saved record. */
-const REC = 6;
+const REC = 10;
+/** Values per rival in records saved without the route position (the `rec` field is missing). */
+const REC_SHORT = 6;
 
 /** Songthaews: locals ride for ฿30 a head (economics.md §3), tourists lean towards tuk-tuks [pacing]. */
 const SONGTHAEW_PREF: Partial<Record<Archetype, number>> = {
@@ -138,25 +140,41 @@ export function rivalTarget(time: number): number {
 }
 
 interface RivalsState {
-  /** Flat records: kind, from hub, to hub, metres along the leg, pause-until time, carrying-until time. */
+  /**
+   * Flat records of `rec` values: kind, from hub, to hub, metres along the leg,
+   * pause-until time, carrying-until time, then the route position (arc index
+   * on the leg, or -1 while the leg is unplanned, and metres along that arc)
+   * and where the rival waits between legs (arc or -1, metres along it).
+   */
   fleet: number[];
+  /** Values per record in `fleet`. */
+  rec: number;
   rng: number;
   /** Street hails taken by rivals, all time and today. */
   taken: number;
   takenToday: number;
   day: number;
   lastNotice: number;
+  /** Game seconds since the last competition check. */
+  sinceCompete: number;
+  /** Minute of the last rival-count check (-1 before the first), and the count wanted then. */
+  targetMinute: number;
+  target: number;
 }
 
 export function rivalsState(game: Game): RivalsState {
   const raw = (game.state.systems.rivals ?? {}) as Partial<RivalsState>;
   const s: RivalsState = {
     fleet: Array.isArray(raw.fleet) ? raw.fleet : [],
+    rec: raw.rec ?? REC_SHORT,
     rng: raw.rng ?? (game.state.seed ^ 0x51d7a1) >>> 0,
     taken: raw.taken ?? 0,
     takenToday: raw.takenToday ?? 0,
     day: raw.day ?? -1,
     lastNotice: raw.lastNotice ?? -Infinity,
+    sinceCompete: raw.sinceCompete ?? 0,
+    targetMinute: raw.targetMinute ?? -1,
+    target: raw.target ?? 0,
   };
   game.state.systems.rivals = s;
   return s;
@@ -211,8 +229,14 @@ export class RivalsSystem implements GameSystem {
       ),
     );
     this.count = 0;
+    this.sinceCompete = st.sinceCompete;
+    this.lastTargetMinute = st.targetMinute;
+    this.target = st.target;
     const f = st.fleet;
-    for (let r = 0; r + REC <= f.length && this.count < MAX_RIVALS; r += REC) {
+    const rec = st.rec >= REC ? st.rec : REC_SHORT;
+    const graph = world.graph;
+    const arcCount = graph.edges.length * 2;
+    for (let r = 0; r + rec <= f.length && this.count < MAX_RIVALS; r += rec) {
       const i = this.count++;
       this.kind[i] = Math.min(RIVAL_KINDS.length - 1, Math.max(0, f[r] | 0));
       this.from[i] = Math.min(f[r + 1], this.hubNodes.length - 1);
@@ -221,7 +245,12 @@ export class RivalsSystem implements GameSystem {
       this.pauseUntil[i] = f[r + 4];
       this.busyUntil[i] = f[r + 5];
       this.routes[i] = null;
-      this.parkArc[i] = -1;
+      const park = rec >= REC ? f[r + 8] : -1;
+      this.parkArc[i] = park >= 0 && park < arcCount ? park : -1;
+      this.parkS[i] = rec >= REC ? f[r + 9] : 0;
+      // A leg that was under way when saved carries on from the same arc and metre.
+      const at = rec >= REC ? f[r + 6] : -1;
+      if (at >= 0) this.resume(game, i, at, f[r + 7]);
     }
     if (!f.length) {
       const n = rivalTarget(game.state.time);
@@ -253,9 +282,9 @@ export class RivalsSystem implements GameSystem {
     for (let i = 0; i < this.count; i++) {
       let route = this.routes[i];
       if (!route) {
+        // Every leg planned counts against the budget, cached or not, so a loaded game plans legs on the same steps.
         if (budget <= 0) continue;
-        const cached = this.cache.has(this.key(i));
-        if (!cached) budget--;
+        budget--;
         route = this.resolve(game, i);
         if (!route) continue;
       }
@@ -355,6 +384,14 @@ export class RivalsSystem implements GameSystem {
     return this.from[i] * 1024 + this.to[i];
   }
 
+  /** Plan rival i's current leg and put it at a saved arc index and metre, if they still fit the route. */
+  private resume(game: Game, i: number, idx: number, s: number): void {
+    const route = this.resolve(game, i);
+    if (!route || idx >= route.arcs.length) return;
+    this.idx[i] = idx;
+    this.s[i] = Math.max(0, Math.min(s, game.world.graph.arcLen(route.arcs[idx])));
+  }
+
   /** Find (or plan) rival i's route and place it `along` metres into it. */
   private resolve(game: Game, i: number): Route | null {
     const key = this.key(i);
@@ -448,17 +485,25 @@ export class RivalsSystem implements GameSystem {
 
   private save(st: RivalsState): void {
     const f = st.fleet;
+    st.rec = REC;
     f.length = this.count * REC;
     for (let i = 0; i < this.count; i++) {
       const r = i * REC;
       f[r] = this.kind[i];
       f[r + 1] = this.from[i];
       f[r + 2] = this.to[i];
-      f[r + 3] = Math.round(this.along[i]);
-      f[r + 4] = Math.round(this.pauseUntil[i]);
-      f[r + 5] = Math.round(this.busyUntil[i]);
+      f[r + 3] = this.along[i];
+      f[r + 4] = this.pauseUntil[i];
+      f[r + 5] = this.busyUntil[i];
+      f[r + 6] = this.routes[i] ? this.idx[i] : -1;
+      f[r + 7] = this.s[i];
+      f[r + 8] = this.parkArc[i];
+      f[r + 9] = this.parkS[i];
     }
     st.rng = this.rng.state;
+    st.sinceCompete = this.sinceCompete;
+    st.targetMinute = this.lastTargetMinute;
+    st.target = this.target;
   }
 }
 
