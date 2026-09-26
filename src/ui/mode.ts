@@ -3,9 +3,10 @@
 // tuk-tuk to autopilot, frees the camera and gives the clock back to the speed
 // buttons. The last choice is remembered for the browser session.
 
+import { VEHICLE_MODELS } from '../content/vehicles';
 import type { PlayMode } from '../sim/driveClock';
 import type { Game } from '../sim/game';
-import { setManual } from '../sim/manual';
+import { manualControl, setAutodrive, setManual } from '../sim/manual';
 import { ui } from './store';
 
 const SESSION_KEY = 'tuktuk-mode';
@@ -80,4 +81,37 @@ export function setMode(game: Game, mode: PlayMode): boolean {
 /** Tab: Drive ↔ Manage. */
 export function toggleMode(game: Game): boolean {
   return setMode(game, ui.get().mode === 'drive' ? 'manage' : 'drive');
+}
+
+/**
+ * After the player gives their tuk-tuk somewhere to go from the UI (Pick up,
+ * Refuel, right-clicking a map): in Drive mode the GPS takes the wheel to get
+ * there, and W takes it back.
+ */
+export function gpsTakesWheel(game: Game): void {
+  if (ui.get().mode === 'drive') setAutodrive(game, true);
+}
+
+/** Right-click on a map: send your tuk-tuk to a point. Returns false if it cannot go now. */
+export function sendPlayerTo(game: Game, x: number, y: number): boolean {
+  if (!game.playerDriveTo(x, y)) return false;
+  gpsTakesWheel(game);
+  game.notify('Heading there.', 'info');
+  return true;
+}
+
+/** ⛽ Refuel / ⚡ Charge: send your tuk-tuk to the nearest pump or charger. Returns false if it cannot go now. */
+export function sendPlayerToRefuel(game: Game): boolean {
+  if (!game.playerRefuel()) return false;
+  gpsTakesWheel(game);
+  const v = game.playerVehicle();
+  const ev = !!v && VEHICLE_MODELS[v.model]?.powertrain === 'ev';
+  game.notify(ev ? 'Off to a charger at the mall.' : 'Off to the LPG pump.', 'info');
+  return true;
+}
+
+/** Manage-mode keyboard panning: not while you steer by hand, haggle, look at the city map or read a dialog. */
+export function canPanWithKeys(game: Game): boolean {
+  const s = ui.get();
+  return s.mode === 'manage' && s.modal === null && !s.planner && s.haggle === null && !manualControl(game).on;
 }

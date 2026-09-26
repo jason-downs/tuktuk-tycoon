@@ -23,15 +23,17 @@ import {
 import { calendar } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
-import { kerbPoint, manualControl, setAutodrive, whoDrives } from '../sim/manual';
+import { kerbPoint, manualControl, whoDrives } from '../sim/manual';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
+import { canPanWithKeys, sendPlayerTo } from '../ui/mode';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import type { TiledCity } from './build/world';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
 import { aimCutaway, applyCutaway, compileCutaway, createCutaway } from './cutaway';
 import { DriveHud } from './driveHud';
-import { Hud } from './hud';
+import { Hud, type CityStatus } from './hud';
+import { PointerGestures, type PinchStep } from './gestures';
 import { FrameStats } from './stats';
 import { edgeLanes } from './kinematics';
 import { CityLayer } from './layers/city';
@@ -55,6 +57,42 @@ interface BuildResult {
 }
 
 let cityPromise: Promise<BuildResult> | null = null;
+
+/**
+ * Start building the city while the title screen shows, so a new game opens
+ * on a finished city (World3DView picks up the same build). The flat
+ * ?view=map page never shows it. A failed build here is retried when the 3D
+ * view opens, which reports it.
+ */
+export function preloadCity(base: string, search: string): void {
+  if (new URLSearchParams(search).get('view') === 'map') return;
+  loadCityMeshes(base).catch(() => {});
+}
+
+/**
+ * Add the city once its build arrives, unless the view has gone. If the build
+ * fails, or adding it throws, the HUD says so in place of "Building…" and a
+ * notice gives the error.
+ */
+export function trackCityBuild(
+  build: Promise<BuildResult>,
+  hud: { city: CityStatus },
+  game: Pick<Game, 'notify'>,
+  alive: () => boolean,
+  add: (res: BuildResult) => void,
+): Promise<void> {
+  return build
+    .then((res) => {
+      if (!alive()) return;
+      add(res);
+      hud.city = 'ready';
+    })
+    .catch((err: unknown) => {
+      if (!alive()) return;
+      hud.city = 'failed';
+      game.notify(`Could not build the 3D city: ${String(err)}`, 'bad');
+    });
+}
 
 /** Build the static city once per page (in a worker); remounts reuse it. */
 export function loadCityMeshes(base: string): Promise<BuildResult> {
@@ -86,6 +124,12 @@ const smooth = (a: number, b: number, x: number) => {
 };
 /** Manage mode: the camera rises to at least this distance (m) when you leave Drive. */
 const MANAGE_MIN_DIST = 380;
+/** A pinch pans the Manage camera once its midpoint has moved this far (CSS px); smaller wobble only zooms. */
+const PINCH_PAN_PX = 12;
+/** Drive mode: how far (m) a look-at without a zoom level stands off. */
+const LOOK_DIST = 260;
+/** Camera distance (m) for a web-map zoom level (16 ≈ street level). */
+const zoomDistance = (zoom: number): number => clamp(180 * 2 ** (16 - zoom), 25, 6000);
 /** Manage mode keyboard pan, camera distances per real second. */
 const PAN_RATE = 1.1;
 const PAN_KEYS: Record<string, [number, number]> = {
@@ -175,23 +219,18 @@ export class World3DView implements GameView, ViewContext {
     this.bindInput();
     this.addLayer(new SignalLayer(this));
 
-    loadCityMeshes(opts.base).then(
-      (res) => {
-        if (this.destroyed) return;
-        const city = new CityLayer(this, res.built);
-        this.cityLayer = city;
-        this.layers.push(city);
-        for (const id of ['buildings', 'structures', 'windows', 'glow'] as const) {
-          const mat = city.materials[id];
-          if (mat) applyCutaway(mat, this.cutaway);
-        }
-        this.env.setCityMaterials(city.materials);
-        this.env.onLight = (light) => city.setNight(1 - light);
-        city.setNight(1 - this.env.light);
-        this.hud.loading = false;
-      },
-      (err: unknown) => game.notify(`Could not build the 3D city: ${String(err)}`, 'bad'),
-    );
+    void trackCityBuild(loadCityMeshes(opts.base), this.hud, game, () => !this.destroyed, (res) => {
+      const city = new CityLayer(this, res.built);
+      this.cityLayer = city;
+      this.layers.push(city);
+      for (const id of ['buildings', 'structures', 'windows', 'glow'] as const) {
+        const mat = city.materials[id];
+        if (mat) applyCutaway(mat, this.cutaway);
+      }
+      this.env.setCityMaterials(city.materials);
+      this.env.onLight = (light) => city.setNight(1 - light);
+      city.setNight(1 - this.env.light);
+    });
     this.raf = requestAnimationFrame(this.frame);
     // Dev builds expose the view for console debugging and automated play-testing.
     if (import.meta.env.DEV) (window as unknown as { __world3d: World3DView }).__world3d = this;
@@ -207,8 +246,13 @@ export class World3DView implements GameView, ViewContext {
     ui.set({ follow: false });
   }
 
+  /** Show a point. In Manage mode the free camera flies there; in Drive mode the chase camera looks there for a while, then swings back. */
   flyTo(x: number, y: number, zoom?: number): void {
-    const toD = zoom !== undefined ? clamp(180 * 2 ** (16 - zoom), 25, 6000) : Math.min(this.rig.dist, 260);
+    if (this.cameraMode() !== 'manage') {
+      this.driveCam.lookAt(x, y, zoom !== undefined ? zoomDistance(zoom) : LOOK_DIST, this.rig, performance.now());
+      return;
+    }
+    const toD = zoom !== undefined ? zoomDistance(zoom) : Math.min(this.rig.dist, 260);
     this.fly = { fromX: this.rig.tx, fromY: this.rig.ty, toX: x, toY: y, fromD: this.rig.dist, toD, t: 0 };
   }
 
@@ -357,14 +401,26 @@ export class World3DView implements GameView, ViewContext {
       const r = el.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
+    const gestures = new PointerGestures();
     const onDown = (e: PointerEvent) => {
       const p = local(e);
+      const start = gestures.down(e.pointerId, p.x, p.y);
+      el.setPointerCapture(e.pointerId);
+      if (start !== 'single') {
+        // A second finger turns the drag into a pinch.
+        this.drag = null;
+        return;
+      }
       const g = this.groundAt(p.x, p.y);
       this.drag = { button: e.button, x: p.x, y: p.y, moved: false, groundX: g?.x ?? this.rig.tx, groundY: g?.y ?? this.rig.ty };
-      el.setPointerCapture(e.pointerId);
     };
     const onMove = (e: PointerEvent) => {
       const p = local(e);
+      const pinch = gestures.move(e.pointerId, p.x, p.y);
+      if (gestures.pinching) {
+        if (pinch) this.onPinch(pinch);
+        return;
+      }
       if (!this.drag) {
         this.onHover(p.x, p.y);
         return;
@@ -399,26 +455,27 @@ export class World3DView implements GameView, ViewContext {
       const d = this.drag;
       this.drag = null;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
-      if (!d || d.moved) return;
+      if (gestures.up(e.pointerId) || !d || d.moved) return;
       const p = local(e);
       if (d.button === 0) this.onClick(p.x, p.y);
       else if (d.button === 2) {
         const g = this.groundAt(p.x, p.y);
-        if (g && this.game.playerDriveTo(g.x, g.y)) {
-          // In Drive mode the GPS takes the wheel to get there; W takes it back.
-          if (ui.get().mode === 'drive') setAutodrive(this.game, true);
-          this.game.notify('Heading there.', 'info');
-        }
+        if (g) sendPlayerTo(this.game, g.x, g.y);
       }
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (this.driveCam.mode !== 'manage') {
-        this.driveCam.wheel(Math.exp(e.deltaY * 0.0012));
+        this.driveCam.wheel(Math.exp(e.deltaY * 0.0012), performance.now());
         return;
       }
       this.rig.dist = clamp(this.rig.dist * Math.exp(e.deltaY * 0.0012), 22, 6000);
       this.fly = null;
+    };
+    const onCancel = (e: PointerEvent) => {
+      gestures.up(e.pointerId);
+      this.drag = null;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
     const onContext = (e: Event) => e.preventDefault();
     const typing = (e: KeyboardEvent) => {
@@ -429,7 +486,7 @@ export class World3DView implements GameView, ViewContext {
       if (typing(e)) return;
       if (e.key === '`') this.stats.toggle();
       const k = e.key.toLowerCase();
-      if (PAN_KEYS[k] && !e.metaKey && !e.ctrlKey && !e.altKey && this.canPanWithKeys()) {
+      if (PAN_KEYS[k] && !e.metaKey && !e.ctrlKey && !e.altKey && canPanWithKeys(this.game)) {
         this.panKeys.add(k);
         e.preventDefault();
       }
@@ -447,15 +504,34 @@ export class World3DView implements GameView, ViewContext {
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onCancel);
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('contextmenu', onContext);
     this.cleanups.push(() => {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onCancel);
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('contextmenu', onContext);
     });
+  }
+
+  /** Two-finger pinch: zoom, and in Manage mode pan with the midpoint once it has clearly moved. */
+  private onPinch(p: PinchStep): void {
+    if (this.driveCam.mode !== 'manage') {
+      this.driveCam.wheel(p.factor, performance.now());
+      return;
+    }
+    this.rig.dist = clamp(this.rig.dist * p.factor, 22, 6000);
+    this.fly = null;
+    if (p.travel < PINCH_PAN_PX) return;
+    const a = this.groundAt(p.prevMid.x, p.prevMid.y);
+    const b = this.groundAt(p.mid.x, p.mid.y);
+    if (!a || !b) return;
+    if (ui.get().follow) ui.set({ follow: false });
+    this.rig.tx += a.x - b.x;
+    this.rig.ty += a.y - b.y;
   }
 
   private requestAt(px: number, py: number): RideRequest | null {
@@ -558,10 +634,10 @@ export class World3DView implements GameView, ViewContext {
     return this.game.playerVehicle();
   }
 
-  /** In Drive mode, cut a line of sight through to the player's tuk-tuk. */
+  /** In Drive mode, cut a line of sight through to the player's tuk-tuk (not while the camera looks elsewhere). */
   private updateCutaway(): void {
     compileCutaway(this.cutaway, this.driveCam.mode !== 'manage');
-    const player = this.driveCam.mode === 'manage' ? undefined : this.game.playerVehicle();
+    const player = this.driveCam.mode === 'manage' || this.driveCam.looking ? undefined : this.game.playerVehicle();
     const proxy = player ? this.vehicles.meshOf(player.id) : undefined;
     if (!proxy) {
       aimCutaway(this.cutaway, this.camera, null, 0, 1);
@@ -578,12 +654,6 @@ export class World3DView implements GameView, ViewContext {
     const player = this.game.playerVehicle();
     if (s.mode !== 'drive' || !player) return 'manage';
     return s.haggle && s.haggle.vehicleId === player.id ? 'kerbside' : 'chase';
-  }
-
-  /** Manage-mode keyboard panning: not while you steer by hand or haggle. */
-  private canPanWithKeys(): boolean {
-    const s = ui.get();
-    return s.mode === 'manage' && !s.planner && s.haggle === null && !manualControl(this.game).on;
   }
 
   /** Where the passenger stands during the player's haggle. */
@@ -617,6 +687,7 @@ export class World3DView implements GameView, ViewContext {
           speed: v.speed,
           timeScale: this.game.timeScale,
           autodrive: whoDrives(this.game) !== 'hand',
+          pedalPresses: manualControl(this.game).presses,
           kerb: mode === 'kerbside' ? this.haggleKerb() : null,
         },
         dt,
@@ -625,7 +696,7 @@ export class World3DView implements GameView, ViewContext {
       this.placeCamera();
       return;
     }
-    if (this.panKeys.size && this.canPanWithKeys()) {
+    if (this.panKeys.size && canPanWithKeys(this.game)) {
       let fx = 0;
       let fy = 0;
       for (const k of this.panKeys) {

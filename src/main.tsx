@@ -6,6 +6,7 @@ import { installSystems } from './sim/systems';
 import { Game } from './sim/game';
 import { App } from './ui/App';
 import { TitleScreen } from './ui/TitleScreen';
+import { preloadCity } from './world3d/World3DView';
 import './ui/styles.css';
 
 const BASE = new URL('.', document.baseURI).href;
@@ -18,7 +19,13 @@ function Root() {
   const [game, setGame] = useState<Game | null>(null);
 
   useEffect(() => {
-    loadWorld(new URL('data/', BASE).href).then(setWorld, (e: unknown) => setError(String(e)));
+    loadWorld(new URL('data/', BASE).href).then(
+      (w) => {
+        setWorld(w);
+        preloadCity(BASE, window.location.search);
+      },
+      (e: unknown) => setError(String(e)),
+    );
   }, []);
 
   useEffect(() => {

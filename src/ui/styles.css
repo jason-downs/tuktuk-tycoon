@@ -240,14 +240,15 @@ button {
 /* ---------------------------------------------------------------- cards */
 .left-stack {
   position: absolute;
-  top: 84px;
+  /* --topbar-bottom: where the (possibly wrapped) top bar ends, measured by layoutVars.ts. */
+  top: calc(var(--topbar-bottom, 64px) + 20px);
   left: 10px;
   width: 300px;
   z-index: 8;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100% - 100px);
+  max-height: calc(100% - var(--topbar-bottom, 64px) - 36px);
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -365,7 +366,7 @@ button {
 /* ---------------------------------------------------------------- panel */
 .panel {
   position: absolute;
-  top: 84px;
+  top: calc(var(--topbar-bottom, 64px) + 20px);
   right: 10px;
   bottom: 10px;
   width: min(440px, calc(100% - 330px));
@@ -646,6 +647,11 @@ button {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
+/* Continue names the saved company, date and cash, so on a phone it wraps inside the card. */
+.title-card .btn.big {
+  white-space: normal;
+  max-width: 100%;
+}
 .title-art {
   position: relative;
   height: 150px;
@@ -766,7 +772,8 @@ button {
     max-height: 45%;
   }
   .panel {
-    top: 130px;
+    /* Under the tutorial card too while it is tucked away under the bar (layoutVars.ts). */
+    top: calc(var(--topbar-bottom, 110px) + var(--coach-h, 0px) + 20px);
     left: 10px;
     width: auto;
   }

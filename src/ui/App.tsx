@@ -11,14 +11,15 @@ import type { Game } from '../sim/game';
 import { bookingTag } from '../sim/business';
 import { fitsParty, inRide } from '../sim/dispatch';
 import { dispatchNearest, freeVehiclesFor } from '../sim/manage';
-import { setAutodrive, setManual } from '../sim/manual';
+import { setManual } from '../sim/manual';
 import { climbBlocked, requestClimbs } from '../sim/mountain';
 import type { Notice } from '../sim/types';
 import { ClimbNotice } from './ClimbNotice';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
+import { useHudLayoutVars } from './layoutVars';
 import { startGameLoop } from './loop';
-import { applyMode, initialMode } from './mode';
+import { applyMode, gpsTakesWheel, initialMode, sendPlayerToRefuel } from './mode';
 import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
@@ -40,6 +41,7 @@ export interface AppProps {
 }
 
 export function App({ game, base, onSave, onQuit }: AppProps) {
+  const appEl = useRef<HTMLDivElement>(null);
   const worldEl = useRef<HTMLDivElement>(null);
   const plannerEl = useRef<HTMLDivElement>(null);
   const [main, setMain] = useState<GameView | null>(null);
@@ -56,6 +58,7 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
     applyMode(game, initialMode(game));
   }, [game]);
   useDriveKeys(game);
+  useHudLayoutVars(appEl);
 
   useEffect(() => {
     const el = worldEl.current;
@@ -119,28 +122,8 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
 
   const view = plan ?? main;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-      if (ui.get().haggle !== null || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === ' ') {
-        e.preventDefault();
-        game.setSpeed(game.state.speed === 0 ? 2 : 0);
-      } else if (e.key >= '1' && e.key <= '5') {
-        game.setSpeed(Number(e.key));
-      } else if (e.key === 'f' || e.key === 'F') {
-        ui.set((s) => ({ follow: !s.follow }));
-      } else if (e.key === 'Escape') {
-        ui.set({ selectedRequest: null, selectedPlace: null, selectedVehicle: null, panel: null, planner: false });
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [game]);
-
   return (
-    <div className="app">
+    <div className="app" ref={appEl}>
       <div className={`map world-host ${planner && !flat ? 'hidden' : ''}`} ref={worldEl} />
       {!flat && <div className={`map planner-host ${planner ? '' : 'hidden'}`} ref={plannerEl} />}
       <TopBar game={game} onSave={onSave} onQuit={onQuit} />
@@ -296,7 +279,7 @@ function PlayerCard({ game, view }: { game: Game; view: GameView | null }) {
         <button
           className="btn"
           disabled={d.busy}
-          onClick={() => game.playerRefuel() && game.notify(d.ev ? 'Off to a charger at the mall.' : 'Off to the LPG pump.', 'info')}
+          onClick={() => sendPlayerToRefuel(game)}
         >
           {d.ev ? '⚡ Charge' : '⛽ Refuel'}
         </button>
@@ -344,7 +327,7 @@ function SelectedVehicleCard({ game }: { game: Game }) {
     <section className="card">
       <div className="card-head">
         <span className="eyebrow">Fleet tuk-tuk</span>
-        <button className="btn tiny" onClick={() => ui.set({ selectedVehicle: null })}>
+        <button className="btn tiny" onClick={() => ui.set({ selectedVehicle: null })} aria-label="Close">
           ✕
         </button>
       </div>
@@ -402,7 +385,7 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
           {r.party > 1 ? ` ×${r.party}` : ''}
           {tag ? ` · ${tag.icon} ${tag.label}` : ''}
         </span>
-        <button className="btn tiny" onClick={() => ui.set({ selectedRequest: null })}>
+        <button className="btn tiny" onClick={() => ui.set({ selectedRequest: null })} aria-label="Close">
           ✕
         </button>
       </div>
@@ -429,8 +412,7 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
         disabled={d.mine || d.busy !== '' || d.noClimb || d.claimed || d.tooBig}
         onClick={() => {
           if (!game.playerClaim(r.id)) return;
-          // In Drive mode the GPS takes the wheel to get there; W takes it back.
-          if (ui.get().mode === 'drive') setAutodrive(game, true);
+          gpsTakesWheel(game);
           ui.set({ follow: true, selectedVehicle: null });
         }}
       >
@@ -466,7 +448,7 @@ function PlaceCard({ game }: { game: Game }) {
     <section className="card place">
       <div className="card-head">
         <span className="eyebrow">{p.cat}</span>
-        <button className="btn tiny" onClick={() => ui.set({ selectedPlace: null })}>
+        <button className="btn tiny" onClick={() => ui.set({ selectedPlace: null })} aria-label="Close">
           ✕
         </button>
       </div>
@@ -489,7 +471,7 @@ function PanelHost({ game, view }: { game: Game; view: GameView | null }) {
         <h2>
           {panel.icon} {panel.title}
         </h2>
-        <button className="btn tiny" onClick={() => ui.set({ panel: null })}>
+        <button className="btn tiny" onClick={() => ui.set({ panel: null })} aria-label="Close panel">
           ✕
         </button>
       </div>
@@ -509,7 +491,7 @@ function Toasts({ game, view }: { game: Game; view: GameView | null }) {
     });
   }, [game]);
   return (
-    <div className="toasts">
+    <div className="toasts" role="status" aria-live="polite">
       {items.map((n) => (
         <div
           key={n.id}

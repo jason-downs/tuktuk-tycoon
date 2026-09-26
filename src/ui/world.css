@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------- badge */
 .world-badge {
   position: absolute;
-  top: 76px;
+  top: calc(var(--topbar-bottom, 64px) + 12px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
@@ -74,10 +74,19 @@
 
 @media (max-width: 900px) {
   .world-badge {
-    top: 132px;
+    top: calc(var(--topbar-bottom, 110px) + var(--coach-h, 0px) + 12px);
     left: 10px;
     transform: none;
     max-width: calc(100% - 20px);
+  }
+}
+/* Phones: under the GPS line, on the right beside the minimap. */
+@media (max-width: 600px) {
+  .world-badge {
+    top: calc(var(--topbar-bottom, 106px) + var(--coach-h, 0px) + var(--gps-h, 0px) + 12px);
+    left: auto;
+    right: 8px;
+    max-width: calc(100% - 186px);
   }
 }
 

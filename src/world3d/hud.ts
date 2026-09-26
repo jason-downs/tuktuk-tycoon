@@ -12,12 +12,14 @@ import type { FrameInfo, ViewContext } from './layers/types';
 const SKIP_2D_PAINTERS = new Set(['rivals', 'weather-tint', 'closures', 'weather-fx', 'festival']);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+export type CityStatus = 'loading' | 'ready' | 'failed';
+
 export class Hud {
   readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;
   private readonly ctx: ViewContext;
-  /** Set while the static city is still being generated. */
-  loading = true;
+  /** The static city: still being generated, shown, or its build failed. */
+  city: CityStatus = 'loading';
 
   constructor(ctx: ViewContext, container: HTMLElement) {
     this.ctx = ctx;
@@ -57,11 +59,11 @@ export class Hud {
     };
     for (const p of OVERLAY_PAINTERS) if (p.layer === 'under' && !SKIP_2D_PAINTERS.has(p.id)) p.paint(pc);
 
-    if (this.loading) {
+    if (this.city !== 'ready') {
       g.fillStyle = 'rgba(43,29,18,0.85)';
       g.font = '600 15px system-ui, sans-serif';
       g.textAlign = 'center';
-      g.fillText('Building Chiang Mai…', width / 2, height / 2);
+      g.fillText(this.city === 'loading' ? 'Building Chiang Mai…' : 'Could not build the 3D city. Reload the page to try again.', width / 2, height / 2);
     }
 
     // Landmark names when close enough.

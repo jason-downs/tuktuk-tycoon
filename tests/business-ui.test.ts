@@ -25,9 +25,9 @@ vi.mock('../src/ui/store', () => ({
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
 
-function newGame(): Game {
+function newGame(hour = 9): Game {
   const game = Game.create(world, { seed: 31 });
-  game.state.time = timeOf(2026, 10, 3, 9);
+  game.state.time = timeOf(2026, 10, 3, hour);
   installSystems(game);
   game.step(1);
   return game;
@@ -83,9 +83,10 @@ describe('business UI', () => {
   });
 
   it('renders the goal list and the finance chart', () => {
-    const game = newGame();
+    // An evening's trade, the 04:00 rollover and the start of the next business day.
+    const game = newGame(20);
     game.state.autopilot = true;
-    for (let t = 0; t < 30 * HOUR; t += 4) game.step(4);
+    for (let t = 0; t < 10 * HOUR; t += 4) game.step(4);
     const goals = text(renderToStaticMarkup(h(GoalsPanel, { game, view: null })));
     expect(goals).toContain(`/ ${GOALS.length}`);
     expect(goals).toContain('Next up');

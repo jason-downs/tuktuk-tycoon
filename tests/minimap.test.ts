@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canvasPoint,
   graphBounds,
   overviewFrame,
   overviewToScreen,
@@ -57,5 +58,25 @@ describe('minimap projections', () => {
     const q = overviewToScreen(f, p.x, p.y);
     expect(q.x).toBeCloseTo(77);
     expect(q.y).toBeCloseTo(133);
+  });
+
+  it('maps a click on a canvas that CSS shows smaller than it was drawn (phones) back into drawing space', () => {
+    const graph = loadGraph();
+    const b = graphBounds(graph.nodeX, graph.nodeY);
+    // Drawn 250 px wide; shown 160 px wide, with a 1 px border, at (20, 500) on the page.
+    const w = 250;
+    const h = Math.round((w * (b.maxY - b.minY)) / (b.maxX - b.minX));
+    const f = overviewFrame(b, w, h);
+    const shownH = (160 * h) / w;
+    const box = { left: 20, top: 500, clientLeft: 1, clientTop: 1, clientWidth: 160, clientHeight: shownH };
+    // The bottom-right corner of the content box is the south-east corner of the map.
+    const se = canvasPoint(20 + 1 + 160, 500 + 1 + shownH, box, w, h);
+    const p = screenToOverview(f, se.x, se.y);
+    const want = screenToOverview(f, w, h);
+    expect(p.x).toBeCloseTo(want.x);
+    expect(p.y).toBeCloseTo(want.y);
+    // Shown at the size it was drawn, only the border is taken off.
+    const same = canvasPoint(31, 41, { left: 10, top: 20, clientLeft: 1, clientTop: 1, clientWidth: 250, clientHeight: h }, w, h);
+    expect(same).toEqual({ x: 20, y: 20 });
   });
 });

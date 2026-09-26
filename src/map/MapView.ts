@@ -9,6 +9,7 @@ import { calendar, daylight } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
+import { sendPlayerTo } from '../ui/mode';
 import { ui } from '../ui/store';
 import { OVERLAY_PAINTERS, type PaintContext } from './painters';
 import type { GameView } from '../ui/view';
@@ -252,7 +253,7 @@ export class MapView implements GameView {
 
   private onDriveHere(lng: number, lat: number): void {
     const [x, y] = this.game.world.graph.projection.toXY(lng, lat);
-    if (this.game.playerDriveTo(x, y)) this.game.notify('Heading there.', 'info');
+    sendPlayerTo(this.game, x, y);
   }
 
   private onHover(px: number, py: number): void {

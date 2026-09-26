@@ -111,3 +111,25 @@
     display: none;
   }
 }
+/* Phones: on the right, standing on the card sheet (--sheet-h, layoutVars.ts),
+   below the GPS line, badge and tutorial card under the top bar. */
+@media (max-width: 600px) {
+  .manual-pad {
+    bottom: calc(var(--sheet-h, 0px) + 18px);
+    transform: none;
+  }
+}
+/* An open panel (App.tsx PanelHost) has the player's attention and its buttons
+   stay reachable: up to 900 px it spans the screen and covers the pad (the
+   panel is at z-index 9); wider, it stands at the right and the pad moves to
+   its left. */
+@media (max-width: 900px) {
+  .app:has(> .panel) > .manual-pad {
+    z-index: 8;
+  }
+}
+@media (min-width: 901px) {
+  .app:has(> .panel) > .manual-pad {
+    right: calc(min(440px, 100% - 330px) + 22px);
+  }
+}

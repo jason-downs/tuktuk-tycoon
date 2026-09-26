@@ -2,8 +2,9 @@ import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { ARCHETYPES } from '../content/archetypes';
 import type { Game } from '../sim/game';
 import type { RoadGraph } from '../sim/graph';
-import { kerbPoint, setAutodrive } from '../sim/manual';
+import { kerbPoint } from '../sim/manual';
 import {
+  canvasPoint,
   graphBounds,
   overviewFrame,
   overviewToScreen,
@@ -16,6 +17,7 @@ import {
   type OverviewFrame,
   type RadarFrame,
 } from './minimapMath';
+import { sendPlayerTo } from './mode';
 import type { OverlayProps } from './overlays';
 import { ui, useUI } from './store';
 import './drive/drive.css';
@@ -128,7 +130,8 @@ export function Minimap({ game, view }: OverlayProps) {
   const mode = useUI((s) => s.mode);
   const planner = useUI((s) => s.planner);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frame = useRef<{ radar: RadarFrame | null; overview: OverviewFrame | null }>({ radar: null, overview: null });
+  /** The last frames drawn, and the CSS size they were drawn at. */
+  const frame = useRef<{ radar: RadarFrame | null; overview: OverviewFrame | null; w: number; h: number }>({ radar: null, overview: null, w: 0, h: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -145,6 +148,8 @@ export function Minimap({ game, view }: OverlayProps) {
     canvas.height = Math.round(h * dpr);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
+    frame.current.w = w;
+    frame.current.h = h;
     let heading: number | null = null;
     let raf = 0;
     let last = 0;
@@ -273,10 +278,12 @@ export function Minimap({ game, view }: OverlayProps) {
   if (planner) return null;
 
   const simAt = (e: ReactMouseEvent<HTMLCanvasElement>): { x: number; y: number } | null => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    // CSS may show the canvas smaller than it was drawn (phones), so scale the click into drawing space.
+    const c = e.currentTarget;
+    const rect = c.getBoundingClientRect();
     const f = frame.current;
+    const box = { left: rect.left, top: rect.top, clientLeft: c.clientLeft, clientTop: c.clientTop, clientWidth: c.clientWidth, clientHeight: c.clientHeight };
+    const { x: px, y: py } = canvasPoint(e.clientX, e.clientY, box, f.w, f.h);
     if (mode === 'drive') return f.radar ? screenToRadar(f.radar, px, py) : null;
     return f.overview ? screenToOverview(f.overview, px, py) : null;
   };
@@ -295,9 +302,7 @@ export function Minimap({ game, view }: OverlayProps) {
         onContextMenu={(e) => {
           e.preventDefault();
           const p = simAt(e);
-          if (!p || !game.playerDriveTo(p.x, p.y)) return;
-          if (ui.get().mode === 'drive') setAutodrive(game, true);
-          game.notify('Heading there.', 'info');
+          if (p) sendPlayerTo(game, p.x, p.y);
         }}
       />
       <div className="minimap-hint">{mode === 'drive' ? 'Right-click: drive there' : 'Click: look · right-click: drive there'}</div>

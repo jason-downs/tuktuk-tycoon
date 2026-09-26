@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { buildWorld, type PoiJSON } from '../src/data/world';
+import { BALANCE } from '../src/sim/balance';
 import { BASE_TIME_SCALE, calendar } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
 import {
@@ -314,6 +316,22 @@ describe('picking up by hand', () => {
     expect(v.busyUntil).toBeGreaterThan(game.state.time);
   });
 
+  it('charges an electric tuk-tuk by hand at a mall charger at the public DC rate', () => {
+    const game = newGame();
+    const v = game.playerVehicle()!;
+    v.model = 'ev_new';
+    setManual(game, true);
+    const mall = landmark('central_airport');
+    expect(game.chargers()).toContain(mall);
+    parkBefore(v, mall.node, 3);
+    v.fuel = 0.3;
+    const cash = game.state.cash;
+    expect(manualRefuel(game)).toBe('filling');
+    expect(v.fuel).toBe(1);
+    const km = 0.7 * VEHICLE_MODELS.ev_new.rangeKm;
+    expect(game.state.cash).toBe(cash - Math.round(km * BALANCE.fuel.evPublicPerKm));
+  });
+
   it('U-turns from a standstill on two-way roads only', () => {
     const game = newGame();
     const v = game.playerVehicle()!;
@@ -333,6 +351,20 @@ describe('picking up by hand', () => {
     v.arc = twoWay * 2;
     v.speed = 8;
     expect(uTurn(game)).toBe(false);
+  });
+
+  it('counts each press of the throttle or brake', () => {
+    const game = newGame();
+    setManual(game, true);
+    const c = manualControl(game);
+    const start = c.presses;
+    setPedals(game, true, false);
+    setPedals(game, true, false);
+    expect(c.presses).toBe(start + 1);
+    setPedals(game, true, true);
+    setPedals(game, false, false);
+    setPedals(game, true, false);
+    expect(c.presses).toBe(start + 3);
   });
 
   it('G hands the wheel to the GPS, or to autopilot with nowhere to go, and takes it back', () => {

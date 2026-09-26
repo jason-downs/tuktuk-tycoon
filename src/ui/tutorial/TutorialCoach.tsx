@@ -6,26 +6,21 @@ import type { OverlayProps } from '../overlays';
 import { PANELS, type PanelDef } from '../panels';
 import { GlossedText } from '../SpeechLine';
 import { ui, useGame, useUI } from '../store';
+import { CONTROL_WEIGHT, dockedOverPad, FLOOR_GAP, placeCoach, samePlacement, type Obstacle, type Placement } from './coachPlacement';
 import './coach.css';
 
-/** Where the card sits and which way its pointer faces. */
-interface Placement {
-  left: number;
-  top: number;
-  /** 'left': the anchor is to the card's left; 'up': the anchor is above. */
-  arrow: 'left' | 'up' | 'none';
-  /** Pointer offset along the card edge, px. */
-  arrowAt: number;
-  mobile: boolean;
-}
-
-const GAP = 14;
-const MOBILE_WIDTH = 700;
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-function samePlacement(a: Placement | null, b: Placement): boolean {
-  return !!a && a.arrow === b.arrow && a.mobile === b.mobile && Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.arrowAt - b.arrowAt) < 1;
-}
+/**
+ * What the card keeps clear of, and what covering it costs: the Drive-mode GPS
+ * line, the world badge and the minimap, and more so the cards and the touch
+ * pad, which hold buttons.
+ */
+const AVOID: [selector: string, weight: number][] = [
+  ['.gps-hud', 1],
+  ['.world-badge', 1],
+  ['.minimap', 1],
+  ['.app > .left-stack', CONTROL_WEIGHT],
+  ['.manual-pad', CONTROL_WEIGHT],
+];
 
 /**
  * Lung Daeng's coach card for a new game: a small, non-blocking card beside
@@ -48,10 +43,21 @@ export function TutorialCoach({ game }: OverlayProps) {
   const modalOpen = useUI((s) => s.modal !== null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<Placement | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  /** The player tucked the card away (true) or opened it (false) this step; null until they do. */
+  const [choice, setChoice] = useState<boolean | null>(null);
+  /**
+   * The open card covered the touch pad this step. On a step the player drives
+   * through (no button to press on the card) it then stays tucked away until
+   * the player opens it, so the pad stays usable.
+   */
+  const [crowded, setCrowded] = useState(false);
+  const collapsed = choice ?? crowded;
 
   // Each new step opens the card again.
-  useEffect(() => setCollapsed(false), [d.step]);
+  useEffect(() => {
+    setChoice(null);
+    setCrowded(false);
+  }, [d.step]);
 
   // Switching mode and opening panels are UI actions the simulation cannot see.
   useEffect(() => {
@@ -75,25 +81,24 @@ export function TutorialCoach({ game }: OverlayProps) {
       const vh = window.innerHeight;
       const w = card.offsetWidth;
       const h = card.offsetHeight;
-      const floor = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 60) + 8;
+      const floor = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 60) + FLOOR_GAP;
       const anchor = coach.anchor ? document.querySelector(coach.anchor) : null;
-      let next: Placement;
-      if (vw < MOBILE_WIDTH) {
-        next = { left: 8, top: floor, arrow: 'none', arrowAt: 0, mobile: true };
-      } else if (!anchor) {
-        const stack = document.querySelector('.left-stack')?.getBoundingClientRect();
-        next = { left: (stack?.right ?? 10) + GAP, top: floor, arrow: 'none', arrowAt: 0, mobile: false };
-      } else {
-        const r = anchor.getBoundingClientRect();
-        if (!coach.below && r.right + GAP + w <= vw - 8) {
-          const top = clamp(r.top, floor, vh - h - 8);
-          next = { left: r.right + GAP, top, arrow: 'left', arrowAt: clamp(r.top + 22 - top, 14, h - 20), mobile: false };
-        } else {
-          const left = clamp(r.left + r.width / 2 - w / 2, 8, vw - w - 8);
-          next = { left, top: clamp(r.bottom + GAP, 8, vh - h - 8), arrow: 'up', arrowAt: clamp(r.left + r.width / 2 - left, 18, w - 18), mobile: false };
-        }
-      }
+      const next = placeCoach({
+        vw,
+        vh,
+        w,
+        h,
+        floor,
+        anchor: anchor ? anchor.getBoundingClientRect() : null,
+        below: !!coach.below,
+        stackRight: document.querySelector('.left-stack')?.getBoundingClientRect().right ?? 10,
+        avoid: AVOID.flatMap(([sel, weight]): Obstacle[] => {
+          const r = document.querySelector(sel)?.getBoundingClientRect();
+          return r && r.width > 0 && r.height > 0 ? [{ left: r.left, top: r.top, right: r.right, bottom: r.bottom, weight }] : [];
+        }),
+      });
       setPlace((p) => (samePlacement(p, next) ? p : next));
+      if (!collapsed && !coach.action && dockedOverPad(next, h, document.querySelector('.manual-pad')?.getBoundingClientRect() ?? null)) setCrowded(true);
       const target = document.querySelector(coach.highlight ?? coach.anchor ?? '.no-coach-target');
       if (target !== lit) {
         lit?.classList.remove('coach-target');
@@ -152,7 +157,7 @@ export function TutorialCoach({ game }: OverlayProps) {
         <div className="coach-tools">
           <button
             className="btn tiny ghost"
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={() => setChoice(!collapsed)}
             title={collapsed ? 'Show Lung Daeng’s tip' : 'Tuck the tip away'}
             aria-label={collapsed ? 'Expand tutorial card' : 'Collapse tutorial card'}
             aria-expanded={!collapsed}
@@ -174,6 +179,11 @@ export function TutorialCoach({ game }: OverlayProps) {
           tour={tour}
           action={coach.action}
           waitFor={coach.waitFor}
+          openPanel={(id) => {
+            ui.set({ panel: id });
+            // Spanning the screen under the top bar, the open card would hide the panel it opened.
+            if (place?.mobile) setChoice(true);
+          }}
         />
       )}
     </div>
@@ -190,10 +200,12 @@ interface CoachBodyProps {
   tour: { id: string; blurb: string; def: PanelDef }[];
   action?: string;
   waitFor?: string;
+  /** Open a panel from the tour. */
+  openPanel: (id: string) => void;
 }
 
 /** The card's text, the panel tour and the footer with progress and the next button. */
-function CoachBody({ game, body, step, waiting, opened, tour, action, waitFor }: CoachBodyProps) {
+function CoachBody({ game, body, step, waiting, opened, tour, action, waitFor, openPanel }: CoachBodyProps) {
   const at = stepIndex(step);
   return (
     <>
@@ -209,7 +221,7 @@ function CoachBody({ game, body, step, waiting, opened, tour, action, waitFor }:
             const seen = opened.includes(id);
             return (
               <li key={id}>
-                <button className={`btn tiny ${seen ? 'on' : ''}`} onClick={() => ui.set({ panel: id })}>
+                <button className={`btn tiny ${seen ? 'on' : ''}`} onClick={() => openPanel(id)}>
                   {def.icon} {def.title}
                   {seen ? ' ✓' : ''}
                 </button>
