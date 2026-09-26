@@ -10,6 +10,7 @@
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import osmtogeojson from 'osmtogeojson';
 import { BBOX, PLAY_BBOX } from './bbox.mjs';
+import { carriagewayWidth } from './roadWidth.mjs';
 
 const RAW = new URL('../data-raw/', import.meta.url);
 // MAP_OUT writes elsewhere (e.g. to preview a rebuild without touching public/data).
@@ -200,6 +201,7 @@ function extractEdges(roads) {
     }
     const name = internName(nameOf(w.tags));
     const lanes = Math.max(0, Math.min(8, parseInt(w.tags.lanes, 10) || 0));
+    const width = carriagewayWidth(w.tags, cls, lanes);
     let start = 0;
     for (let i = 1; i < ids.length; i++) {
       if (i === ids.length - 1 || use.get(ids[i]) > 1) {
@@ -209,7 +211,7 @@ function extractEdges(roads) {
         for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
         const a = nodeOf(ids[start], geom[start].lon, geom[start].lat);
         const b = nodeOf(ids[i], geom[i].lon, geom[i].lat);
-        if (a !== b && len > 0.5) edges.push({ a, b, cls, oneway, name, lanes, len, pts: simplify(pts, 1.0) });
+        if (a !== b && len > 0.5) edges.push({ a, b, cls, oneway, name, lanes, width, len, pts: simplify(pts, 1.0) });
         start = i;
       }
     }
@@ -412,7 +414,7 @@ function buildGraph(roads, landmarks) {
     if (remap[e.a] < 0 || remap[e.b] < 0) continue;
     if (!e.virtual) keptLen += e.len;
     const inner = e.pts.slice(1, -1).flatMap(([x, y]) => [round(x, 1), round(y, 1)]);
-    outEdges.push([remap[e.a], remap[e.b], e.cls, e.oneway, e.name, round(e.len, 1), inner, e.lanes ?? 0, e.virtual ? 1 : 0]);
+    outEdges.push([remap[e.a], remap[e.b], e.cls, e.oneway, e.name, round(e.len, 1), inner, e.lanes ?? 0, e.virtual ? 1 : 0, Math.round((e.width ?? 0) * 10)]);
   }
   const portalsOut = portalOut
     .filter((p) => remap[p.out] >= 0 && remap[p.in] >= 0)

@@ -1,5 +1,6 @@
 import type { MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Game } from '../../sim/game';
+import type { KerbPoint } from '../../sim/manual';
 import type { RideRequest } from '../../sim/types';
 import type { UIState } from '../../ui/store';
 import type { TiledCity } from '../build/world';
@@ -22,8 +23,8 @@ export interface ViewContext {
   placeVehicle(obj: Object3D, arc: number, s: number, scale: number, lift?: number): void;
   /** Screen position (CSS px) of a sim point at height h, or null when off-camera. */
   screenOf(x: number, y: number, h?: number): { x: number; y: number } | null;
-  /** Where a waiting passenger stands: beside the road node, towards the place. */
-  kerbOf(req: RideRequest): { x: number; y: number };
+  /** Where a waiting passenger stands (on the pavement beside the road nearest their place) and the heading that faces the road. */
+  kerbOf(req: RideRequest): KerbPoint;
   /**
    * The object that follows a fleet vehicle's rendered pose, if drawn: position
    * on the ground at the vehicle's centre, rotation.y its heading, scale its

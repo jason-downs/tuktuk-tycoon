@@ -1,4 +1,5 @@
 import type { CityData } from '../city';
+import type { RoadNet } from './junctions';
 import type { MeshWriter } from './mesh';
 import type { Occupancy } from './occupancy';
 import type { Ring } from './shapes';
@@ -66,6 +67,8 @@ export interface BuildContext {
   waterBodies?: { kind: string; ring: Ring; islands: Ring[]; level: number; cut: boolean[] }[];
   /** Road polylines in way order (roads builder). */
   roadPts: Ring[];
+  /** Ways and junction surfaces as the roads builder draws them. */
+  roadNet?: RoadNet;
   /** Tree instances: x, y, scale, kind index. */
   trees: number[];
   /**

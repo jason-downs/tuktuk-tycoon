@@ -5,6 +5,11 @@ import { Projection } from '../src/geo';
 import { ccw, FX, moatGaps, pieceEnds, segDist, signedArea } from '../src/world3d/build/effects';
 import { buildCity } from '../src/world3d/build/world';
 import { ringOf, type CityData } from '../src/world3d/city';
+import { ringDist } from '../src/world3d/build/kit';
+import { wallHeight } from '../src/world3d/build/landmarks';
+import { HEROES } from '../src/world3d/build/landmarks3d';
+import { pointInRing } from '../src/world3d/build/shapes';
+import { isMarkerKind } from '../src/world3d/propModels';
 import landmarks from '../src/content/landmarks.json';
 
 const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', import.meta.url), 'utf8')) as CityData;
@@ -123,6 +128,63 @@ describe('effect anchors from the city data', () => {
     for (let i = 0; i < c.length; i += 4) expect(Math.hypot(c[i] - gx, c[i + 1] - gy)).toBeLessThan(1100);
     expect(count(FX.moat)).toBeGreaterThan(500);
     expect(count(FX.mist)).toBeGreaterThan(200);
+  });
+
+  it('lines the Tha Phae Gate walls with candles, along the top and at the foot', () => {
+    const gate = HEROES.find((h) => h.id === 'tha_phae_gate')!;
+    const walls = (city.cityWalls ?? []).filter((w) => gate.walls!.includes(w.id)).map((w) => ringOf(w.r));
+    expect(walls.length).toBe(2);
+    const c = fx(FX.candle);
+    let top = 0;
+    let foot = 0;
+    for (let i = 0; i < c.length; i += 4) {
+      const [x, y, , h] = [c[i], c[i + 1], c[i + 2], c[i + 3]];
+      const inside = walls.some((r) => pointInRing(x, y, r));
+      const near = walls.some((r) => ringDist(x, y, r) < 2);
+      if (inside && Math.abs(h - wallHeight(gate)) < 1e-6) top++;
+      else if (!inside && near && h < 0.2) foot++;
+      // Never floating over the street or sunk in the brick.
+      if (inside) expect(h).toBeCloseTo(wallHeight(gate), 5);
+    }
+    expect(top).toBeGreaterThan(40);
+    expect(foot).toBeGreaterThan(40);
+  });
+
+  it('keeps market stalls clear of trees, lamps, poles and permanent stalls', () => {
+    const items: [number, number][] = [];
+    for (let i = 0; i < built.trees.length; i += 4) items.push([built.trees[i], built.trees[i + 1]]);
+    for (const [kind, a] of Object.entries(built.props)) if (!isMarkerKind(kind)) for (let i = 0; i < a.length; i += 4) items.push([a[i], a[i + 1]]);
+    const grid = new Map<string, [number, number][]>();
+    for (const p of items) {
+      const k = `${Math.floor(p[0] / 10)},${Math.floor(p[1] / 10)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k)!.push(p);
+    }
+    for (const kind of [FX.stallSunday, FX.stallSaturday, FX.stallBazaar]) {
+      const a = fx(kind);
+      let blocked = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        const [x, y, , size] = [a[i], a[i + 1], a[i + 2], a[i + 3]];
+        const cx = Math.floor(x / 10);
+        const cy = Math.floor(y / 10);
+        let hit = false;
+        for (let gx = cx - 1; gx <= cx + 1 && !hit; gx++) {
+          for (let gy = cy - 1; gy <= cy + 1 && !hit; gy++) hit = (grid.get(`${gx},${gy}`) ?? []).some(([px, py]) => Math.hypot(px - x, py - y) < size / 2);
+        }
+        if (hit) blocked++;
+      }
+      expect(blocked, kind).toBe(0);
+    }
+  });
+
+  it('keeps Songkran splash points off the city walls and out of the moat', () => {
+    const walls = (city.cityWalls ?? []).map((w) => ringOf(w.r));
+    const moat = city.areas.filter((x) => city.areaKinds[x.k] === 'moat').map((x) => ringOf(x.r));
+    const a = fx(FX.moat);
+    for (let i = 0; i < a.length; i += 4) {
+      expect(walls.some((r) => pointInRing(a[i], a[i + 1], r))).toBe(false);
+      expect(moat.some((r) => pointInRing(a[i], a[i + 1], r))).toBe(false);
+    }
   });
 
   it('is deterministic', () => {

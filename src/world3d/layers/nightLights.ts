@@ -5,6 +5,7 @@
 
 import type { Scene } from 'three';
 import { hash01 } from '../build/mesh';
+import { HERITAGE_LAMP_HEAD, STREET_LAMP_HEAD } from '../build/props';
 import { GlowSprites, LightPools, type GlowFrame } from './glow';
 
 /**
@@ -27,14 +28,17 @@ export interface LampSpec {
 export const LAMP_SPECS: Record<string, LampSpec> = {
   // Sodium on most roads, white LED on some main roads (world.md §3.3).
   street_lamp: {
-    reach: 1.8,
-    height: 7.4,
+    reach: STREET_LAMP_HEAD.reach,
+    // Just under the head's lit underside, so the head box does not hide the glow's core from above.
+    height: STREET_LAMP_HEAD.height - 0.12,
     glow: 1.5,
     pool: 10,
     poolReach: 2.6,
     colours: ['#ffb45c', '#ffb45c', '#ffb45c', '#f3f1ea', '#f3f1ea'],
   },
-  heritage_lamp: { reach: 0, height: 3.7, glow: 1.0, pool: 5.5, poolReach: 0, colours: ['#ffcf7a'] },
+  // The lantern shines all round; its pool is pushed along the facing, which the street furniture points at the
+  // carriageway on streets and away from the water along the moat.
+  heritage_lamp: { reach: HERITAGE_LAMP_HEAD.reach, height: HERITAGE_LAMP_HEAD.height, glow: 1.0, pool: 5.5, poolReach: 3, colours: ['#ffcf7a'] },
 };
 
 /** Pool brightness relative to the head colour (additive on the road). */

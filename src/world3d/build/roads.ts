@@ -89,6 +89,7 @@ function paintKerb(w: MeshWriter, path: Path, o0: number, o1: number, s0: number
 export function buildRoads(ctx: BuildContext): void {
   const { city, w, occ } = ctx;
   const net = buildRoadNet(city);
+  ctx.roadNet = net;
   for (const way of net.ways) ctx.roadPts.push(way.path.pts);
   const paint = w.roads;
   const oldCity = oldCityTest(ctx.moatRings);

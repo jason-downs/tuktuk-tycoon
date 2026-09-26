@@ -5,6 +5,8 @@ import { PAINTS } from '../src/content/paints';
 import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import type { GraphJSON } from '../src/sim/graph';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import type { CityData } from '../src/world3d/city';
 import {
   edgeLanes,
   kerbOffset,
@@ -171,7 +173,7 @@ describe('vehicle kinematics', () => {
         const p = graph.poseAt(arc, edge.len / 2);
         const left = (c.x - p.x) * -Math.sin(p.heading) + (c.y - p.y) * Math.cos(p.heading);
         expect(left).toBeCloseTo(off, 5);
-        expect(left).toBeLessThan(roadWidth(edge.cls, edge.oneway) / 2);
+        expect(left).toBeLessThan(lanes.half[e]);
         // Stopping at the kerb moves a vehicle further left, never past the road edge when it fits.
         const kerb = kerbOffset(off, lanes.half[e], 1.0);
         expect(kerb).toBeGreaterThanOrEqual(off);
@@ -182,6 +184,29 @@ describe('vehicle kinematics', () => {
     expect(checked).toBeGreaterThan(200);
     expect(laneOffsetFor(1, true)).toBeGreaterThan(laneOffsetFor(5, true));
     expect(laneOffsetFor(3, false)).toBeCloseTo(roadWidth(3, false) / 4);
+  });
+
+  it('keeps traffic inside the carriageway each road is drawn with', () => {
+    const net = buildRoadNet(read<CityData>('city3d.json'));
+    let matched = 0;
+    let sameWidth = 0;
+    const overhang: string[] = [];
+    graph.edges.forEach((edge, e) => {
+      if (edge.virtual) return;
+      const mid = graph.poseAt(e * 2, edge.len / 2);
+      const hit = net.nearest(mid.x, mid.y, 1.5, (w) => w.cls === edge.cls);
+      if (!hit) return;
+      matched++;
+      const hw = hit.way.hw;
+      if (Math.abs(lanes.half[e] - hw) < 0.06) sameWidth++;
+      // A car (half-width 0.9) in its lane, and a tuk-tuk (0.72 × the 1.3 minimum render scale) at the kerb, stay on the road.
+      if (hw >= 0.9 && lanes.lane[e] + 0.9 > hw + 0.05) overhang.push(`car on edge ${e}: lane ${lanes.lane[e].toFixed(2)}, drawn half ${hw}`);
+      const tuk = 0.72 * 1.3;
+      if (hw >= tuk && kerbOffset(lanes.lane[e], lanes.half[e], tuk) + tuk > hw + 0.15) overhang.push(`parked on edge ${e}`);
+    });
+    expect(matched / graph.edges.length).toBeGreaterThan(0.97);
+    expect(sameWidth / matched).toBeGreaterThan(0.99);
+    expect(overhang.length / matched, overhang.slice(0, 5).join('; ')).toBeLessThan(0.01);
   });
 
   it('keeps the heading on a straight road', () => {

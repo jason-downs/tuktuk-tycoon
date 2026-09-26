@@ -19,9 +19,14 @@ import landmarks from '../../content/landmarks.json';
 import { ROAD_SETS, type RoadSetDef } from '../../content/events';
 import { Projection } from '../../geo';
 import { ringOf, ROAD_FLAG } from '../city';
+import { OB } from './clearance';
 import { addProp, type BuildContext } from './context';
+import { ringDist } from './kit';
+import { wallHeight } from './landmarks';
+import { HEROES } from './landmarks3d';
 import { hash01 } from './mesh';
 import { alongLine, pointInRing, type Ring } from './shapes';
+import { placeEnv } from './streets';
 
 export const FX = {
   lanternYiPeng: 'fx_lantern_yipeng',
@@ -43,6 +48,12 @@ const CANDLE_STEP = 1.6;
 /** Stalls: 2 × 2 m canopies (world.md §3.5), a little gap between neighbours. */
 const STALL_STEP = 2.4;
 const STALL_SIZE = 2;
+/** Nothing already placed (trees, lamps, poles, permanent stalls) within this share of a stall's size of its centre. */
+const STALL_CLEAR = 0.55;
+/** Candles on a city wall's top stand this far in from its outer face, inside the merlons (landmarks.ts brickMass). */
+const WALL_TOP_IN = 1.2;
+/** Candles at a city wall's foot stand this far out, clear of the margin the wall reserves. */
+const WALL_FOOT_OUT = 1.2;
 /** No stall this close to a junction node, so cross streets stay open. */
 const STALL_JUNCTION_GAP = 7;
 /** Night Bazaar stalls line Chang Klan Rd this far either side of the Night Bazaar. */
@@ -219,6 +230,10 @@ export function buildEffectAnchors(ctx: BuildContext): void {
   const moat = city.areas.filter((a) => city.areaKinds[a.k] === 'moat').map((a) => ccw(ringOf(a.r)));
   const riverAreas = city.areas.filter((a) => city.areaKinds[a.k] === 'river').map((a) => ringOf(a.r));
   const inMoat = (x: number, y: number) => moat.some((r) => pointInRing(x, y, r));
+  const cityWalls = (city.cityWalls ?? []).map((w) => ringOf(w.r));
+  const inCityWall = (x: number, y: number) => cityWalls.some((r) => pointInRing(x, y, r));
+  // Trees and street props are already placed; festival set dressing keeps clear of them and of the obstacles.
+  const env = placeEnv(ctx);
 
   // ---- Yi Peng lantern strings: named streets, then the moat causeways.
   const lanternGap = new Spacer(4);
@@ -305,6 +320,7 @@ export function buildEffectAnchors(ctx: BuildContext): void {
       addProp(ctx, FX.candle, px, py, Math.atan2(-nx, ny), 0.06 + hash01(candleN++, 61) * 0.04);
     });
   }
+  // City walls mapped as lines: either side of the line.
   for (const l of city.lines) {
     if (city.lineKinds[l.k] !== 'city_wall') continue;
     const pts = ringOf(l.p);
@@ -315,6 +331,25 @@ export function buildEffectAnchors(ctx: BuildContext): void {
         const py = y + ny * side;
         if (!inMoat(px, py)) addProp(ctx, FX.candle, px, py, Math.atan2(-nx, ny), 0.06);
       }
+    });
+  }
+  // City walls mapped as areas (the gate's brick masses): along the top inside the merlons, and at the foot
+  // on the plaza and street sides, off the carriageway.
+  for (const cw of city.cityWalls ?? []) {
+    const ring = ccw(ringOf(cw.r));
+    if (!ring.some(([x, y]) => Math.hypot(x - gx, y - gy) <= 220)) continue;
+    const hero = HEROES.find((h) => h.walls?.includes(cw.id));
+    const top = hero ? wallHeight(hero) : 0;
+    // Counter-clockwise ring: the left normal points into the wall.
+    alongLine([...ring, ring[0]], 1.3, (x, y, _n, nx, ny) => {
+      if (Math.hypot(x - gx, y - gy) > 220) return;
+      const yaw = Math.atan2(-nx, ny);
+      const tx = x + nx * WALL_TOP_IN;
+      const ty = y + ny * WALL_TOP_IN;
+      if (top > 0 && pointInRing(tx, ty, ring) && ringDist(tx, ty, ring) > WALL_TOP_IN - 0.05) addProp(ctx, FX.candle, tx, ty, yaw, top);
+      const fx = x - nx * WALL_FOOT_OUT;
+      const fy = y - ny * WALL_FOOT_OUT;
+      if (!inMoat(fx, fy) && !inCityWall(fx, fy) && !env.clear.hit(fx, fy, 0.2, OB.ROAD | OB.BUILDING | OB.WATER)) addProp(ctx, FX.candle, fx, fy, yaw, 0.06);
     });
   }
 
@@ -369,7 +404,11 @@ export function buildEffectAnchors(ctx: BuildContext): void {
       if (!keep(x, y) || ends.some(([ex, ey]) => Math.hypot(ex - x, ey - y) < STALL_JUNCTION_GAP)) return;
       for (const { off, face } of offsets) {
         const f = face === 0 ? (n % 2 === 0 ? 1 : -1) : face;
-        addProp(ctx, kind, x + nx * off, y + ny * off, Math.atan2(ny * f, nx * f), size);
+        const px = x + nx * off;
+        const py = y + ny * off;
+        // No tree trunk, lamp, pole or permanent stall under the canopy.
+        if (!env.placed.free(px, py, size * STALL_CLEAR)) continue;
+        addProp(ctx, kind, px, py, Math.atan2(ny * f, nx * f), size);
       }
     });
   };
@@ -397,7 +436,7 @@ export function buildEffectAnchors(ctx: BuildContext): void {
       // Left normal of a counter-clockwise ring points into the water.
       const px = x - nx * 2.5;
       const py = y - ny * 2.5;
-      if (!inMoat(px, py)) addProp(ctx, FX.moat, px, py, Math.atan2(-ny, -nx), 1);
+      if (!inMoat(px, py) && !inCityWall(px, py)) addProp(ctx, FX.moat, px, py, Math.atan2(-ny, -nx), 1);
     });
     alongLine([...ring, ring[0]], 18, (x, y, n, nx, ny) => {
       const px = x + nx * 6;

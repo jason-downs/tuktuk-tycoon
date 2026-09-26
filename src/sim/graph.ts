@@ -17,13 +17,35 @@ export type RoadClass = (typeof ROAD_CLASSES)[number];
 export const CLASS_SPEED_KMH: readonly number[] = [50, 42, 38, 33, 28, 24, 12, 14];
 export const MAX_ROAD_SPEED_MS = Math.max(...CLASS_SPEED_KMH) / 3.6;
 
+/**
+ * Typical carriageway width (m) by road class, [two-way, one-way]: medians of
+ * the widths baked into public/data/city3d.json (lanes × lane width + 0.6 m, or
+ * the class default). Stands in for edges without a baked width.
+ */
+export const ROAD_WIDTH: readonly (readonly [number, number])[] = [
+  [14, 10.4],
+  [7.1, 10.4],
+  [12.6, 6.6],
+  [6.6, 6.6],
+  [6.1, 6.1],
+  [5.5, 5.5],
+  [4.5, 4.5],
+  [4, 4],
+];
+
+/** Typical carriageway width (m) of a road class, two-way or one-way. */
+export function roadWidth(cls: number, oneway: boolean): number {
+  const w = ROAD_WIDTH[cls] ?? ROAD_WIDTH[ROAD_WIDTH.length - 1];
+  return w[oneway ? 1 : 0];
+}
+
 export interface GraphJSON {
   origin: LatLon;
   classes: string[];
   names: string[];
   nodes: number[];
-  /** [a, b, class, oneway, nameIndex, length, interiorXY[], lanes, virtual] */
-  edges: [number, number, number, number, number, number, number[], number?, number?][];
+  /** [a, b, class, oneway, nameIndex, length, interiorXY[], lanes, virtual, carriageway width in dm (0 = unknown)] */
+  edges: [number, number, number, number, number, number, number[], number?, number?, number?][];
   /** Main roads leaving the play area: out = boundary node where traffic leaves, in = where it returns. */
   portals?: PortalJSON[];
   /** Out-of-town landmarks: the portal to use and the road metres beyond it. */
@@ -49,6 +71,8 @@ export interface Edge {
   name: number;
   /** Lanes tagged in OSM (0 = untagged). */
   lanes: number;
+  /** Carriageway width (m) as the 3D city draws it; 0 when unknown (turnarounds beyond portals). */
+  width: number;
   /** Hidden turnaround beyond a portal (not a real street). */
   virtual: boolean;
   /** Polyline x0,y0,…,xn,yn including both end nodes. */
@@ -56,6 +80,11 @@ export interface Edge {
   /** Cumulative distance at each polyline vertex; cum[last] is the edge length. */
   cum: Float64Array;
   len: number;
+}
+
+/** Carriageway width (m) of an edge: the drawn width when baked, else the typical width of its class. */
+export function edgeWidth(e: Edge): number {
+  return e.width > 0 ? e.width : roadWidth(e.cls, e.oneway);
 }
 
 export interface Pose {
@@ -84,6 +113,9 @@ export class RoadGraph {
   /** CSR adjacency: outgoing arcs of node n are outArcs[outStart[n] .. outStart[n + 1]). */
   readonly outStart: Int32Array;
   readonly outArcs: Int32Array;
+  /** CSR incidence: edges touching node n, whatever their direction, are edgeIds[edgeStart[n] .. edgeStart[n + 1]). */
+  private readonly edgeStart: Int32Array;
+  private readonly edgeIds: Int32Array;
   readonly nodeCount: number;
   readonly portals: PortalJSON[];
   /** Junction nodes controlled by traffic signals, ascending. */
@@ -103,7 +135,7 @@ export class RoadGraph {
     }
     this.portals = json.portals ?? [];
     this.signals = json.signals ?? [];
-    this.edges = json.edges.map(([a, b, cls, oneway, name, , inner, lanes, virtual]) => {
+    this.edges = json.edges.map(([a, b, cls, oneway, name, , inner, lanes, virtual, widthDm]) => {
       const pts = new Float64Array(inner.length + 4);
       pts[0] = this.nodeX[a];
       pts[1] = this.nodeY[a];
@@ -114,7 +146,7 @@ export class RoadGraph {
       for (let k = 1; k < cum.length; k++) {
         cum[k] = cum[k - 1] + Math.hypot(pts[2 * k] - pts[2 * k - 2], pts[2 * k + 1] - pts[2 * k - 1]);
       }
-      return { a, b, cls, oneway: oneway === 1, name, lanes: lanes ?? 0, virtual: virtual === 1, pts, cum, len: Math.max(cum[cum.length - 1], 0.5) };
+      return { a, b, cls, oneway: oneway === 1, name, lanes: lanes ?? 0, width: (widthDm ?? 0) / 10, virtual: virtual === 1, pts, cum, len: Math.max(cum[cum.length - 1], 0.5) };
     });
 
     const degree = new Int32Array(this.nodeCount + 1);
@@ -129,6 +161,20 @@ export class RoadGraph {
     this.edges.forEach((e, i) => {
       this.outArcs[fill[e.a]++] = i * 2;
       if (!e.oneway) this.outArcs[fill[e.b]++] = i * 2 + 1;
+    });
+
+    const touching = new Int32Array(this.nodeCount + 1);
+    this.edges.forEach((e) => {
+      touching[e.a]++;
+      if (e.b !== e.a) touching[e.b]++;
+    });
+    this.edgeStart = new Int32Array(this.nodeCount + 1);
+    for (let i = 0; i < this.nodeCount; i++) this.edgeStart[i + 1] = this.edgeStart[i] + touching[i];
+    this.edgeIds = new Int32Array(this.edgeStart[this.nodeCount]);
+    const at = this.edgeStart.slice(0, this.nodeCount);
+    this.edges.forEach((e, i) => {
+      this.edgeIds[at[e.a]++] = i;
+      if (e.b !== e.a) this.edgeIds[at[e.b]++] = i;
     });
 
     for (let i = 0; i < this.nodeCount; i++) this.gridAdd(this.nodeGrid, this.nodeX[i], this.nodeY[i], i);
@@ -181,6 +227,11 @@ export class RoadGraph {
 
   outgoing(node: number): Int32Array {
     return this.outArcs.subarray(this.outStart[node], this.outStart[node + 1]);
+  }
+
+  /** Edges that start or end at a node, one-way edges in either direction included. */
+  edgesAt(node: number): Int32Array {
+    return this.edgeIds.subarray(this.edgeStart[node], this.edgeStart[node + 1]);
   }
 
   edgeName(edge: number): string {
@@ -266,6 +317,13 @@ export class RoadGraph {
       }
     }
     return best;
+  }
+
+  /** Edges passing through the grid cells within `radius` metres of (x, y): every edge that comes that close, and some further away. */
+  edgesNear(x: number, y: number, radius: number): number[] {
+    const out = new Set<number>();
+    for (const key of this.cellsAround(x, y, radius)) for (const ei of this.edgeGrid.get(key) ?? []) out.add(ei);
+    return [...out];
   }
 
   /** Nearest point on any edge within maxDist metres. s is measured along the edge from node a. */

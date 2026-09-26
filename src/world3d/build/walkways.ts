@@ -3,8 +3,9 @@
 // where one is drawn, just off the carriageway edge on sois), loops inside
 // pedestrian plazas, and the aisles of the two walking streets (Ratchadamnoen
 // on Sunday, Wua Lai on Saturday) which run down the closed carriageway. Runs
-// stop wherever they would cross another carriageway, a building or water;
-// nearby run ends are linked so walkers turn corners and cross side sois.
+// stop wherever they would cross another carriageway, a building, a city wall
+// or water; nearby run ends are linked so walkers turn corners and cross side
+// sois.
 //
 // Output goes through addProp as invisible prop kinds (no model is registered
 // for them): 'walk', 'walk_sun', 'walk_sat' hold x, y, heading to the next
@@ -61,12 +62,12 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
   return Math.hypot(px - ax - dx * t, py - ay - dy * t);
 }
 
-/** Spatial tests the walk runs must pass: carriageways, buildings, water. */
+/** Spatial tests the walk runs must pass: carriageways, buildings and city walls, water. */
 export class Clearance {
   private readonly seg: Float64Array;
   private readonly segCls: Uint8Array;
   private readonly segGrid: Grid = new Map();
-  /** Building outlines as flat x, y metres; building i spans pairs bldStart[i] … bldStart[i + 1]. */
+  /** Building and city-wall outlines as flat x, y metres; outline i spans pairs bldStart[i] … bldStart[i + 1]. */
   private readonly bldPts: Float64Array;
   private readonly bldStart: Int32Array;
   private readonly bldBox: Float64Array;
@@ -97,22 +98,23 @@ export class Clearance {
         s++;
       }
     });
-    const blds = city.buildings.filter((b) => !b.part);
+    // Building footprints and the brick city walls, gate towers and bastions: flat x, y rings in decimetres.
+    const blds = [...city.buildings.filter((b) => !b.part).map((b) => b.r), ...(city.cityWalls ?? []).map((w) => w.r)];
     let pts = 0;
-    for (const b of blds) pts += b.r.length / 2;
+    for (const r of blds) pts += r.length / 2;
     this.bldPts = new Float64Array(pts * 2);
     this.bldStart = new Int32Array(blds.length + 1);
     this.bldBox = new Float64Array(blds.length * 4);
     let o = 0;
-    blds.forEach((b, i) => {
+    blds.forEach((r, i) => {
       this.bldStart[i] = o;
       let x0 = Infinity;
       let y0 = Infinity;
       let x1 = -Infinity;
       let y1 = -Infinity;
-      for (let k = 0; k < b.r.length; k += 2) {
-        const x = b.r[k] / 10;
-        const y = b.r[k + 1] / 10;
+      for (let k = 0; k < r.length; k += 2) {
+        const x = r[k] / 10;
+        const y = r[k + 1] / 10;
         this.bldPts[2 * o] = x;
         this.bldPts[2 * o + 1] = y;
         o++;

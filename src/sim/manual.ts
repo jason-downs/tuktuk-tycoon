@@ -20,7 +20,7 @@ import { angleDiff } from '../geo';
 import { BALANCE } from './balance';
 import { findRequest, refuel, releaseClaim } from './dispatch';
 import type { Game, GameSystem, RatingModifier } from './game';
-import { reverseArc, type RoadGraph } from './graph';
+import { edgeWidth, reverseArc, type RoadGraph } from './graph';
 import { beginKerbside } from './kerbside';
 import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
 import { accountDistance, targetSpeed } from './movement';
@@ -46,8 +46,12 @@ export const PICKUP_MAX_SPEED = 1.5;
 export const WALK_OVER_S = 20;
 /** A pump or charger this close (m) to the tuk-tuk can be used by hand. */
 export const PUMP_RADIUS_M = 30;
-/** Where a waiting passenger stands: at most this far from the road node, towards their place. */
-const KERB_OFFSET_M = 6;
+/** Where a waiting passenger stands: at least this far back from the junction node along the road… */
+const KERB_BACK_M = 6;
+/** …and this far beyond the edge of any crossing carriageway, clear of the rounded kerb corners (up to 6 m radius). */
+const KERB_JUNCTION_CLEAR_M = 4;
+/** Distance (m) from the carriageway edge to where the passenger stands: on the pavement, just behind the kerb. */
+const KERB_STAND_M = 0.7;
 
 export type TurnIntent = 'left' | 'right';
 export type TurnKind = 'left' | 'right' | 'straight' | 'uturn';
@@ -325,16 +329,51 @@ export class ManualSystem implements GameSystem {
 }
 
 // ------------------------------------------------------------ at the kerb
-/** Where a waiting passenger stands: beside the place's road node, a few metres towards the place. */
-export function kerbPoint(game: Game, place: Place): { x: number; y: number } {
+const _kerbPose = { x: 0, y: 0, heading: 0 };
+
+/** Where a waiting passenger stands (sim metres) and the heading (radians) that faces the carriageway. */
+export interface KerbPoint {
+  x: number;
+  y: number;
+  face: number;
+}
+
+/**
+ * Where a waiting passenger stands: on the pavement of one of the roads that
+ * meet at the place's node, set back from the junction beyond the crossing
+ * carriageways, KERB_STAND_M outside the drawn kerb, on whichever road and
+ * side is nearest the place.
+ */
+export function kerbPoint(game: Game, place: Place): KerbPoint {
   const g = game.world.graph;
-  const nx = g.nodeX[place.node];
-  const ny = g.nodeY[place.node];
-  const dx = place.x - nx;
-  const dy = place.y - ny;
-  const d = Math.hypot(dx, dy) || 1;
-  const off = Math.min(d, KERB_OFFSET_M);
-  return { x: nx + (dx / d) * off, y: ny + (dy / d) * off };
+  const node = place.node;
+  const edges = g.edgesAt(node);
+  const best: KerbPoint = { x: g.nodeX[node], y: g.nodeY[node], face: Math.atan2(g.nodeY[node] - place.y, g.nodeX[node] - place.x) || 0 };
+  let bestD = Infinity;
+  for (const ei of edges) {
+    const e = g.edges[ei];
+    if (e.virtual) continue;
+    let cross = 0;
+    for (const oi of edges) if (oi !== ei && !g.edges[oi].virtual) cross = Math.max(cross, edgeWidth(g.edges[oi]) / 2);
+    const back = Math.min(Math.max(KERB_BACK_M, cross + KERB_JUNCTION_CLEAR_M), e.len / 2);
+    // The arc leaving the node along this edge; its pose gives the road direction there.
+    const p = g.poseAt(ei * 2 + (e.a === node ? 0 : 1), back, _kerbPose);
+    const off = edgeWidth(e) / 2 + KERB_STAND_M;
+    const lx = -Math.sin(p.heading) * off;
+    const ly = Math.cos(p.heading) * off;
+    for (const side of [1, -1]) {
+      const x = p.x + lx * side;
+      const y = p.y + ly * side;
+      const d = Math.hypot(x - place.x, y - place.y);
+      if (d < bestD) {
+        bestD = d;
+        best.x = x;
+        best.y = y;
+        best.face = Math.atan2(-ly * side, -lx * side);
+      }
+    }
+  }
+  return best;
 }
 
 /** The nearest passenger the tuk-tuk could pick up here: in sight, not taken by another tuk-tuk, within PICKUP_RADIUS_M. */

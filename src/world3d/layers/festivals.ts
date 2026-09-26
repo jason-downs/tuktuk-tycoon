@@ -21,13 +21,14 @@ import {
 } from 'three';
 import { FX } from '../build/effects';
 import { hash01 } from '../build/mesh';
+import { WATER_LEVEL } from '../build/water';
 import type { FestivalState } from '../env/festivals';
 import { krathongGeometry, lanternGeometry, stallBaseGeometry, stallCanopyGeometry } from '../festivalModels';
 import { GlowSprites, LightPools, lineGeometry, type GlowFrame } from './glow';
 import { linearRGB } from './nightLights';
 
-/** Height of the Ping's water surface (the ground builder's river ribbon). */
-const RIVER_WATER_Y = 0.06;
+/** Where a krathong floats: 1 cm above the Ping's surface, which is sunk below the street (the fx_river path lies on it). */
+const RIVER_WATER_Y = WATER_LEVEL.river + 0.01;
 /** Lantern strings: anchored at 6.3 m, sagging 0.55 m mid-span; a lantern every 1.5 m (world.md §3.5). */
 const STRING_HEIGHT = 6.3;
 const STRING_SAG = 0.55;

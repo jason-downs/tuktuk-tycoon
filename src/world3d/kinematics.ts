@@ -5,44 +5,35 @@
 // (x east, y north) and headings radians counter-clockwise from east. Nothing
 // here touches game.state.
 
-import type { RoadGraph } from '../sim/graph';
+import { edgeWidth, roadWidth, ROAD_WIDTH, type RoadGraph } from '../sim/graph';
+import { PAINT_Y } from './build/paths';
 
-/**
- * Typical carriageway width (m) by road class, [two-way, one-way]: medians of
- * the widths baked into public/data/city3d.json (lanes × lane width + 0.6 m, or
- * the class default), so traffic sits in the lanes the 3D roads draw.
- */
-export const ROAD_WIDTH: readonly (readonly [number, number])[] = [
-  [14, 10.4],
-  [7.1, 10.4],
-  [12.6, 6.6],
-  [6.6, 6.6],
-  [6.1, 6.1],
-  [5.5, 5.5],
-  [4.5, 4.5],
-  [4, 4],
-];
+export { roadWidth, ROAD_WIDTH };
 
 /** Lane width (m) on one-way roads; the leftmost lane's centre is half of this in from the kerb. */
 const LANE = 3.2;
+/** Half a car's width (m): the closest a lane centre comes to the kerb. */
+const CAR_HALF_WIDTH = 0.9;
 
-/** Height (m) of the drawn carriageway above the ground plane (the road ribbons of build/roads.ts): wheels sit here. */
-export const ROAD_SURFACE_Y = 0.12;
-/** Height (m) of the drawn pavements: pedestrians stand here. */
-export const PAVEMENT_Y = 0.07;
-
-export function roadWidth(cls: number, oneway: boolean): number {
-  const w = ROAD_WIDTH[cls] ?? ROAD_WIDTH[ROAD_WIDTH.length - 1];
-  return w[oneway ? 1 : 0];
-}
+/** Height (m) of the drawn carriageway: the flat road paint of build/roads.ts. Wheels sit here. */
+export const ROAD_SURFACE_Y = PAINT_Y;
+/** Height (m) of the drawn pavements, painted flat at the same height as the carriageway. Pedestrians stand here. */
+export const PAVEMENT_Y = PAINT_Y;
 
 /**
- * Sideways offset (m, positive = left of travel) of the lane traffic keeps to:
- * the middle of the left half on two-way roads, the leftmost lane on one-way roads.
+ * Sideways offset (m, positive = left of travel) of the lane traffic keeps to
+ * on a carriageway `w` metres wide: the middle of the left half on two-way
+ * roads, the leftmost lane on one-way roads, and never so near the kerb that
+ * a car would overhang it.
  */
+export function laneOffsetForWidth(w: number, oneway: boolean): number {
+  const lane = oneway ? w / 2 - LANE / 2 : w / 4;
+  return Math.max(0, Math.min(lane, w / 2 - CAR_HALF_WIDTH));
+}
+
+/** Lane offset (m) for the typical carriageway of a road class. */
 export function laneOffsetFor(cls: number, oneway: boolean): number {
-  const w = roadWidth(cls, oneway);
-  return oneway ? Math.max(0, w / 2 - LANE / 2) : w / 4;
+  return laneOffsetForWidth(roadWidth(cls, oneway), oneway);
 }
 
 /**
@@ -55,7 +46,7 @@ export function kerbOffset(lane: number, halfRoad: number, halfWidth: number): n
 
 const laneCache = new WeakMap<RoadGraph, { lane: Float32Array; half: Float32Array }>();
 
-/** Per-edge lane offset and half carriageway width for a graph (cached). */
+/** Per-edge lane offset and half carriageway width, from the width each road is drawn at (cached per graph). */
 export function edgeLanes(graph: RoadGraph): { lane: Float32Array; half: Float32Array } {
   let hit = laneCache.get(graph);
   if (!hit) {
@@ -63,8 +54,9 @@ export function edgeLanes(graph: RoadGraph): { lane: Float32Array; half: Float32
     hit = { lane: new Float32Array(n), half: new Float32Array(n) };
     for (let i = 0; i < n; i++) {
       const e = graph.edges[i];
-      hit.lane[i] = laneOffsetFor(e.cls, e.oneway);
-      hit.half[i] = roadWidth(e.cls, e.oneway) / 2;
+      const w = edgeWidth(e);
+      hit.lane[i] = laneOffsetForWidth(w, e.oneway);
+      hit.half[i] = w / 2;
     }
     laneCache.set(graph, hit);
   }

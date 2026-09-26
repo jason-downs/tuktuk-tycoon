@@ -3,7 +3,7 @@
 // Checks what each layer would draw and that nothing throws or goes NaN.
 
 import { readFileSync } from 'node:fs';
-import { InstancedMesh, MeshLambertMaterial, PerspectiveCamera, Scene } from 'three';
+import { InstancedMesh, Matrix4, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
@@ -17,12 +17,17 @@ import { buildCity, tileCity } from '../src/world3d/build/world';
 import { edgeLanes } from '../src/world3d/kinematics';
 import { CrowdLayer } from '../src/world3d/layers/crowds';
 import { PeopleLayer } from '../src/world3d/layers/people';
+import { ARM_Y, LAMP_HEIGHT, SignalLayer } from '../src/world3d/layers/signals';
+import { arcLight, signalMap } from '../src/sim/signals';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import { pointInRing } from '../src/world3d/build/shapes';
 import type { ViewContext, WorldLayer } from '../src/world3d/layers/types';
 import { VehicleLayer } from '../src/world3d/layers/vehicles';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
-const built = tileCity(buildCity(read<CityData>('city3d.json')));
+const city = read<CityData>('city3d.json');
+const built = tileCity(buildCity(city));
 
 function setup(time: number) {
   const game = Game.create(world, { seed: 7 });
@@ -46,7 +51,7 @@ function setup(time: number) {
     screenOf: () => null,
     kerbOf: (req: RideRequest) => {
       const place = game.place(req.from);
-      return { x: world.graph.nodeX[place.node] + 3, y: world.graph.nodeY[place.node] };
+      return { x: world.graph.nodeX[place.node] + 3, y: world.graph.nodeY[place.node], face: Math.PI };
     },
     vehicleMesh: (id) => vehicles?.meshOf(id),
     hoverRequest: null,
@@ -179,5 +184,83 @@ describe('3D layers, headless', () => {
       if ((o as InstancedMesh).isInstancedMesh) left++;
     });
     expect(left).toBe(0);
+  });
+});
+
+describe('traffic lights', () => {
+  it('draws one sim-driven light per signalled approach, each on a pole beside the road with its head over the lane', () => {
+    const t = setup(timeOf(2026, 10, 3, 10));
+    const instanced = () => {
+      const out: InstancedMesh[] = [];
+      t.scene.traverse((o) => {
+        if ((o as InstancedMesh).isInstancedMesh) out.push(o as InstancedMesh);
+      });
+      return out;
+    };
+    const before = new Set(instanced());
+    const layer = new SignalLayer(t.ctx);
+    const graph = world.graph;
+    const n = signalMap(graph).approaches.length;
+    expect(n).toBeGreaterThan(150);
+    expect(layer.approaches.length).toBe(n);
+    // The static city has no signal props of its own, so no second, unsynchronised set.
+    expect(built.props.traffic_light).toBeUndefined();
+    const meshes = instanced().filter((m) => !before.has(m));
+    expect(meshes.length).toBe(4);
+    for (const m of meshes) expect(m.count).toBe(n);
+    expect(finiteMatrices(meshes)).toBe(true);
+    // Instance order: poles, arms, plates, lamps. Each arm runs from the top of its pole to over the head,
+    // and each head faces back along the approach, towards the waiting traffic.
+    const [, arms, , lampMesh] = meshes;
+    const m = new Matrix4();
+    for (let i = 0; i < n; i += 7) {
+      const s = layer.approaches[i];
+      arms.getMatrixAt(i, m);
+      const start = new Vector3(0, 0, 0).applyMatrix4(m);
+      const end = new Vector3(1, 0, 0).applyMatrix4(m);
+      expect(Math.hypot(start.x - s.poleX, -start.z - s.poleY)).toBeLessThan(1e-3);
+      expect(Math.hypot(end.x - s.headX, -end.z - s.headY)).toBeLessThan(1e-3);
+      expect(end.y).toBeCloseTo(ARM_Y, 5);
+      lampMesh.getMatrixAt(i, m);
+      const facing = new Vector3(0, 0, 1).transformDirection(m);
+      expect(facing.x * Math.cos(s.heading) - facing.z * Math.sin(s.heading)).toBeLessThan(-0.99);
+    }
+    const net = buildRoadNet(city);
+    const onRoad = (x: number, y: number) => {
+      const near = net.nearest(x, y, 30);
+      if (near && near.d < near.way.hw) return true;
+      return net.junctions.some((j) => j.simple && Math.hypot(j.x - x, j.y - y) < 40 && pointInRing(x, y, j.ring));
+    };
+    let poleOnRoad = 0;
+    let headOverRoad = 0;
+    for (const s of layer.approaches) {
+      if (onRoad(s.poleX, s.poleY)) poleOnRoad++;
+      // The arm reaches from the pole to the head, which hangs over the road.
+      expect(Math.hypot(s.headX - s.poleX, s.headY - s.poleY)).toBeCloseTo(s.arm, 5);
+      if (onRoad(s.headX, s.headY)) headOverRoad++;
+    }
+    console.log(`signals: ${n} approaches, ${poleOnRoad} poles on a road surface, ${headOverRoad} heads over the road`);
+    expect(headOverRoad / n).toBeGreaterThan(0.97);
+    // Complex junctions (dual carriageways joined by short links) leave a few poles on the edge of a junction surface.
+    expect(poleOnRoad / n).toBeLessThan(0.1);
+    expect(ARM_Y).toBeGreaterThan(LAMP_HEIGHT + 0.95);
+    // The lit lamp shows each approach's current light: high on the plate for red, low for green.
+    const lamps = meshes.find((m) => m.instanceColor)!;
+    let seen = 0;
+    for (let k = 0; k < 90 && seen < 2; k++) {
+      t.game.state.time += 7;
+      layer.update({ now: 0, dt: 1 / 60, hour: 10, ui: ui.get() });
+      const lights = layer.approaches.map((s) => arcLight(t.game, s.arc) ?? 'red');
+      const red = lights.indexOf('red');
+      const green = lights.indexOf('green');
+      if (red < 0 || green < 0) continue;
+      const y = (i: number) => lamps.instanceMatrix.array[i * 16 + 13];
+      expect(y(red)).toBeGreaterThan(LAMP_HEIGHT + 0.3);
+      expect(y(green)).toBeLessThan(LAMP_HEIGHT - 0.3);
+      seen++;
+    }
+    expect(seen).toBe(2);
+    layer.dispose();
+    expect(instanced().filter((m) => !before.has(m)).length).toBe(0);
   });
 });

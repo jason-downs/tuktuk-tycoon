@@ -23,7 +23,7 @@ import {
 import { calendar } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
-import { kerbPoint, manualControl, setAutodrive, whoDrives } from '../sim/manual';
+import { kerbPoint, manualControl, setAutodrive, whoDrives, type KerbPoint } from '../sim/manual';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
@@ -309,7 +309,7 @@ export class World3DView implements GameView, ViewContext {
     return this.screenOf(x, y, h);
   }
 
-  kerbOf(req: RideRequest): { x: number; y: number } {
+  kerbOf(req: RideRequest): KerbPoint {
     return kerbPoint(this.game, this.game.place(req.from));
   }
 

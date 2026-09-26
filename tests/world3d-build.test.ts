@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CityData } from '../src/world3d/city';
 import { clipMeshToTiles, splitMesh, type PackedMesh } from '../src/world3d/build/mesh';
 import { LAYERS, TILE_SIZE, buildCity, tileCity } from '../src/world3d/build/world';
+import { PAVEMENT_Y, ROAD_SURFACE_Y } from '../src/world3d/kinematics';
 
 const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', import.meta.url), 'utf8')) as CityData;
 
@@ -31,6 +32,15 @@ describe('3D city generation', () => {
     expect(total).toBeLessThan(3_000_000);
     expect(built.stats.buildings).toBeGreaterThan(18_000);
     expect(built.stats.trees).toBeGreaterThan(3_000);
+  });
+
+  it('paints the roads at the height vehicles drive and people stand on', () => {
+    const pos = built.layers.roads.position;
+    let off = 0;
+    for (let i = 1; i < pos.length; i += 3) if (Math.abs(pos[i] - ROAD_SURFACE_Y) > 1e-4) off++;
+    expect(pos.length).toBeGreaterThan(0);
+    expect(off).toBe(0);
+    expect(PAVEMENT_Y).toBe(ROAD_SURFACE_Y);
   });
 
   it('is deterministic', () => {
