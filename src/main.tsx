@@ -1,5 +1,5 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { loadWorld, type World } from './data/world';
 import { deleteSave, loadGame, saveGame } from './save';
 import { installSystems } from './sim/systems';
@@ -83,7 +83,9 @@ function Root() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
+// A hot update can run this module again: it renders into the root already mounted on the element.
+const container = document.getElementById('root') as HTMLElement & { reactRoot?: ReactRoot };
+(container.reactRoot ??= createRoot(container)).render(
   <StrictMode>
     <Root />
   </StrictMode>,
