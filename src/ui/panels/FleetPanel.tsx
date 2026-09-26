@@ -36,7 +36,7 @@ import {
 import { formatClock } from '../../sim/clock';
 import type { Game } from '../../sim/game';
 import type { Driver, Vehicle } from '../../sim/types';
-import type { MapView } from '../../map/MapView';
+import type { GameView } from '../view';
 import { baht } from '../format';
 import type { PanelProps } from '../panels';
 import { ui, useGame, useUI } from '../store';
@@ -79,7 +79,7 @@ function forget(vehicleId: number): void {
   if (ui.get().selectedVehicle === vehicleId) ui.set({ selectedVehicle: null });
 }
 
-function showOnMap(game: Game, view: MapView | null, v: Vehicle): void {
+function showOnMap(game: Game, view: GameView | null, v: Vehicle): void {
   ui.set({ selectedVehicle: v.id, follow: true });
   const p = game.vehiclePose(v);
   view?.flyTo(p.x, p.y, 16);

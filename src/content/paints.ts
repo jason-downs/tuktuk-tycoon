@@ -25,4 +25,5 @@ export const PAINTS: Record<string, Paint> = {
   tung_lanna: { id: 'tung_lanna', name: 'Tung Lanna', body: '#7b2d8b', canopy: '#2b0f33', trim: '#f2c14e', price: 5_000, comfort: 0.06, blurb: 'Lanna tung flags and hanging lanterns along the canopy.' },
   ev_green: { id: 'ev_green', name: 'EV Green', body: '#2f9e5b', canopy: '#16301f', trim: '#c7f0d4', price: 3_000, comfort: 0.03, blurb: 'Eco green for the silent electric fleet.' },
   coop_taxi: { id: 'coop_taxi', name: 'Cooperative Taxi', body: '#f2c418', canopy: '#1f4fa8', trim: '#1f4fa8', price: 2_000, comfort: 0.02, blurb: 'The yellow-blue split of Chiang Mai’s cooperative taxis.' },
+  songkran_splash: { id: 'songkran_splash', name: 'Songkran Splash', body: '#2f9fd0', canopy: '#e4f3f8', trim: '#ffd23f', price: 4_000, comfort: 0.05, blurb: 'Water-blue with splash-proof seats and a water-pistol rack, ready for April.' },
 };

@@ -65,6 +65,12 @@ simulations (`tests/`).
   - Subscribe with `game.on(name, fn)`, emit with `game.emit(name, payload)`.
   - Built-in events: `trip` (a `TripResult`), `day` (the closing `DayBook`), `notice`, `haggle`, `speed`, `pause`,
     `frame`, `change`.
+- **Garage** (`src/sim/garage.ts`, `src/sim/mountain.ts`):
+  - Workshop work (service, fitting, respray, EV kit) puts a vehicle in a `broken` task with a `work` label, and the
+    garage system ends it. Like a breakdown, the vehicle takes no rides meanwhile.
+  - `climbBlocked(game, v, req)`: an LPG tuk-tuk without the mountain rebuild can't take a ride that starts or ends up
+    Doi Suthep. The fleet AI and `claimRequest` honour it.
+  - Vehicle models with `convertedFrom` are the garage's EV conversions and are never sold new.
 - **Money** goes only through `earn(game, amount, category)` / `spend(...)` in `economy.ts`, never through
   `state.cash` directly, so the ledger stays correct.
 - **Requests**:

@@ -94,7 +94,8 @@ export type VehicleTask =
   | { kind: 'refuel'; place: number }
   | { kind: 'cruise'; place: number }
   | { kind: 'depot' }
-  | { kind: 'broken'; until: number }
+  /** Off the road until `until`: a breakdown, or planned workshop work when `work` names the job. */
+  | { kind: 'broken'; until: number; work?: string }
   | { kind: 'offduty' };
 
 export interface Trip {

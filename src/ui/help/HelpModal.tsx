@@ -109,6 +109,11 @@ export function HelpModal({ game }: OverlayProps) {
               Save up, rent or buy more tuk-tuks, hire drivers and give them shifts and zones. Upgrades and paint win better
               ratings; partnerships, permits and depots open new kinds of work. Your office: {panels}.
             </p>
+            <p>
+              An LPG tuk-tuk can’t haul passengers up Doi Suthep. Fit a mountain rebuild at the Garage, or convert it to
+              electric, to take those fares. Lung Daeng won’t let you drill holes in his rented tuk-tuk, so only small
+              extras go on that one.
+            </p>
           </section>
 
           <section className="help-controls">

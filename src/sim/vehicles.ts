@@ -15,11 +15,21 @@ import type { Vehicle } from './types';
 /** Hours a working day is assumed to last, for spreading the daily breakdown chance. */
 const SERVICE_HOURS = 14;
 
+/** Chance per in-service day that a vehicle breaks down; it rises as condition falls. */
+export function breakdownPerDay(game: Game, v: Pick<Vehicle, 'model' | 'condition' | 'upgrades'>): number {
+  const model = VEHICLE_MODELS[v.model];
+  if (!model) return 0;
+  let perDay = model.breakdownPerDay * (1 + (100 - v.condition) / 30);
+  for (const up of v.upgrades) perDay *= game.upgradeReliability(up);
+  return perDay;
+}
+
 export class VehicleSystem {
   update(game: Game, dt: number): void {
     for (const v of game.state.vehicles) {
       if (v.task.kind === 'broken') {
-        if (game.state.time >= v.task.until) {
+        // Planned workshop work (service, fitting, respray, EV kit) is finished by the garage system.
+        if (v.task.work === undefined && game.state.time >= v.task.until) {
           v.task = { kind: 'idle' };
           v.condition = Math.max(v.condition, 55);
           game.notify(`${v.name} is fixed and back on the road.`, 'good');
@@ -85,11 +95,8 @@ export class VehicleSystem {
   }
 
   private rollBreakdown(game: Game, v: Vehicle, dt: number): void {
-    const model = VEHICLE_MODELS[v.model];
-    if (!model) return;
-    let perDay = model.breakdownPerDay * (1 + (100 - v.condition) / 30);
-    for (const up of v.upgrades) perDay *= game.upgradeReliability(up);
-    const p = (perDay * dt) / (SERVICE_HOURS * HOUR);
+    if (!VEHICLE_MODELS[v.model]) return;
+    const p = (breakdownPerDay(game, v) * dt) / (SERVICE_HOURS * HOUR);
     if (!game.rng.chance(p)) return;
     const repair = Math.round(game.rng.range(500, 3_000) / 50) * 50;
     const hours = game.rng.range(2, 6);
