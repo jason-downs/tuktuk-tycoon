@@ -62,7 +62,7 @@ export class VehicleSystem {
       case 'refuel': {
         const model = VEHICLE_MODELS[v.model];
         const ev = model?.powertrain === 'ev';
-        refuel(game, v, ev ? BALANCE.fuel.evPerKm : BALANCE.fuel.lpgPerKm, model?.rangeKm ?? BALANCE.fuel.tankKm);
+        refuel(game, v, ev ? game.evChargePerKm(game.place(task.place)) : BALANCE.fuel.lpgPerKm, model?.rangeKm ?? BALANCE.fuel.tankKm);
         v.task = { kind: 'idle' };
         if (playerControlled) game.notify(ev ? 'Battery charged.' : 'Tank full of LPG.', 'info');
         return;

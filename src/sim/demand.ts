@@ -63,7 +63,8 @@ export const LANDMARK_SCHEDULE: Record<string, (c: CalendarInfo) => number> = {
   sunday_walking_street: (c) => (c.weekday === 0 && inHours(c.hour, 16, 23) ? (inHours(c.hour, 18, 21) ? 5 : 3) : 0),
   // Saturday Walking Street, Wua Lai Rd, 17:00–23:00.
   saturday_walking_street: (c) => (c.weekday === 6 && inHours(c.hour, 17, 23) ? 3.5 : 0),
-  // Night Bazaar daily 18:00–23:00; pickups peak 21–23.
+  // Night Bazaar daily 18:00 to midnight (calendar.md §5 ~18–23; landmarks.md "Cited facts": to midnight); pickups
+  // ×1.5 from 21:00 (calendar.md §8).
   night_bazaar: (c) => (inHours(c.hour, 18, 24) ? (inHours(c.hour, 21, 24) ? 3 : 2) : 0.15),
   anusarn_market: (c) => (inHours(c.hour, 17, 24) ? 1.8 : 0.1),
   kalare_night_bazaar: (c) => (inHours(c.hour, 18, 23) ? 1 : 0.05),
@@ -146,6 +147,12 @@ export function pickDestination(game: Game, from: Place, arch: Archetype, cal: C
   return places[game.rng.weighted(weights, total)];
 }
 
+/** The going rate for a ride of `metres` to `to`: the agreed return fare of an out-of-town round trip, else the street fare. */
+export function fairFareTo(to: Place, metres: number): number {
+  const off = to.offmap;
+  return off?.roundTrip && off.fare ? off.fare : streetFare(metres);
+}
+
 /** Build a street/app request between two places. */
 export function makeRequest(
   game: Game,
@@ -174,7 +181,7 @@ export function makeRequest(
     spawnedAt: game.state.time,
     expiresAt: game.state.time + rng.range(patienceMin, patienceMax),
     distance,
-    fairFare: streetFare(distance),
+    fairFare: fairFareTo(to, distance),
     fixedFare: null,
     maxRatio,
     line: requestLine(game, from, to, arch, cal),

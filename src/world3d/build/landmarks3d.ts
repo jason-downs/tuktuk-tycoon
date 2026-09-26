@@ -37,8 +37,9 @@ export interface TempleHero {
 
 export const TEMPLE_HEROES: TempleHero[] = [
   {
-    // #4: ruined brick chedi originally ~82 m; the upper ~30 m fell in 1545 [research: Wikipedia]. Model 55 m on the
-    // OSM 58.5 × 57.4 m footprint. Viharn Luang 70.6 × 21.3 m (OSM) with a three-tier roof, facing Phra Pokklao Rd.
+    // #4: ruined brick chedi originally ~82 m; the upper ~30 m fell in 1545 [est: docs/3d/world.md §2.8, from
+    // Wikipedia]. Model 55 m on the OSM 58.5 × 57.4 m footprint. Viharn Luang 70.6 × 21.3 m (OSM) with a three-tier
+    // roof, facing Phra Pokklao Rd.
     id: 'wat_chedi_luang',
     ground: 243018795,
     front: 'east',

@@ -86,8 +86,9 @@ export const VEHICLE_MODELS: Record<string, VehicleModel> = {
     blurb: 'Stretch body for families and tour groups.',
   },
   // EV conversions of the LPG models, made by the garage's 200,000 THB conversion kit (economics.md
-  // "Suggested game numbers"). price = model price + kit. Range and breakdowns follow the used EV;
-  // the tired body keeps a higher breakdown rate [pacing].
+  // "Suggested game numbers"). price = model price + kit. Range and breakdowns follow the used EV,
+  // except that the good body gets a little more range (100 km) and the tired body keeps a higher
+  // breakdown rate [pacing].
   rusty_ev: {
     id: 'rusty_ev',
     name: 'Converted EV tuk-tuk (tired body)',

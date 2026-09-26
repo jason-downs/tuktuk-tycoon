@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
+import { requestValue } from '../src/sim/ai';
 import { makeRequest } from '../src/sim/demand';
+import { awaySeconds } from '../src/sim/offmap';
 import { claimRequest, startTrip } from '../src/sim/dispatch';
 import { calendar, HOUR } from '../src/sim/clock';
 import type { GraphJSON } from '../src/sim/graph';
@@ -84,5 +86,31 @@ describe('out-of-town trips through portals', () => {
     const pose = game.vehiclePose(v);
     const from = landmark('tha_phae_gate');
     expect(Math.hypot(pose.x - world.graph.nodeX[from.node], pose.y - world.graph.nodeY[from.node])).toBeLessThan(60);
+  });
+
+  it('prices a round trip at its return fare from the moment it is booked', () => {
+    const game = Game.create(world, { seed: 5 });
+    const cal = calendar(game.state.time);
+    for (const id of ['night_safari', 'grand_canyon', 'wat_doi_suthep']) {
+      const req = makeRequest(game, landmark('tha_phae_gate'), landmark(id), 'tourist_west', 'regular', cal);
+      expect(req.fairFare).toBe(landmark(id).offmap!.fare);
+    }
+  });
+
+  it('fleet drivers value a round trip by the whole outing, wait and ride back included', () => {
+    const game = Game.create(world, { seed: 5 });
+    const v = game.playerVehicle()!;
+    const cal = calendar(game.state.time);
+    const safari = landmark('night_safari');
+    const req = makeRequest(game, landmark('tha_phae_gate'), safari, 'tourist_west', 'street', cal);
+    req.expiresAt = game.state.time + HOUR;
+    const off = safari.offmap!;
+    const outing = 2 * (req.distance / 7) + off.waitS;
+    expect(requestValue(game, v, req)).toBeLessThan(req.fairFare / outing);
+    // A one-way drop out of town counts the empty drive back from beyond the portal.
+    const zoo = landmark('chiang_mai_zoo');
+    const drop = makeRequest(game, landmark('tha_phae_gate'), zoo, 'tourist_west', 'street', cal);
+    drop.expiresAt = game.state.time + HOUR;
+    expect(requestValue(game, v, drop)).toBeLessThanOrEqual(drop.fairFare / (drop.distance / 7 + 120 + awaySeconds(game, zoo, zoo.offmap!.extraM)));
   });
 });

@@ -22,10 +22,11 @@ import type { Archetype, Trip, Vehicle } from './types';
 export const GARAGE_ID = 'garage';
 
 /**
- * [pacing] THB per condition point a service restores. Anchored to economics.md §5 maintenance
- * (LPG 12,000–25,000/yr, ≈16,500/yr ≈ 55 per working day): a day's wear (~5 points) costs ~225,
- * higher than real life because a game day holds many more rides. Renters pay for repairs too
- * (economics.md §4: a driver on a yearly lease pays the repairs).
+ * [pacing] THB per condition point a service restores. Wear is BALANCE.upkeep.wearPerKm (0.05) a km, and a tuk-tuk
+ * on autopilot drives ~500 km a game day, so it loses ~25 points and a daily service costs ~฿1,100. That is far above
+ * economics.md §5 maintenance (LPG 12,000–25,000/yr, ≈16,500/yr ≈ 55 per working day, charged separately as
+ * BALANCE.upkeep.lpgPerDay) because a game day holds ~140 rides. Renters pay for repairs too (economics.md §4: a
+ * driver on a yearly lease pays the repairs).
  */
 export const SERVICE_THB_PER_POINT = 45;
 /** [pacing] Game hours off the road for a service: 1 h for a check-up, up to 3 h for a wreck. */

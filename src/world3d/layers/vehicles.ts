@@ -9,7 +9,6 @@
 import { Color, Group, InstancedMesh, Matrix4, Quaternion, Vector3, type MeshBasicMaterial, type Object3D } from 'three';
 import { PAINTS } from '../../content/paints';
 import { VEHICLE_MODELS } from '../../content/vehicles';
-import { daylight } from '../../sim/clock';
 import { RIVAL_KINDS, rivalsOf } from '../../sim/rivals';
 import { lightPoolMaterial, PersonBatch, personMaterials, VehicleBatch, vehicleMaterial } from '../batches';
 import { hash01 } from '../build/mesh';
@@ -171,7 +170,8 @@ export class VehicleLayer implements WorldLayer {
     const dtGame = this.lastTime < 0 ? 0 : Math.max(0, Math.min(3600, time - this.lastTime));
     this.lastTime = time;
     this.frameNo++;
-    const night = 1 - daylight(frame.hour);
+    // The environment's darkness: the real sun for the date, and dark storms.
+    const night = this.ctx.envState().night;
     const env = lookEnvAt(game);
     const scale = this.ctx.vehicleScale();
     const lod: 0 | 1 = rig.dist > LOD_DIST ? 1 : 0;

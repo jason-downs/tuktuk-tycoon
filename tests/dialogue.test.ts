@@ -5,7 +5,7 @@ import { composeRequestLine, glossLine, haggleLine, isNarration, spokenName } fr
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
-import { Game } from '../src/sim/game';
+import { Game, rushHour } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { Rng } from '../src/sim/rng';
 import type { Archetype, Place } from '../src/sim/types';
@@ -147,6 +147,21 @@ describe('passenger dialogue', () => {
         expect(haggleLine(g, req, 'merit')).toMatch(/merit/i);
       }
     }
+  });
+
+  it('grumbles about the traffic only in the weekday rush that slows it', () => {
+    const from = landmark('tha_phae_gate');
+    const to = landmark('wat_phra_singh');
+    const grumbles = (time: number) => {
+      let n = 0;
+      for (let i = 0; i < 400; i++) if (/traffic always this bad/.test(sample(from, to, 'tourist_west', time).text)) n++;
+      return n;
+    };
+    // Monday 2 Nov 2026: the evening rush is 16:00–18:00 (calendar.md §8).
+    expect(grumbles(timeOf(2026, 10, 2, 17.25))).toBeGreaterThan(0);
+    expect(grumbles(timeOf(2026, 10, 2, 18.25))).toBe(0);
+    expect(rushHour(1, calendar(timeOf(2026, 10, 2, 17.25)))).toBe(0.6);
+    expect(rushHour(1, calendar(timeOf(2026, 10, 2, 18.25)))).toBe(1);
   });
 
   it('glosses Thai and Kham Mueang words but not inside place names', () => {

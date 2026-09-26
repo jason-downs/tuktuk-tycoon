@@ -3,11 +3,12 @@
 // docs/research/economics.md (§1 fares, §2 apps, §3 songthaew charters, §8
 // commissions, "Suggested game numbers" trip catalogue); seasonality from
 // calendar.md §1. Prices of company services are not in the research, so they
-// are [pacing]: one tuk-tuk on autopilot makes about 100 trips and ฿9k net a
-// game day (the headless day in tests/sim.test.ts prints it), and a busy fleet
+// are [pacing]: one tuk-tuk on autopilot makes about 140 trips and ฿10–14k net
+// a game day (the headless day in tests/sim.test.ts prints it), and a busy fleet
 // earns ฿6–7k a day per tuk-tuk.
 
 import type { Archetype } from '../sim/types';
+import { OFFMAP_TRIPS } from './offmap';
 
 /** Bookings per game hour at a 1.0 time-of-day and season factor. */
 type Rate = number;
@@ -47,9 +48,10 @@ export const SERVICES: ServiceDef[] = [
     name: `${APP_BRAND} app partnership`,
     icon: '📱',
     group: 'dispatch',
-    // [research] economics.md §2: app tuk-tuk fares are 80 THB + 12–15 THB/km fixed; the platform keeps 20–25 %.
+    // [research] economics.md §2: app tuk-tuk fares are 80 THB + 12–15 THB/km fixed; Grab keeps 25 % of 4-wheel and
+    // 15 % of 2-wheel fares. The 20 % cut is from economics.md "Suggested game numbers" (the platform keeps 20–25 %).
     blurb: `Sign your fleet up as ${APP_BRAND} drivers. Riders book in the app, the fare is fixed and nobody haggles.`,
-    effect: `App riders near your working tuk-tuks book at a fixed ฿80 + ฿13/km; ${APP_BRAND} keeps 20 %. More tuk-tuks and better stars bring more bookings.`,
+    effect: `App riders near your working tuk-tuks book at a fixed ฿80 + ฿13/km; ${APP_BRAND} keeps 20 %. More tuk-tuks on shift and better stars bring more bookings.`,
     // [pacing] app fares net about what a haggled street fare does, so the gain is filling idle time: roughly ฿1k a
     // day with 5 tuk-tuks and ฿6k with 20. The fee pays back within days once a small fleet shares the bookings.
     cost: 12_000,
@@ -147,7 +149,7 @@ export const SERVICES: ServiceDef[] = [
     // [research] economics.md trip catalogue: Doi Suthep 400 return, locked for LPG tuk-tuks ("can't climb");
     // §3: a private round trip with waiting costs 300–500. 400 + 400 = 800 for the sunset charter.
     blurb: 'Up the mountain road to Wat Phra That Doi Suthep for sunset. LPG tuk-tuks can’t make the climb.',
-    effect: 'Tour bookings 15:00–17:00 at a fixed ฿800, offered to a tuk-tuk that can climb. The driver waits 15 min at the top.',
+    effect: `Tour bookings 15:00–17:00 at a fixed ฿800, offered to a tuk-tuk that can climb. The driver waits ${OFFMAP_TRIPS.wat_doi_suthep.waitMin} min at the top.`,
     // [pacing]
     cost: 15_000,
     ledger: 'business',
@@ -185,6 +187,7 @@ export const SERVICE_GROUPS: { id: ServiceDef['group']; title: string }[] = [
  * sized so a service brings a fleet of its minimum size a few extra rides an hour.
  */
 export const RATES = {
+  /** Per fleet tuk-tuk that can take a booking now: one with a driver, not off duty, broken down or at a depot. */
   appPerVehicle: 1.5,
   flyers: 3,
   concierge: 3,
@@ -192,7 +195,7 @@ export const RATES = {
   hotelOther: 1,
 } satisfies Record<string, Rate>;
 
-/** App bookings scale with fleet size up to this many tuk-tuks [pacing]. */
+/** App bookings scale with the tuk-tuks that can take them up to this many [pacing]. */
 export const APP_FLEET_CAP = 40;
 /** Social media ads multiply app bookings [pacing]. */
 export const SOCIAL_ADS_BOOST = 1.5;
@@ -246,8 +249,9 @@ export const DEPOT = {
   minRank: 2,
   /** Repairs cost this share with one depot [pacing]. */
   repairDiscount: 0.8,
-  /** Repairs cost this share with MANY_DEPOTS or more [pacing]. */
+  /** Repairs cost this share with `manyDepots` or more depots [pacing]. */
   repairDiscountMany: 0.7,
+  /** Depots needed for the `repairDiscountMany` rate [pacing]. */
   manyDepots: 3,
   /** Off-duty tuk-tuks drive back to a depot this close (metres). */
   parkingRange: 9_000,
@@ -264,7 +268,8 @@ export interface TourDef {
   fare: number;
   /**
    * Game hours the driver waits at the final stop while the group looks around [pacing]: a game day holds far more
-   * rides than a real one, so the wait is short enough that a tour beats an hour of street fares (~฿550).
+   * rides than a real one, so the wait is short enough that a tour beats an hour of street fares (~฿550). A tour whose
+   * stop is an out-of-town round trip sets 0: that trip's own wait (OFFMAP_TRIPS waitMin) is the group's time there.
    */
   dwellHours: number;
   /** Landmark ids where the tour ends. */
@@ -318,7 +323,7 @@ export const TOURS: TourDef[] = [
     service: 'tour_suthep',
     name: 'Sunset run',
     fare: 800,
-    dwellHours: 0.25,
+    dwellHours: 0,
     stops: ['wat_doi_suthep'],
     from: 15,
     to: 17,

@@ -24,7 +24,7 @@ import { block, canopy, chineseShrine, church, condo, hospital, house, kiosk, la
 
 export type { BuildEnv, Plan, Site } from './site';
 
-/** Height caps for untagged buildings [research: Citylife "In the zone"]. */
+/** Height caps for untagged buildings [est: docs/3d/world.md §1.1 and §2.4, from Citylife "In the zone"]. */
 export const OLD_CITY_CAP = 12;
 export const TEMPLE_CAP = 9;
 export const TEMPLE_CAP_RADIUS = 100;

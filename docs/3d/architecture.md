@@ -353,7 +353,7 @@ Per-vehicle render state lives in a `Map<id, RenderState>`, **never in `game.sta
 
 ## 11. Lighting, shadows, sky, night
 
-- **`sun.ts`.** NOAA-simplified solar elevation and azimuth for 18.79 N / 98.98 E from `calendar(time)` (day of year for declination, local time with a 105° E meridian correction). It is consistent with `daylight()` (November sunrise 6.4 h, sunset 17.85 h). A moon direction is added for night.
+- **`sun.ts`.** NOAA-simplified solar elevation and azimuth for 18.79 N / 98.98 E from `calendar(time)` (day of year for declination, local time with a 105° E meridian correction). In November it agrees with `daylight()` (sunrise 6.4 h, sunset 17.85 h), which keeps those times all year and serves only the flat map; 3D layers read `EnvState.night` through `ViewContext.envState()`. A moon direction is added for night.
 - **`LightingRig.update(cal)`** publishes an `EnvState`:
   - `{ sunDir, sunElevation, night 0..1, sunColor, hemiSky, hemiGround, fogColor, exposure, haze, rain }`.
   - `HemisphereLight` plus a sun `DirectionalLight`, warm at golden hour. At night, a dim bluish moon without shadows, and the shadow pass is skipped.

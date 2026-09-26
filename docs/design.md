@@ -39,7 +39,7 @@ simulations (`tests/`).
   tip and rating → reputation. The platform takes a cut on app rides. Money splits depend on the driver's pay model.
 - **Fleet AI** (`src/sim/ai.ts`): shifts, zones, request scoring, refuelling, cruising to busy ranks.
 - **Economy** (`src/sim/economy.ts`): ledger by category, and a daily settlement at 04:00 covering rent, wages,
-  rent-from-drivers and upkeep.
+  rent-from-drivers and upkeep, booked to the business day that closed.
 - **Vehicles** (`src/sim/vehicles.ts`): route following, fuel, wear, breakdowns.
 - **UI**: MapView (MapLibre plus a canvas overlay), top bar with speed controls, player card, request card, haggle
   dialog, fleet and finance panels, toasts, and a title screen with save/continue.
@@ -58,13 +58,14 @@ simulations (`tests/`).
   - `speedModifiers(roadClass, cal)`
   - `ratingModifiers(vehicle, trip)`
   - `sightRules(vehicle, request)`
-  - `extraChargers()`
+  - `extraChargers()`: the company's own EV chargers (depots), which charge at the home rate; the malls' public
+    chargers cost more.
   - `edgePenalty(edge)`: per-edge routing time multiplier (road closures; Infinity forbids). The events system owns it;
     the game hands it to the shared router every step, and vehicles on a penalised edge slow down (at most ×1/5).
 - **Events**:
   - Subscribe with `game.on(name, fn)`, emit with `game.emit(name, payload)`.
-  - Built-in events: `trip` (a `TripResult`), `day` (the closing `DayBook`), `notice`, `haggle`, `speed`, `pause`,
-    `frame`, `change`.
+  - Built-in events: `trip` (a `TripResult`), `day` (the closing `DayBook`; whatever its listeners earn or spend is
+    booked to that day), `notice`, `haggle`, `speed`, `pause`, `frame`, `change`.
 - **Garage** (`src/sim/garage.ts`, `src/sim/mountain.ts`):
   - Workshop work (service, fitting, respray, EV kit) puts a vehicle in a `broken` task with a `work` label, and the
     garage system ends it. Like a breakdown, the vehicle takes no rides meanwhile.
@@ -110,7 +111,7 @@ simulations (`tests/`).
   - Upgrades per owned or leased vehicle (extend `content/upgrades.ts`).
   - Paint jobs (`content/paints.ts`, rating bonus via `ratingModifiers`).
   - Repairs that restore condition and take time.
-  - EV conversion kit, 200k (economics.md §4).
+  - EV conversion kit, 200k (economics.md "Suggested game numbers"; the §4 prototype cost ≈340k).
   - Garage panel.
 - **C. Business & progression**:
   - Company unlocks: a ride-hailing app partnership (fictional brand) that spawns `app` requests, a dispatch radio

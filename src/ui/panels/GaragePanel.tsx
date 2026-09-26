@@ -308,7 +308,7 @@ function Workshop({ game, v, autoService, hired }: { game: Game; v: Vehicle; aut
               <tr>
                 <td>Running cost</td>
                 <td>฿{BALANCE.fuel.lpgPerKm}/km</td>
-                <td className="pos">฿{BALANCE.fuel.evPerKm}/km</td>
+                <td className="pos">฿{BALANCE.fuel.evPublicPerKm}/km</td>
               </tr>
               <tr>
                 <td>Upkeep</td>
@@ -333,7 +333,8 @@ function Workshop({ game, v, autoService, hired }: { game: Game; v: Vehicle; aut
             </tbody>
           </table>
           <p className="hint small">
-            Charges at the big malls. {lpgParts.length ? `${lpgParts.join(' and ')} come out with the engine.` : ''}
+            Charges at the big malls, or for ฿{BALANCE.fuel.evHomePerKm}/km overnight at a company depot.{' '}
+            {lpgParts.length ? `${lpgParts.join(' and ')} come out with the engine.` : ''}
           </p>
           {job?.kind === 'ev' ? (
             <p className="small pos">Conversion under way.</p>
@@ -352,8 +353,8 @@ function Workshop({ game, v, autoService, hired }: { game: Game; v: Vehicle; aut
             <b>⚡ Electric</b>
           </div>
           <p className="small muted">
-            Silent and cheap to run at ฿{BALANCE.fuel.evPerKm}/km. Charges at the big malls, and climbs Doi Suthep without
-            complaint.
+            Silent and cheap to run: ฿{BALANCE.fuel.evPublicPerKm}/km at the big malls’ chargers, ฿{BALANCE.fuel.evHomePerKm}/km
+            overnight at a company depot. Climbs Doi Suthep without complaint.
           </p>
         </section>
       )}

@@ -368,9 +368,11 @@ describe('world systems', () => {
     const loaded = Game.load(world, state);
     installSystems(loaded);
     loaded.state.autopilot = true;
-    const t0 = performance.now();
+    // CPU time rather than wall time: the suite runs files in parallel, often on a busy machine.
+    const cpu0 = process.cpuUsage();
     for (let t = 0; t < 12 * HOUR; t += 4) loaded.step(4);
-    const ms = performance.now() - t0;
+    const cpu = process.cpuUsage(cpu0);
+    const ms = (cpu.user + cpu.system) / 1000;
     expect(loaded.state.stats.trips).toBeGreaterThan(5);
     expect(ms).toBeLessThan(6000);
   });

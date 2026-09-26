@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { DAY, HOUR } from '../src/sim/clock';
 import { VEHICLE_MODELS } from '../src/content/vehicles';
-import { businessDay, earn } from '../src/sim/economy';
+import { bookTotals, businessDay, earn } from '../src/sim/economy';
 import {
   rentedFrom,
   FLEET,
@@ -32,6 +32,7 @@ import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { installSystems } from '../src/sim/systems';
 import type { Archetype, DayBook, Trip } from '../src/sim/types';
+import { settledLines } from './helpers';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
@@ -51,13 +52,12 @@ function nextRollover(game: Game): number {
   return (businessDay(game.state.time) + 1) * DAY + 4 * HOUR;
 }
 
-/** Skip ahead to just before 04:00 and step across the settlement. */
+/** Skip ahead to just before 04:00, step across the settlement and return what it booked to the day that closed. */
 function jumpPastSettlement(game: Game): DayBook {
   // The first step only records the current business day.
   game.step(1);
   game.state.time = nextRollover(game) - 1;
-  game.step(2);
-  return game.state.books[game.state.books.length - 1];
+  return settledLines(game, () => game.step(2));
 }
 
 /** A finished trip carrying one passenger of the given archetype. */
@@ -482,5 +482,30 @@ describe('hiring gate and owner rentals', () => {
     expect(v.rentPerDay).toBe(FLEET.owners.rentPerDay);
     expect(rentedFrom(game, 'owner')).toBe(1);
     expect(rentedFrom(game, 'lung_daeng')).toBe(1);
+  });
+});
+
+describe('daily settlement', () => {
+  it('books the closed day’s rent to that day and reports it in the day’s closing notice', () => {
+    const game = newGame(11);
+    game.step(1);
+    const closed = businessDay(game.state.time);
+    earn(game, 1_000, 'fares');
+    rentVehicle(game);
+    // A fare in the first second of the new day is booked before the settlement runs in the same step.
+    game.state.time = nextRollover(game) + 1;
+    earn(game, 100, 'fares');
+    game.step(1);
+
+    const day = game.state.books.find((b) => b.day === closed)!;
+    const next = game.state.books.find((b) => b.day === closed + 1)!;
+    expect(day.expense.rent).toBe(2 * FLEET.rentPerDay);
+    expect(next.expense).toEqual({});
+    expect(next.income).toEqual({ fares: 100 });
+    expect(day.cashEnd).toBe(game.state.cash - 100);
+    expect(next.cashEnd).toBe(game.state.cash);
+    const net = bookTotals(day).net;
+    expect(net).toBe(1_000 - 2 * FLEET.rentPerDay);
+    expect(game.state.notices.some((n) => n.text.startsWith(`Day ${closed + 1} closed: +฿${net.toLocaleString()} net`))).toBe(true);
   });
 });

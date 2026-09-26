@@ -505,6 +505,11 @@ const DISPATCH_RADIUS = 2_500;
 /** Riders who do not book through an app: they wave down whatever passes. */
 const NO_APP: Archetype[] = ['monk', 'vendor', 'elder'];
 
+/** Fleet tuk-tuks the app can offer riders to: with a driver, and not off duty, broken down or parked at a depot. */
+function appTukTuks(game: Game): Vehicle[] {
+  return game.state.vehicles.filter((v) => v.driverId !== null && v.task.kind !== 'offduty' && v.task.kind !== 'broken' && v.task.kind !== 'depot');
+}
+
 type PoolId = 'app' | 'hotel' | 'hostel';
 
 interface PoolDef {
@@ -688,7 +693,7 @@ export class BusinessSystem implements GameSystem {
     }
     const rates: Rates = { app: 0, flyers: 0, concierge: 0, hotels: [], tours: [] };
     if (on('app')) {
-      const fleet = Math.min(APP_FLEET_CAP, fleetSize(game));
+      const fleet = Math.min(APP_FLEET_CAP, appTukTuks(game).length);
       const ads = on('social_ads') ? SOCIAL_ADS_BOOST : 1;
       rates.app = RATES.appPerVehicle * fleet * appRatingFactor(game.state.reputation) * factor.app * season * ads;
     }
@@ -759,7 +764,7 @@ export class BusinessSystem implements GameSystem {
   private spawnApp(game: Game, cal: CalendarInfo): void {
     const live = this.live.app;
     if (!live || live.total <= 0) return;
-    const working = game.state.vehicles.filter((v) => v.driverId !== null && v.task.kind !== 'offduty' && v.task.kind !== 'broken' && v.task.kind !== 'depot');
+    const working = appTukTuks(game);
     if (!working.length) return;
     const pose = game.vehiclePose(game.rng.pick(working));
     const places = live.def.places;
@@ -777,7 +782,8 @@ export class BusinessSystem implements GameSystem {
     const arch = pickArchetype(game, from.cat, cal);
     if (NO_APP.includes(arch)) return;
     const to = pickDestination(game, from, arch, cal);
-    if (!to) return;
+    // The app sells one-way rides at its per-km fare, not an out-of-town round trip with a wait.
+    if (!to || to.offmap?.roundTrip) return;
     const req = makeRequest(game, from, to, arch, 'app', cal);
     this.push(game, req, 'app', appFare(req.distance));
   }
@@ -804,7 +810,8 @@ export class BusinessSystem implements GameSystem {
 
   /**
    * With the counter permit, a share of the passengers hailing at the terminal kerb buy a counter ticket instead: the
-   * ride becomes a company booking at the set fare, which rivals cannot take and every fleet tuk-tuk can see.
+   * ride becomes a company booking at the set fare, which rivals cannot take and every fleet tuk-tuk can see. Long
+   * runs and out-of-town round trips stay on the kerb.
    */
   private airportCounter(game: Game): void {
     const since = this.counterScan;
@@ -813,7 +820,7 @@ export class BusinessSystem implements GameSystem {
     if (!airport || !(since <= game.state.time)) return;
     for (const r of game.state.requests) {
       if (r.channel !== 'street' || r.from !== airport.idx || r.spawnedAt <= since || r.claimedBy !== null) continue;
-      if (r.distance > AIRPORT_MAX_TRIP || !game.rng.chance(AIRPORT_COUNTER_SHARE)) continue;
+      if (r.distance > AIRPORT_MAX_TRIP || game.place(r.to).offmap?.roundTrip || !game.rng.chance(AIRPORT_COUNTER_SHARE)) continue;
       r.channel = 'regular';
       r.source = 'airport';
       r.fixedFare = AIRPORT_FARE;
@@ -949,7 +956,7 @@ export class BusinessSystem implements GameSystem {
         continue;
       }
       const model = VEHICLE_MODELS[v.model];
-      if (model?.powertrain === 'ev' && v.fuel < 0.9) refuel(game, v, BALANCE.fuel.evPerKm, model.rangeKm);
+      if (model?.powertrain === 'ev' && v.fuel < 0.9) refuel(game, v, BALANCE.fuel.evHomePerKm, model.rangeKm);
     }
   }
 
@@ -989,7 +996,8 @@ export class BusinessSystem implements GameSystem {
     if (!source.startsWith('tour:')) return;
     const tour = TOUR_BY_ID[source.slice(5)];
     const v = game.vehicle(r.vehicleId);
-    if (!tour || !v) return;
+    // An out-of-town round trip ends back at the pickup, and its wait at the stop was part of the time away.
+    if (!tour || !v || game.place(r.request.to).offmap?.roundTrip) return;
     const until = game.state.time + tour.dwellHours * HOUR;
     v.busyUntil = Math.max(v.busyUntil, until);
     st.dwell[String(v.id)] = { until, tour: tour.id, place: r.request.to };

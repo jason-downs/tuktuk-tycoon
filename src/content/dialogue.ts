@@ -11,7 +11,7 @@
 // isNarration() marks it so the UI shows it as italic prose, without quotes.
 
 import { BALANCE, streetFare } from '../sim/balance';
-import { calendar, type CalendarInfo } from '../sim/clock';
+import { calendar, isWeekdayRush, type CalendarInfo } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Archetype, Place, PlaceCategory, RideRequest } from '../sim/types';
 import { ZONES } from './zones';
@@ -165,9 +165,8 @@ const yiPeng = (c: Ctx) => {
 };
 /** [research] calendar.md §4: Songkran, the traditional days 13–15 April. */
 const songkran = (c: Ctx) => c.cal.month === 3 && c.cal.date >= 13 && c.cal.date <= 15;
-/** [research] calendar.md §5 weekday rush 07–09 and 16–18:30 (as in game.ts rushHour). */
-const rushHour = (c: Ctx) =>
-  c.cal.weekday >= 1 && c.cal.weekday <= 5 && (inHours(c.cal.hour, 7, 9) || inHours(c.cal.hour, 16, 18.5));
+/** The weekday rush hours that slow the traffic (isWeekdayRush, calendar.md §8). */
+const rushHour = (c: Ctx) => isWeekdayRush(c.cal);
 
 const toIs = (...ids: string[]) => (c: Ctx) => ids.includes(c.to.id);
 const khaoSoi = (c: Ctx) => /khao ?soi/i.test(c.to.name);
@@ -255,7 +254,7 @@ const PLACE_LINES: Line[] = [
   // §11a #24, the rain half only in the rainy season.
   { text: 'Pik ban, {p} — back to Nong Hoi before the rain.', arch: ['vendor', 'elder'], when: (c) => rainySeason(c) && nearLatLon(c, c.to, NONG_HOI, 1_200) },
   { text: 'Pik ban, {p} — back home to Nong Hoi.', arch: ['vendor', 'elder'], when: (c) => !rainySeason(c) && nearLatLon(c, c.to, NONG_HOI, 1_200) },
-  // §11a #28; culture.md §8: Khao Soi Lam Duan Fa Ham opens 08:00–16:00.
+  // §11a #28; culture.md §2 (Fa Ham row): Khao Soi Lam Duan Fa Ham opens 08:00–16:00.
   {
     text: 'Ai, kin khao laew ka? No? Then take me to Fa Ham and I’ll show you real khao soi.',
     arch: ['elder'],

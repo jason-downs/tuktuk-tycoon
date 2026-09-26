@@ -3,7 +3,8 @@
 
 import { ARCHETYPES } from '../content/archetypes';
 import { haggleLine } from '../content/dialogue';
-import { BALANCE, appFare, roundFare, streetFare } from './balance';
+import { BALANCE, appFare, roundFare } from './balance';
+import { fairFareTo } from './demand';
 import { earn, currentBook, spend } from './economy';
 import type { Game } from './game';
 import { climbBlocked } from './mountain';
@@ -61,10 +62,10 @@ export function measureRequest(game: Game, req: RideRequest): void {
   const { places, router } = game.world;
   const route = router.route(places[req.from].node, places[req.to].node);
   if (route) {
-    const off = places[req.to].offmap;
-    const distance = route.length + (off?.extraM ?? 0);
+    const to = places[req.to];
+    const distance = route.length + (to.offmap?.extraM ?? 0);
     req.distance = distance;
-    req.fairFare = off?.roundTrip && off.fare ? off.fare : streetFare(distance);
+    req.fairFare = fairFareTo(to, distance);
     if (req.channel === 'app') req.fixedFare = appFare(distance);
   }
 }
