@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "map:fetch": "node scripts/fetch-osm.mjs",
-    "map:build": "node scripts/build-map.mjs"
+    "map:build": "node scripts/build-map.mjs",
+    "city:build": "node scripts/build-city3d.mjs"
   },
   "dependencies": {
     "earcut": "^3.2.3",

@@ -10,7 +10,7 @@
    fleet with drivers, depots, app contracts and hotel partnerships.
 3. **Every ride is a little story.** Passengers have archetypes, lines of dialogue, patience, and a price they'll
    accept. Haggling is a real decision: gouging pays today and costs stars tomorrow.
-4. **Readable at a glance.** A warm Lanna-styled map, clear icons, a calm HUD, and speed controls from ½× to 8×.
+4. **Readable at a glance.** A warm Lanna-styled 3D city, clear icons, a calm HUD, and speed controls from ½× to 8×.
 
 ## Pacing targets (1× = 30 game seconds per real second; a game day is 48 real minutes at 1×)
 
@@ -27,11 +27,23 @@ Real tuk-tuks pay for themselves in more than a year, so capital prices stay rea
 more rides than a real one. Hire-purchase and renting make early growth possible. Balance is checked with headless
 simulations (`tests/`).
 
-## What exists (foundation)
+While you steer your own tuk-tuk in Drive mode, the clock slows to 4 game seconds per real second (3–5 from the drive
+clock chip in the top bar), so the streets pass at a believable speed. It runs at 1× while you are parked, loading or on GPS
+autodrive, and fast-forwards while you are out of town (`src/sim/driveClock.ts`). The economy per game day is the same
+in both modes.
 
-- **Map & graph** (`scripts/`, `public/data/`): the road graph is the largest strongly connected component of the
-  drivable OSM network (28.5k nodes, 34k edges), with one-way streets honoured. There are ~4.4k named POIs and 88
-  curated landmarks; `Place` merges the two.
+## What exists
+
+- **Map data** (`scripts/`, `public/data/`). `npm run map:fetch` downloads the OSM extracts into `data-raw/`,
+  `npm run map:build` turns them into the road graph, the places and the flat-map layers, and `npm run city:build`
+  bakes `city3d.json`, the semantic data the 3D city is generated from.
+  - The playable area is central Chiang Mai, lon 98.950–99.020 and lat 18.762–18.808 (`scripts/bbox.mjs`).
+  - The road graph is the largest strongly connected component of the drivable OSM network inside it, with one-way
+    streets honoured: 7,983 nodes and 9,718 edges (588 km of road), with traffic signals at 103 of its nodes.
+  - 16 portals on the edge of the area lead to out-of-town destinations such as Doi Suthep, the Zoo and the Night
+    Safari. A tuk-tuk taking a passenger there leaves through a portal and comes back in the same way while the clock
+    runs on (`src/sim/offmap.ts`).
+  - There are about 3.5k named POIs and 89 curated landmarks; `Place` merges the two.
 - **Demand** (`src/sim/demand.ts`): Poisson street hails. Each place's weight is shaped by the hour-of-day profile of its
   category, landmark timetables (walking streets, night bazaar…) and the month (MOTS visitor index). Archetype mixes
   come from the kind of origin; destinations use archetype affinities with a distance kernel.
@@ -41,8 +53,21 @@ simulations (`tests/`).
 - **Economy** (`src/sim/economy.ts`): ledger by category, and a daily settlement at 04:00 covering rent, wages,
   rent-from-drivers and upkeep, booked to the business day that closed.
 - **Vehicles** (`src/sim/vehicles.ts`): route following, fuel, wear, breakdowns.
-- **UI**: MapView (MapLibre plus a canvas overlay), top bar with speed controls, player card, request card, haggle
-  dialog, fleet and finance panels, toasts, and a title screen with save/continue.
+- **Drive and Manage** (`src/sim/manual.ts`, `src/sim/driveClock.ts`, `src/ui/mode.ts`): in Drive mode you steer your
+  own tuk-tuk along the road graph (throttle, brake, lane and exit choice at junctions, U-turns, GPS autodrive) and pick
+  passengers up at the kerb. Tab switches to Manage mode, which puts your tuk-tuk on autopilot and gives you a free
+  camera and the speed buttons. Traffic signals (`src/sim/signals.ts`) stop simulated vehicles at red; the tuk-tuk you
+  steer can run one, at a cost.
+- **3D view** (`src/world3d/`): `World3DView` is the game's main view. It shows a three.js city generated in a Web
+  Worker from `city3d.json` and split into 800 m tiles, with a chase camera in Drive mode and a free camera in Manage
+  mode. Its layers draw the environment (sun path, sky, weather, festivals, night lights), vehicles, passengers,
+  crowds, signals and markers, and a 2D HUD canvas carries badges and labels. See
+  [docs/3d/architecture.md](3d/architecture.md).
+- **City map** (`src/map/`): `MapView` (MapLibre plus a canvas overlay) is loaded the first time it is opened. M opens
+  it as a planner that takes the 3D view's place until it is closed; `?view=map` makes it the main view.
+- **UI** (`src/ui/`): top bar with speed controls, the Drive/Manage toggle and the drive clock; player card, request
+  card and haggle dialog; the fleet, hire, garage, business, goals, finance and calendar panels; minimap, GPS line,
+  toasts, tutorial coach and help; and a title screen with save/continue.
 
 ## Code contract (read before changing things)
 
@@ -62,10 +87,14 @@ simulations (`tests/`).
     chargers cost more.
   - `edgePenalty(edge)`: per-edge routing time multiplier (road closures; Infinity forbids). The events system owns it;
     the game hands it to the shared router every step, and vehicles on a penalised edge slow down (at most ×1/5).
+  - `speedCaps(vehicle)`: upper bounds on a vehicle's speed right now, in m/s (a red light ahead); the lowest applies.
+  - `clockOverride(game)`: replaces the speed buttons' time scale while set (the drive clock owns it); return null to
+    use the speed buttons.
 - **Events**:
   - Subscribe with `game.on(name, fn)`, emit with `game.emit(name, payload)`.
   - Built-in events: `trip` (a `TripResult`), `day` (the closing `DayBook`; whatever its listeners earn or spend is
-    booked to that day), `notice`, `haggle`, `speed`, `pause`, `frame`, `change`.
+    booked to that day), `notice`, `haggle`, `speed`, `pause`, `frame`, `change`, `manual`, `uturn`, `rank`, `goal`,
+    `tutorial`, `mode` (the UI's Drive/Manage switch).
 - **Garage** (`src/sim/garage.ts`, `src/sim/mountain.ts`):
   - Workshop work (service, fitting, respray, EV kit) puts a vehicle in a `broken` task with a `work` label, and the
     garage system ends it. Like a breakdown, the vehicle takes no rides meanwhile.
@@ -81,7 +110,11 @@ simulations (`tests/`).
 - **UI**:
   - Panels register in `src/ui/panels.tsx`.
   - Always-on layers go in `src/ui/overlays.tsx`.
-  - Map canvas drawing uses `registerPainter` in `src/map/painters.ts`.
+  - 2D overlay drawing uses `registerPainter` in `src/map/painters.ts`. Painters run on the flat map and on the 3D
+    view's HUD canvas; `src/world3d/hud.ts` skips the ones the 3D scene replaces with objects of its own.
+  - Things drawn in the 3D scene implement `WorldLayer` (`src/world3d/layers/types.ts`) and are added with
+    `ViewContext.addLayer`. The static city is generated by the builders in `src/world3d/build/`, run in order by
+    `buildCity` (`src/world3d/build/world.ts`), which is pure TypeScript with no three.js.
   - Read game data with `useGame(game, g => …)`. Its result is compared shallowly, so return primitives, flat objects
     or strings.
   - UI state lives in `ui` (`src/ui/store.ts`).
@@ -90,9 +123,9 @@ simulations (`tests/`).
 - **Content**: data tables go in `src/content/` with a comment naming the research source.
 - **Tests**: Vitest in `tests/`. `tests/helpers.ts` loads the real graph. `tests/sim.test.ts` shows how to build a
   `World` and run a headless game.
-- **Dev handle**: `window.__game` in dev builds.
+- **Dev handles**: `window.__game` (the game) and `window.__world3d` (the 3D view) in dev builds.
 
-## Workstreams
+## Feature areas
 
 - **A. Fleet (vehicles, drivers, hiring)**:
   - Vehicle market:
@@ -133,5 +166,5 @@ simulations (`tests/`).
   - Contextual dialogue with templates (destination, time of day) built from culture.md.
   - Manual driving mode (throttle and turn choice at junctions, GPS guidance).
   - Mobile/touch polish.
-- **F. Balance & QA** (after merging): a headless balance harness against the pacing targets, performance with 50+
-  tuk-tuks, a full review and play-testing.
+- **F. Balance & QA**: a headless balance harness against the pacing targets (`tests/balance.test.ts`), performance
+  with 50+ tuk-tuks, a full review and play-testing.

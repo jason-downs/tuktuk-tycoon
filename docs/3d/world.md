@@ -1,6 +1,6 @@
 # World content and art direction for Tuk-Tuk Tycoon's 3D central Chiang Mai (lon 98.950–99.020, lat 18.762–18.808)
 
-> Reference design report behind [docs/plan-3d.md](../plan-3d.md), the approved plan. Where they differ, plan-3d.md wins: the playable area shrinks to the central box with edge portals and save format v2 (so graph.json is rebuilt), the driving clock is 4 game s per real s, and saves start fresh.
+> The content and art-direction spec for the 3D city: what to build, where, and how it should look. The builders in `src/world3d/build/` follow it and cite its sections. How the city is baked, generated and drawn is in [architecture.md](architecture.md); the approved plan is [docs/plan-3d.md](../plan-3d.md). The OSM counts in §0 were measured on the raw extracts when the spec was written.
 
 ## 0. Findings, assumptions and conventions
 
@@ -53,13 +53,13 @@ I measured the existing `data-raw/` extracts inside the core bbox.
 
 ### Conventions for all implementing agents
 - **Units and axes:** metres. World X = sim x (east), world Z = −sim y (north is −Z), Y is up. Use the same origin as `graph.projection` / `ORIGIN` in `scripts/build-map.mjs`.
-- **Randomness:** always `hash32(osmId, salt)`, so the world is identical on every load and every build.
+- **Randomness:** always a hash of the OSM id and a salt (`hash01(id, salt)` in `src/world3d/build/mesh.ts`), so the world is identical on every load and every build.
 - **Style:**
   - Flat-shaded, vertex-coloured geometry.
-  - One procedurally generated texture atlas is allowed (a `CanvasTexture` built at startup). It holds sign glyphs, shutter ribs and lattice patterns. No downloaded models or textures.
+  - No textures and no downloaded models: signs, shutters and lattices are geometry with vertex colours.
   - Bake "AO and grime" into vertex colours: darken the bottom 0.6 m of walls, the underside of eaves, and add streaks under sills.
 - **Source labels in content files:** `[research]` (from `docs/research`), `[osm]`, `[est]` (an art estimate), plus the existing `[pacing]`.
-- **Renderer independence:** geometry generators should be pure functions that return typed arrays (positions, flat normals, colours, plus an optional `emissive` and `sway` attribute each). Then they run in Web Workers and in Vitest, and a thin adapter wraps them as Three.js `BufferGeometry`. This keeps the three workstreams independent of the renderer choice.
+- **Renderer independence:** the city builders are pure TypeScript with no three.js. They write positions, flat normals and colours through `MeshWriter` into one of the static layers (glowing surfaces go to the `windows` and `glow` layers), so they run in the build worker and in Vitest; `CityLayer` wraps the results as three.js meshes.
 
 ---
 
@@ -207,7 +207,7 @@ I measured the existing `data-raw/` extracts inside the core bbox.
 ## 2. Procedural generation rules from OSM
 
 ### 2.1 What to fetch
-Add a `world3d` query set to `scripts/fetch-osm.mjs` for the **core bbox only** (`18.762,98.950,18.808,99.020`). Keep the existing game-bbox queries untouched.
+`scripts/fetch-osm.mjs` fetches these for the **core bbox** (`18.762,98.950,18.808,99.020`) plus a 0.003° margin (about 300 m), next to the wider game-bbox queries.
 
 | File | Query | Tags to keep |
 |---|---|---|
@@ -221,39 +221,29 @@ Add a `world3d` query set to `scripts/fetch-osm.mjs` for the **core bbox only** 
 
 - **Roads:** reuse `data-raw/roads.json`, but keep `lanes`, `width`, `sidewalk*`, `surface`, `bridge`, `layer`, `lit`, `junction`, `maxspeed`. It already has them.
 - **Pipeline:**
-  - A new `scripts/build-world3d.mjs` that imports the helpers from `build-map.mjs` (`toXY`, `simplify`).
-  - Add an npm script `map:world3d`.
-  - Leave `buildings.geojson` alone; MapLibre still uses it.
+  - `scripts/build-city3d.mjs` (`npm run city:build`) bakes the extracts, with the road graph's origin from `public/data/graph.json`.
+  - `buildings.geojson` stays as it is; the flat MapLibre map uses it.
 
 ### 2.2 Output data (built offline, deterministic, testable)
-Write `public/data/world3d/` split into 250 m tiles, plus `index.json`. Coordinates are Int16 decimetres relative to the tile origin; expect about 1–2 MB in total. These interfaces are the contract between agents:
+One file, `public/data/city3d.json` (about 4.3 MB, 1.5 MB gzipped), covering the core bbox plus a 350 m margin. Coordinates are integer decimetres in sim space. Its TypeScript shape is `CityData` in `src/world3d/city.ts`:
 
-```ts
-type Zone = 'old_city'|'moat_ring'|'tha_phae'|'night_bazaar'|'chinatown_warorot'|'riverside_west'|'wat_ket'|'nimman'|'santitham'|'suan_dok'|'chang_phueak'|'wua_lai'|'airport'|'suburb';
-interface BuildingRec { id: number; ring: number[]; holes?: number[][]; zone: Zone; cls: BuildingClass;
-  levels: number; h: number; minH?: number; roof: 'flat'|'gable'|'hip'|'skillion'|'lanna'|'open'|'dome'|'none';
-  wall: number; roofCol: number;          // palette indices
-  front?: number; bays?: number;          // street-facing edge index; shophouse bay count
-  use?: 'shop'|'cafe'|'restaurant'|'massage'|'bar'|'hotel'|'hostel'|'convenience'|'bank'|'moto_rent'|'residential';
-  temple?: { ground: number; role: 'viharn'|'ubosot'|'chedi'|'ho_trai'|'sala'|'kuti'|'school'|'misc'; faces: number };
-  hidden?: true }                          // replaced by a hero model
-interface TempleRec { id: number; ring: number[]; front: number; entrance: [number, number];
-  synth: { kind: 'chedi'|'bell_tower'|'gate'|'wall'|'bodhi'|'sema'; x: number; y: number; rot: number; size: number; variant: number }[] }
-interface PropRec { k: PropKind; x: number; y: number; rot: number; v: number; link?: number } // link = next pole for cables
-```
+- `roads`: node coordinates and ways as `[class, flags, widthDm, lanes, name, surface, layer, ...nodes]`.
+- `buildings`: ring and holes, the `building=*` value, zone, area, oriented box, levels and heights, roof shape and colours, material, street-front edge and its road, temple ground, use and name.
+- `areas` (land cover, temple and worship grounds, markets, water), `lines` (walls, fences, rail, runway, canals, power lines) and `cityWalls`.
+- `trees` with species, street-furniture `props` and `shops` (shopfront points).
 
-The road ribbons, water polygons (moat, river, canal, pool) and ground areas (park, temple ground, plaza, sand, apron) go in the same tiles. The ground layer owns their schema.
+The bake keeps the raw facts; classification, temple roles, bays, heights and everything else in §2.4–2.8 happen at runtime in the builders, so they can change without a re-bake.
 
 ### 2.3 Zones
-Define the zones as polygons in `src/content/districts3d.ts`, reusing the `ZONES` centres from `src/content/zones.ts`:
-- `old_city` is the inside of the moat polygon.
-- `moat_ring` is within 40 m outside it.
-- The rest are hand-drawn from the neighbourhood table in culture.md §2.
+The bake assigns each building a zone (`zoneOf` in `scripts/build-city3d.mjs`):
+- `old_city` is the inside of the moat square, with the four bastions as corners.
+- `moat_ring` is within 45 m outside it.
+- The rest are boxes hand-drawn from the neighbourhood table in culture.md §2: `tha_phae`, `night_bazaar`, `chinatown`, `riverside`, `wat_ket`, `nimman`, `santitham`, `suan_dok`, `chang_phueak`, `wua_lai` and `airport`; everything else is `suburb`.
 
 ### 2.4 Building classification, heights, roofs, colours
 Rules run in order; the first match wins.
 
-1. **Hero suppression list** (`src/content/landmarks3d.ts`): hide the footprint.
+1. **Hero suppression list** (`src/world3d/build/landmarks3d.ts`): hide the footprint.
 2. **Inside a Buddhist temple ground:** go to the temple inference in §2.5.
 3. **Tagged footprints:**
    - `building=roof` → an open canopy on 150 mm posts.
@@ -434,7 +424,7 @@ Each hero model is fitted to its OSM footprint or anchor and hides the generic f
 ## 3. Palette and lighting
 
 ### 3.1 Base palette
-One palette file, `src/world3d/palette.ts`, with namespaced groups.
+Palette files in `src/world3d/build/`: `palette.ts` (shared), `groundPalette.ts` (ground, streets, water) and `buildingPalette.ts` (buildings, temples, landmarks).
 
 | Group | Colours |
 |---|---|
@@ -477,7 +467,7 @@ Light colours:
 - The tuk-tuk's roof TAXI box is lit yellow #f4d03f. A lit roof sign is required by the 2017 rules (culture.md §7).
 
 ### 3.4 Weather and season variants
-All published through one `WorldEnv` state.
+The environment layer (`src/world3d/layers/environment.ts`) turns the sim's weather into these looks (`src/world3d/env/atmosphere.ts`) and publishes them in its `EnvState`.
 
 | Variant | When | Look |
 |---|---|---|
@@ -486,7 +476,7 @@ All published through one `WorldEnv` state.
 | **Cool-season mist** | Nov–Jan mornings | Low fog in the moat and river channels. Thai visitors in puffer jackets. |
 
 ### 3.5 Festivals and weekly events
-Owner: Agent B for set dressing, Agent C for crowds and vehicles. Driven by `src/content/festivals3d.ts`, which cites calendar.md.
+Driven by the events calendar (`src/content/events.ts`, which cites calendar.md) through `src/world3d/env/festivals.ts`, so the set dressing matches the sim's closures and notices.
 
 **Yi Peng / Loy Krathong, 23–25 Nov 2026**
 - This is game days 22–24, so it is the first set piece players will see. Build it first.
@@ -615,47 +605,48 @@ Owner: Agent B for set dressing, Agent C for crowds and vehicles. Driven by `src
 - Rigid segmented low-poly people (150–250 triangles), with no skinning.
 - A per-vertex limb index plus per-instance attributes (colour slots for skin/top/bottom/hat/prop, animation id, phase).
 - The vertex shader animates walk, idle, hail, sit, wai and carry.
-- One `InstancedMesh` per body/prop variant.
+- One rigged geometry holds every body part, hat, hairdo and prop; each instance carries its colours, the parts it wears and its joint angles, and each batch is one `InstancedMesh`.
 - Caps: about 800 ambient people plus all passengers, about 300 ambient vehicles, with crowd impostors beyond 250 m.
 
 ---
 
 ## 5. Build order, ownership and "done"
 
-### 5.0 Shared contracts (P0, the lead lands these before anyone forks)
-**Module layout**
-- `src/world3d/core/`: `units.ts`, `rng.ts`, `palette.ts`, `atlas.ts` (the procedural sign / shutter / lattice / glyph texture), `geom.ts` (extrude, gable/hip/Lanna roof primitives, lathe, prism, merge, flat normals), `lod.ts`, `chunks.ts` (250 m tiles, worker build queue), `env.ts` (`WorldEnv { sunDir, sunElev, phase, weather, festival, moon }` from the game clock and calendar).
-- Content files:
-  - Agent A owns `src/content/buildings3d.ts` and `src/content/landmarks3d.ts`.
-  - Agent B owns `src/content/props3d.ts` and `src/content/festivals3d.ts`.
-  - Agent C owns `src/content/people3d.ts` and `src/content/vehicles3d.ts`.
-  - `src/content/districts3d.ts` is shared and written by the lead.
+### 5.0 Where the pieces live
+- **Modules:** [architecture.md](architecture.md) §2.
+- **Content:**
+  - Hero landmark definitions: `src/world3d/build/landmarks3d.ts`.
+  - Zones: baked into `city3d.json` (§2.3).
+  - Tree species: `TREE_KINDS` in `src/world3d/build/context.ts`, models in `src/world3d/treeModels.ts`.
+  - Street props: `src/world3d/build/props.ts`, models in `src/world3d/propModels.ts`.
+  - Festival set dressing: `src/world3d/env/festivals.ts`, `src/world3d/layers/festivals.ts` and `src/world3d/festivalModels.ts`.
+  - People and vehicles: `src/world3d/personModels.ts` and `src/world3d/vehicleModels.ts`.
 
-**Generator contract:** `(rec, ctx: { rng, palette, atlas, lod, env }) => MeshData { position, normal, color, emissive?, sway?, uv? }`, as pure functions.
+**Generator contract:** a builder takes the `BuildContext` (`src/world3d/build/context.ts`) and writes geometry through `MeshWriter` or records instances with `addProp`; it is pure (no three.js, no DOM).
 
-**Shared material:** one world material with the uniforms `uNight`, `uWet`, `uHaze`, `uWind`, `uFestivalGlow`.
+**Materials:** each static layer has one Lambert material whose shader converts the sRGB vertex colours to linear (`cityMaterial` in `src/world3d/layers/city.ts`). Night lights the `windows` and `glow` layers through their emissive intensity; wet roads, the backdrop's aerial haze and the Drive-mode cutaway are shader patches (`patchMaterial`).
 
-**Visual APIs for Agent C** (the traffic *logic* is design.md Workstream D):
-- `vehicleVisual(kind, livery, model).setPose(x, y, heading, speed, steer)`
-- `personVisual(archetype, variant).play(anim)`
+**Visual APIs:** vehicles and people are drawn from sim state by `src/world3d/layers/vehicles.ts` and `src/world3d/layers/people.ts`, posed by `src/world3d/kinematics.ts` and the rig in `src/world3d/personModels.ts` (the traffic *logic* is design.md feature area D).
 
-**Debug handle:** `window.__world3d` with layer toggles and camera presets: tha_phae_gate, chedi_luang, si_phum_corner, rin_kham, night_bazaar, warorot_riverside, wua_lai, cnx_apron.
+**Debug handle:** `window.__world3d` in dev builds is the 3D view: `setCamera(x, y, dist, yaw?)` places the camera, and `quality.set(level)` switches the graphics preset.
 
 ### 5.1 Phases
 
+The "done when" column doubles as the acceptance checks. The 8 review views are Tha Phae Gate, Wat Chedi Luang, the Si Phum corner, Rin Kham, the Night Bazaar, Warorot riverside, Wua Lai and the CNX apron (place the camera with `__world3d.setCamera`).
+
 | Phase | Owner | Deliverable | Done when |
 |---|---|---|---|
-| **P0 Foundation and data** | Lead | Contracts above; new Overpass queries; `build-world3d.mjs` producing classified buildings, zones and fronts; `tests/world3d-*.test.ts` | Whole core bbox renders as coloured extrusions at 60 fps on an M1/Iris laptop at 1080p. Sun follows the game clock. Build is deterministic (same hash twice). Tests pass: 88 grounds; heights ≤ 12 m untagged in the Old City; bay width 3.5–4.8 m. |
-| **P1 Ground** | Lead | Road ribbons with widths, kerbs and paint, markings, ranks; sunken moat with banks and causeways; Ping and canal; plazas; runway/apron | Driving the moat loop in follow-cam, lanes, kerbs, one-way arrows and moat banks read clearly. No z-fighting at the 8 presets. |
+| **P0 Foundation and data** | Lead | Shared contracts (§5.0); new Overpass queries; `build-city3d.mjs` baking buildings, zones and street fronts; `tests/world3d-*.test.ts` | Whole core bbox renders as coloured extrusions at 60 fps on an M1/Iris laptop at 1080p. Sun follows the game clock. Build is deterministic (same hash twice). Tests pass: 88 grounds; heights ≤ 12 m untagged in the Old City; bay width 3.5–4.8 m. |
+| **P1 Ground** | Lead | Road ribbons with widths, kerbs and paint, markings, ranks; sunken moat with banks and causeways; Ping and canal; plazas; runway/apron | Driving the moat loop in follow-cam, lanes, kerbs, one-way arrows and moat banks read clearly. No z-fighting at the 8 review views. |
 | **P2 Buildings** | A | Shophouse row generator (bays, shutters by time of day, signs, awnings, grilles, AC units, rooftop clutter); wooden shophouse, house, Lanna house, condo, mall, market/open roof, institutional, church/mosque/shrine; ground-floor uses | A random Old City block and a Nimman block match §1.2 in side-by-side review. All 18.8k built in workers in under 3 s total. LOD0 shophouse bay ≤ 250 triangles. |
 | **P3 Temples** | A | Viharn, ubosot, 4 chedi types × 4 finishes, ho trai, sala, bell tower, wall, arch gate, singhas, sema; inference from §2.5 | Every Buddhist ground has exactly one main chedi, ≥ 1 viharn with a Lanna roof facing its street side, a wall and a gate (Vitest). Gold spires visible from any Old City preset. |
 | **P4 Walls, gates, bastions, moat dressing** | A (structures) + B (fountains, railings, trees) | Landmarks 1–3 plus moat fountains | The moat square is recognisable from max zoom-out. Tha Phae Gate matches the reference at the preset. |
 | **P5 Hero landmarks** | A | Landmarks 4–17 with night lighting and footprint suppression | Each within ±15% of the table dimensions, placed on its OSM anchor, lit at night. Doi Suthep visible in the dusk establishing shot. |
 | **P6 Vegetation** | B | 12 species × 3 LODs (tree LOD0 ≤ 400 triangles), OSM trees plus procedural rules, seasonal tints, wind sway | 15–25k instanced trees. Moat fully lined. A bodhi in every temple. No trees inside footprints or carriageways (test). |
-| **P7 Street furniture** | B | Poles and cables (with the buried-cable exclusions), lamps, PEA cabinets, spirit houses, motorbike rows, carts and parasols, signals with countdowns, shelters, flags, bins, stall kit | No bare frontage at street-level presets. No poles on Tha Phae / Chang Klan / moat roads (test). Props add ≤ 40 draw calls. |
-| **P8 Vehicles** | C | Tuk-tuk (11 liveries × 5 models, wear), songthaews (6 colours), scooters, cars/pickups, vans, taxis, buses, jets | Player and fleet drive 3D tuk-tuks. All liveries in `paints.ts` render correctly. The ambient API is ready for Workstream D. |
+| **P7 Street furniture** | B | Poles and cables (with the buried-cable exclusions), lamps, PEA cabinets, spirit houses, motorbike rows, carts and parasols, signals with countdowns, shelters, flags, bins, stall kit | No bare frontage at the street-level review views. No poles on Tha Phae / Chang Klan / moat roads (test). Props add ≤ 40 draw calls. |
+| **P8 Vehicles** | C | Tuk-tuk (11 liveries × 5 models, wear), songthaews (6 colours), scooters, cars/pickups, vans, taxis, buses, jets | Player and fleet drive 3D tuk-tuks. All liveries in `paints.ts` render correctly. The ambient API is ready for feature area D. |
 | **P9 People** | C | 12 archetypes plus ambient types, shader animation, waiting/hail/board/drop-off, density by zone and time (alms at dawn, market crowds) | A playtester names 5 random waiting passengers' archetypes correctly with badges hidden. 800 animated people at ≤ 3 ms/frame. |
-| **P10 Moods and weather** | Lead | §3.2–3.4 keyframes, lamps and windows, rain/haze/mist | Screenshots at 07:00, 12:00, 17:30, 18:30 and 23:00 × clear/rain/haze at the 8 presets approved. |
+| **P10 Moods and weather** | Lead | §3.2–3.4 keyframes, lamps and windows, rain/haze/mist | Screenshots at 07:00, 12:00, 17:30, 18:30 and 23:00 × clear/rain/haze at the 8 review views approved. |
 | **P11 Festivals and weekly events** | B + C | Yi Peng first, then walking streets, Night Bazaar timetable, Songkran, Flower Festival, CNY, Inthakin | Advancing the clock to 24 Nov 19:00 shows lanterns, candles, krathong, crowds and no sky lanterns. Stalls appear and disappear on schedule. |
 | **P12 Polish** | Lead | Pitch-by-zoom horizon, airport arrivals/departures, title-screen flyover, photo mode | Doi Suthep visible at closest zoom facing west in clear weather, and hidden in haze. |
 
