@@ -37,8 +37,8 @@ const key = (k: string, ki: number, z: string, h: string, hs: string, hg: string
 });
 
 // Colours from world.md §3.2. Key intensities are world.md's scaled by 0.8 to
-// the renderer's calibration; hemisphere intensities keep the ambient
-// luminance readable (the night sky colour is very dark, so its intensity is high).
+// the renderer's calibration; hemisphere colours and intensities keep streets
+// readable for play at blue hour and night (a moonlit blue rather than black).
 export const KEYS = {
   day: key('#fff4e0', 2.4, '#7fb6e0', '#cfe3ec', '#a9cdef', '#cdb89a', 1.35, '#cfe3ec', 1.0),
   morningHigh: key('#ffe6c4', 1.9, '#8fbde2', '#e4e6dc', '#b4d4ee', '#c2ab88', 1.15, '#d9e4e4', 1.02),
@@ -46,8 +46,8 @@ export const KEYS = {
   dawn: key('#ffc89a', 0.35, '#5f7aa8', '#f0c6a8', '#8a9cc4', '#6a5a48', 1.2, '#b9b6bd', 1.12),
   goldenHigh: key('#ffb86b', 1.6, '#7aa0c8', '#ffc58a', '#c9b8d8', '#a4805a', 0.95, '#f1c9a0', 1.05),
   goldenLow: key('#ff8a4a', 0.8, '#6f8fbe', '#ffad72', '#c0a8cf', '#8d6a4a', 0.9, '#eeb58c', 1.08),
-  blue: key('#000000', 0, '#2e3f6e', '#e39a6b', '#5d6f9a', '#3a3028', 1.3, '#6d6f8a', 1.2),
-  night: key('#000000', 0, '#0f1630', '#25304f', '#1b2440', '#2a2018', 3.7, '#1a1f33', 1.35),
+  blue: key('#000000', 0, '#2e3f6e', '#e39a6b', '#6d80b0', '#463a2e', 1.45, '#6d6f8a', 1.25),
+  night: key('#000000', 0, '#0f1630', '#25304f', '#3a4c80', '#3e3428', 3.3, '#1a1f33', 1.55),
 } satisfies Record<string, LightKey>;
 
 /** Keyframes by sun elevation (degrees), low to high, for the morning and the evening. */
