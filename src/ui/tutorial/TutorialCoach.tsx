@@ -6,16 +6,18 @@ import type { OverlayProps } from '../overlays';
 import { PANELS, type PanelDef } from '../panels';
 import { GlossedText } from '../SpeechLine';
 import { ui, useGame, useUI } from '../store';
-import { CONTROL_WEIGHT, dockedOverPad, FLOOR_GAP, placeCoach, samePlacement, type Obstacle, type Placement } from './coachPlacement';
+import { CONTROL_WEIGHT, dockedOverPad, FLOOR_GAP, KEEP_CLEAR, placeCoach, samePlacement, type Obstacle, type Placement } from './coachPlacement';
 import './coach.css';
 
 /**
- * What the card keeps clear of, and what covering it costs: the Drive-mode GPS
- * line, the world badge and the minimap, and more so the cards and the touch
- * pad, which hold buttons.
+ * What the card keeps clear of, and what covering it costs: the world badge
+ * and the minimap, more so the cards and the touch pad, which hold buttons, and
+ * above all the Drive-mode GPS line the player steers by. While a haggle is
+ * open (ui.haggle) the tuk-tuk stands at the kerb and the haggle sheet matters
+ * more than the GPS line.
  */
-const AVOID: [selector: string, weight: number][] = [
-  ['.gps-hud', 1],
+const avoidList = (): [selector: string, weight: number][] => [
+  ['.gps-hud', ui.get().haggle ? 1 : KEEP_CLEAR],
   ['.world-badge', 1],
   ['.minimap', 1],
   ['.app > .left-stack', CONTROL_WEIGHT],
@@ -94,7 +96,7 @@ export function TutorialCoach({ game }: OverlayProps) {
         anchor: anchor ? anchor.getBoundingClientRect() : null,
         below: !!coach.below,
         stackRight: document.querySelector('.left-stack')?.getBoundingClientRect().right ?? 10,
-        avoid: AVOID.flatMap(([sel, weight]): Obstacle[] => {
+        avoid: avoidList().flatMap(([sel, weight]): Obstacle[] => {
           const r = document.querySelector(sel)?.getBoundingClientRect();
           return r && r.width > 0 && r.height > 0 ? [{ left: r.left, top: r.top, right: r.right, bottom: r.bottom, weight }] : [];
         }),

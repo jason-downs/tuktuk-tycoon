@@ -64,7 +64,9 @@ button {
   height: 100%;
 }
 
-.map {
+/* Outranks MapLibre's .maplibregl-map { position: relative }: that stylesheet arrives with the lazily loaded City map
+   and would otherwise take the map hosts out of absolute positioning, collapsing them to zero height. */
+.app > .map {
   position: absolute;
   inset: 0;
 }

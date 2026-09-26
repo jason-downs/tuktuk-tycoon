@@ -1,7 +1,8 @@
 // Where Lung Daeng's coach card goes (TutorialCoach.tsx): beside the UI the
 // current step is about and pointing at it, clear of that UI, of the controls
-// the player presses and of the HUD it must not hide (the GPS line, the world
-// badge). Pure geometry in CSS pixels, so it can be tested without a browser.
+// the player presses and of the HUD (the GPS line, which it must not hide while
+// the player drives, and the world badge). Pure geometry in CSS pixels, so it
+// can be tested without a browser.
 
 export interface Rect {
   left: number;
@@ -12,7 +13,10 @@ export interface Rect {
 
 /** UI the card should not cover. */
 export interface Obstacle extends Rect {
-  /** What covering one px² of it costs: 1 for a readout (the default), CONTROL_WEIGHT for controls the player presses. */
+  /**
+   * What covering one px² of it costs: 1 for a readout (the default), CONTROL_WEIGHT for controls the player presses,
+   * KEEP_CLEAR for the HUD the card must not hide.
+   */
   weight?: number;
 }
 
@@ -56,6 +60,11 @@ export const FLOOR_GAP = 8;
 export const MOBILE_WIDTH = 700;
 /** Covering the step's own UI or a control counts this many times over covering a readout. */
 export const CONTROL_WEIGHT = 3;
+/**
+ * The cost per px² of covering what the card must not hide (the GPS line while the player drives): more than any
+ * spot that keeps it clear costs, so the card covers it only when every spot would.
+ */
+export const KEEP_CLEAR = 1_000_000;
 /** Edge margin, px. */
 const EDGE = 8;
 /** The pointer stays this far (px) from the card's corners. */
@@ -90,7 +99,9 @@ export function samePlacement(a: Placement | null, b: Placement): boolean {
  * can still reach the anchor. It takes the spot that costs least: covering
  * readouts, three times that for the anchor and controls, and half the card's
  * area for a card whose pointer no longer reaches its anchor, so a card stays
- * on its anchor unless that covers a lot. Ties go to the earlier, less moved spot.
+ * on its anchor unless that covers a lot; any spot that covers what it must not
+ * hide (KEEP_CLEAR) costs more than any spot that keeps it clear. Ties go to the
+ * earlier, less moved spot.
  */
 export function placeCoach(l: CoachLayout): Placement {
   const { vw, vh, w, h, floor } = l;

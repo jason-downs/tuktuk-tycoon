@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTROL_WEIGHT, dockedOverPad, GAP, placeCoach, type Placement, type Rect } from '../src/ui/tutorial/coachPlacement';
+import { CONTROL_WEIGHT, dockedOverPad, GAP, KEEP_CLEAR, placeCoach, type Placement, type Rect } from '../src/ui/tutorial/coachPlacement';
 
 const rect = (left: number, top: number, right: number, bottom: number): Rect => ({ left, top, right, bottom });
 
@@ -80,20 +80,29 @@ describe('coach card placement', () => {
     expect(p.left + p.arrowAt).toBeCloseTo((nav.left + nav.right) / 2, 0);
   });
 
-  it('stays on its top-bar anchor rather than drifting under the GPS line (1280×800, manage step in Drive)', () => {
+  it('never covers the GPS line while the player drives: it points at the mode toggle when that leaves the line clear, else sits below the line (manage step in Drive)', () => {
     const w = 300;
-    const h = 280;
-    const toggle = rect(440, 42, 536, 69);
-    const gps = rect(434, 152, 846, 241);
-    const badge = rect(584, 109, 696, 146);
-    const cards = { ...rect(10, 117, 310, 368), weight: CONTROL_WEIGHT };
-    for (const height of [h, 64]) {
-      const p = placeCoach({ vw: 1280, vh: 800, w, h: height, floor: 105, anchor: toggle, below: true, stackRight: 310, avoid: [gps, badge, cards] });
-      expect(p.arrow, `h ${height}`).toBe('up');
-      expect(p.top, `h ${height}`).toBe(105);
-      expect(p.left + p.arrowAt, `h ${height}`).toBeCloseTo((toggle.left + toggle.right) / 2, 0);
-      // It never slides onto the cards, which hold the player's buttons.
-      expect(covers(p, w, height, cards), `h ${height}`).toBe(0);
+    const layouts = [
+      { vw: 1280, vh: 800, floor: 105, toggle: rect(440, 42, 536, 69), gps: rect(434, 152, 846, 241), badge: rect(584, 109, 696, 146), cards: rect(10, 117, 310, 368) },
+      { vw: 1400, vh: 850, floor: 76, toggle: rect(443, 26, 539, 53), gps: rect(550, 120, 850, 208), badge: rect(644, 80, 756, 117), cards: rect(10, 88, 310, 339) },
+      { vw: 1598, vh: 902, floor: 104, toggle: rect(405, 40, 624, 67), gps: rect(649, 148, 949, 237), badge: rect(746, 108, 852, 145), cards: rect(10, 116, 310, 384) },
+    ];
+    for (const { vw, vh, floor, toggle, gps, badge, cards } of layouts) {
+      for (const h of [280, 64]) {
+        const avoid = [{ ...gps, weight: KEEP_CLEAR }, badge, { ...cards, weight: CONTROL_WEIGHT }];
+        const p = placeCoach({ vw, vh, w, h, floor, anchor: toggle, below: true, stackRight: 310, avoid });
+        const at = `${vw}×${vh}, h ${h}`;
+        expect(covers(p, w, h, gps), at).toBe(0);
+        // It never slides onto the cards, which hold the player's buttons.
+        expect(covers(p, w, h, cards), at).toBe(0);
+        // Only the widest window leaves room to point at the mode toggle without covering the GPS line.
+        if (vw === 1598) {
+          expect(p.arrow, at).toBe('up');
+          expect(p.left + p.arrowAt, at).toBeCloseTo((toggle.left + toggle.right) / 2, 0);
+        } else {
+          expect(p.top, at).toBeGreaterThanOrEqual(gps.bottom);
+        }
+      }
     }
   });
 
