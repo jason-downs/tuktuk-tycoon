@@ -7,6 +7,7 @@ import { buildWorld, type PoiJSON } from '../src/data/world';
 import { BASE_TIME_SCALE, DAY, HOUR } from '../src/sim/clock';
 import { buyVehicle, fleetState, freeVehicles, hireCandidate, hiredDrivers, rentedFrom, rentVehicle } from '../src/sim/fleet';
 import { installUpgrade } from '../src/sim/garage';
+import { hotelSites, isActive, partnerHotel, serviceCheck, startService } from '../src/sim/business';
 import type { GraphJSON } from '../src/sim/graph';
 import { Game } from '../src/sim/game';
 import { installSystems } from '../src/sim/systems';
@@ -19,8 +20,11 @@ interface Milestone {
   day: number;
 }
 
-/** A plain owner: autopilot on, cheap upgrades first, rent+hire while Lung Daeng has tuk-tuks, then buy. */
-function playBusiness(days: number, seed: number) {
+/**
+ * A plain owner: autopilot on, cheap upgrades first, rent and hire while tuk-tuks can be rented, then buy.
+ * With `services`, the owner also signs up to company services as they become affordable.
+ */
+function playBusiness(days: number, seed: number, services = false) {
   const game = Game.create(world, { seed });
   installSystems(game);
   game.state.autopilot = true;
@@ -50,6 +54,13 @@ function playBusiness(days: number, seed: number) {
         if (d) mark(hiredDrivers(game).length === 1 ? 'first hire' : `${hiredDrivers(game).length} drivers`);
       }
     }
+    if (services && game.state.cash > 20_000) {
+      for (const id of ['app', 'radio', 'flyers', 'social_ads', 'concierge', 'tour_temples', 'airport']) {
+        if (!isActive(game, id) && serviceCheck(game, id).ok && game.state.cash > 20_000) startService(game, id).ok && mark(`service ${id}`);
+      }
+      const hotel = hotelSites(game.world)[0];
+      if (hotel && game.state.cash > 60_000) partnerHotel(game, hotel.place.id).ok && mark('hotel partner');
+    }
     if (game.state.vehicles.some((v) => v.ownership !== 'rented')) mark('owns a tuk-tuk');
     if (game.state.vehicles.length >= 5) mark('5 tuk-tuks');
     if (game.state.vehicles.length >= 10) mark('10 tuk-tuks');
@@ -74,4 +85,16 @@ describe('balance harness', () => {
     expect(game.state.vehicles.length).toBeGreaterThanOrEqual(3);
     expect(Number.isFinite(game.state.cash)).toBe(true);
   }, 120_000);
+
+  it('company services lift the fleet past the street-demand ceiling', () => {
+    const plain = playBusiness(10, 12);
+    const smart = playBusiness(10, 12, true);
+    const perDay = (r: ReturnType<typeof playBusiness>) => {
+      const d = r.daily;
+      return (d[d.length - 1].trips - d[d.length - 4].trips) / 3;
+    };
+    console.log('services milestones:', smart.miles.filter((m) => m.label.startsWith('service') || m.label === 'hotel partner').map((m) => `${m.label}@d${m.day.toFixed(1)}`).join(' '));
+    console.log(`trips/day late: plain ${perDay(plain).toFixed(0)} vs services ${perDay(smart).toFixed(0)}; cash plain ฿${Math.round(plain.game.state.cash)} vs services ฿${Math.round(smart.game.state.cash)}`);
+    expect(perDay(smart)).toBeGreaterThan(perDay(plain));
+  }, 240_000);
 });
