@@ -169,6 +169,8 @@ export interface Driver {
   earnedToday: number;
   lifetimeFares: number;
   rating: number;
+  /** Game time until which a tired driver stays off duty (set by the fleet system). */
+  restUntil?: number;
 }
 
 export type LedgerCategory =

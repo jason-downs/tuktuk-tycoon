@@ -1,0 +1,540 @@
+/* Fleet and Hire panels: vehicle and driver rows with inline detail, applicant
+   cards and the dealer's showroom. Builds on .list-row, .btn, .eyebrow, .hint. */
+
+.fl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------ summary */
+.fl-summary {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(232, 185, 35, 0.14);
+  border-radius: 10px;
+}
+.fl-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 6px;
+}
+.fl-kpi {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fl-kpi b {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--gold-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fl-kpi span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.fl-bills {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--cream-2);
+  line-height: 1.45;
+}
+.fl-bills b {
+  font-variant-numeric: tabular-nums;
+}
+.fl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fl-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ------------------------------------------------------------ rows */
+.fl-item {
+  display: flex;
+  flex-direction: column;
+}
+.fl-row {
+  width: 100%;
+  align-items: center;
+}
+.fl-item.open > .fl-row {
+  border-color: var(--line);
+  border-radius: 10px 10px 0 0;
+  background: rgba(232, 185, 35, 0.09);
+}
+.fl-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.fl-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fl-row-title b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-row-sub,
+.fl-row-status {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-row-sub {
+  color: var(--muted);
+}
+.fl-row-status {
+  color: var(--cream-2);
+  margin-top: 1px;
+}
+.fl-row-status.warn {
+  color: #ffb4a8;
+  font-weight: 400;
+}
+.fl-row-meters {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.fl-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fl-gauge .fl-meter {
+  width: 54px;
+}
+.fl-row-side {
+  flex: none;
+  text-align: right;
+  font-size: 12px;
+  color: var(--cream-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+.fl-row-side b {
+  display: block;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--gold-2);
+}
+
+.fl-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--teak-3);
+  border: 1px solid var(--line);
+  font-family: var(--font-head);
+  font-weight: 600;
+  color: var(--gold-2);
+  margin-right: 2px;
+}
+.fl-avatar.you {
+  background: var(--gold);
+  color: var(--teak);
+}
+.fl-icon {
+  flex: none;
+  font-size: 20px;
+  width: 30px;
+  text-align: center;
+  margin-right: 2px;
+}
+
+/* ------------------------------------------------------------ badges */
+.fl-badge {
+  flex: none;
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.fl-badge.rented {
+  background: rgba(61, 111, 182, 0.22);
+  border-color: rgba(61, 111, 182, 0.65);
+  color: #bcd2f2;
+}
+.fl-badge.leased {
+  background: rgba(217, 161, 59, 0.16);
+  border-color: rgba(217, 161, 59, 0.65);
+  color: var(--gold-2);
+}
+.fl-badge.owned {
+  background: rgba(58, 163, 91, 0.18);
+  border-color: rgba(58, 163, 91, 0.6);
+  color: #9fe3b0;
+}
+.fl-badge.you {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--teak);
+}
+.fl-badge.warn {
+  background: rgba(214, 69, 61, 0.18);
+  border-color: rgba(214, 69, 61, 0.6);
+  color: #ffb4a8;
+}
+.fl-badge.soft {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cream-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------ detail */
+.fl-detail {
+  padding: 8px 12px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+}
+.fl-hook {
+  margin: 2px 0 8px;
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--cream-2);
+  line-height: 1.4;
+}
+.fl-field {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+}
+.fl-field > .fl-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.fl-field-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fl-select,
+.fl-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--teak-3);
+  color: var(--cream);
+  font: inherit;
+  font-size: 13px;
+}
+.fl-select:focus,
+.fl-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.fl-select:disabled {
+  opacity: 0.55;
+}
+.fl-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(232, 185, 35, 0.2);
+}
+.fl-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.fl-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  font-size: 12px;
+  color: var(--cream-2);
+}
+.fl-facts.spaced {
+  margin-top: 8px;
+}
+.fl-facts b {
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+}
+.fl-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.fl-why {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #ffb4a8;
+  line-height: 1.35;
+}
+.fl-good {
+  color: #9fe3b0;
+}
+.fl-bad {
+  color: #ffb4a8;
+}
+
+/* ------------------------------------------------------------ meters and skills */
+.fl-meter {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.fl-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.fl-meter.big {
+  height: 8px;
+  border-radius: 4px;
+}
+.fl-skills {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 6px 8px;
+}
+.fl-skill {
+  min-width: 0;
+  cursor: help;
+}
+.fl-skill-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.fl-skill-label b {
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+}
+.fl-condition {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.fl-condition > span:first-child {
+  color: var(--muted);
+}
+.fl-condition > span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ controls */
+.fl-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.fl-seg .btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.fl-seg .btn small {
+  font-size: 10.5px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+.fl-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fl-stepper .btn.tiny {
+  min-width: 26px;
+  font-weight: 700;
+}
+.fl-stepper-value {
+  min-width: 64px;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fl-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn.fl-danger {
+  border-color: rgba(214, 69, 61, 0.6);
+  color: #ffb4a8;
+}
+.btn.fl-danger:hover:not(:disabled) {
+  background: rgba(214, 69, 61, 0.25);
+  border-color: var(--red);
+}
+.btn.fl-danger.on {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ hire panel */
+.fl-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.fl-tabs .btn {
+  padding: 7px 10px;
+}
+.fl-card {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(232, 185, 35, 0.14);
+  border-radius: 10px;
+}
+.fl-card.muted-card {
+  opacity: 0.8;
+}
+.fl-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.fl-card-head .fl-name {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--cream);
+}
+.fl-card-head .fl-price {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--gold-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.fl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+.fl-chip {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11.5px;
+  color: var(--cream-2);
+  white-space: nowrap;
+}
+.fl-chip.good {
+  color: #9fe3b0;
+}
+.fl-chip.bad {
+  color: #ffb4a8;
+}
+.fl-offers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.btn.fl-offer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
+}
+.fl-offer small {
+  font-size: 11.5px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+.fl-offers .fl-confirm {
+  display: flex;
+}
+.fl-offers .fl-confirm .btn:first-child {
+  flex: 1;
+}
+.fl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.fl-toolbar .fl-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fl-explain {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--cream-2);
+  line-height: 1.45;
+}
+
+@media (max-width: 600px) {
+  .fl-field {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .fl-gauge .fl-meter {
+    width: 40px;
+  }
+  /* Touch-sized controls on phones. */
+  .fl-stepper .btn.tiny {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .fl-seg .btn.tiny,
+  .fl-select,
+  .fl-input {
+    min-height: 36px;
+  }
+}

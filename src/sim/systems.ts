@@ -1,4 +1,5 @@
 import { EventsSystem } from './events';
+import { FleetSystem } from './fleet';
 import type { Game } from './game';
 import { ManualSystem } from './manual';
 import { RivalsSystem } from './rivals';
@@ -16,4 +17,5 @@ export function installSystems(game: Game): void {
   game.addSystem(new RivalsSystem());
   game.addSystem(new TutorialSystem());
   game.addSystem(new ManualSystem());
+  game.addSystem(new FleetSystem());
 }
