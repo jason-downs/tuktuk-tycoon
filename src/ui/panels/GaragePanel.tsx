@@ -5,6 +5,7 @@ import { VEHICLE_UPGRADES, type VehicleUpgrade } from '../../content/upgrades';
 import { VEHICLE_MODELS } from '../../content/vehicles';
 import { BALANCE } from '../../sim/balance';
 import { formatClock } from '../../sim/clock';
+import { upkeepPerDay } from '../../sim/fleet';
 import {
   AUTO_SERVICE_OPTIONS,
   EV_CONVERSION_HOURS,
@@ -197,7 +198,7 @@ export function GaragePanel({ game }: PanelProps) {
       <Meter label="Condition" value={d.condition / 100} color={d.condition < 35 ? '#d6453d' : '#d9a13b'} />
       <Meter label={ev ? 'Battery' : 'LPG'} value={d.fuel / 100} color={d.fuel < 20 ? '#d6453d' : '#3aa35b'} />
       <div className="facts garage-facts">
-        <span>🛣️ {d.odometer.toLocaleString('en-US')} km</span>
+        <span title="Distance driven for your company">🛣️ {d.odometer.toLocaleString('en-US')} km</span>
         <span title="Chance of a breakdown per working day">🔧 Breakdowns {odds(breakdownPerDay(game, v))}</span>
         <span className={climbs ? 'pos' : 'muted'} title={climbs ? '' : CLIMB_HELP_TEXT}>
           ⛰️ {climbs ? 'Climbs Doi Suthep' : 'Can’t climb Doi Suthep'}
@@ -312,8 +313,8 @@ function Workshop({ game, v, autoService, hired }: { game: Game; v: Vehicle; aut
               </tr>
               <tr>
                 <td>Upkeep</td>
-                <td>{baht(BALANCE.upkeep.lpgPerDay)}/day</td>
-                <td className="pos">{baht(BALANCE.upkeep.evPerDay)}/day</td>
+                <td>{baht(upkeepPerDay(model.id))}/day</td>
+                <td className="pos">{baht(upkeepPerDay(target.id))}/day</td>
               </tr>
               <tr>
                 <td>Range</td>
