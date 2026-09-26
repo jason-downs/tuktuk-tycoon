@@ -42,7 +42,7 @@ export function TutorialCoach({ game }: OverlayProps) {
       rating: st.rating,
       lost: st.lost,
       opened: st.opened.join(','),
-      waiting: st.step === 'select' && !st.done ? g.visibleRequests().length : -1,
+      waiting: st.step === 'find' && !st.done ? g.visibleRequests().length : -1,
     };
   });
   const modalOpen = useUI((s) => s.modal !== null);
@@ -53,12 +53,12 @@ export function TutorialCoach({ game }: OverlayProps) {
   // Each new step opens the card again.
   useEffect(() => setCollapsed(false), [d.step]);
 
-  // Selecting a passenger and opening panels are UI actions the simulation cannot see.
+  // Switching mode and opening panels are UI actions the simulation cannot see.
   useEffect(() => {
     let prev = ui.get();
     return ui.subscribe(() => {
       const s = ui.get();
-      if (s.selectedRequest !== null && s.selectedRequest !== prev.selectedRequest) tutorialSignal(game, { kind: 'select' });
+      if (s.mode !== prev.mode) tutorialSignal(game, { kind: 'mode', mode: s.mode });
       if (s.panel && s.panel !== prev.panel) tutorialSignal(game, { kind: 'panel', id: s.panel });
       prev = s;
     });
@@ -123,7 +123,7 @@ export function TutorialCoach({ game }: OverlayProps) {
       .replace('{tip}', d.tip > 0 ? ` plus a ฿${d.tip} tip` : '')
       .replace('{rating}', d.rating.toFixed(1));
   const body = coach.body.map(fill);
-  if (d.step === 'select' && d.lost && coach.lost) body.unshift(coach.lost);
+  if (d.step === 'find' && d.lost && coach.lost) body.unshift(coach.lost);
   const opened = d.opened ? d.opened.split(',') : [];
   const tour = PANEL_TOUR.flatMap((t) => {
     const def = PANELS.find((p) => p.id === t.id);
@@ -202,7 +202,7 @@ function CoachBody({ game, body, step, waiting, opened, tour, action, waitFor }:
           <GlossedText text={p} />
         </p>
       ))}
-      {waiting === 0 && <p className="hint">Nobody waving yet? Give it a moment, or press 3 to speed up time.</p>}
+      {waiting === 0 && <p className="hint">Nobody waving yet? Give it a moment — the clock runs at 1× while you wait.</p>}
       {step === 'panels' && (
         <ul className="coach-panels">
           {tour.map(({ id, blurb, def }) => {

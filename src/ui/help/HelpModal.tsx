@@ -10,23 +10,29 @@ import { ui, useUI } from '../store';
 import './help.css';
 
 const KEYS: [string[], string][] = [
+  [['Tab'], 'Drive ↔ Manage'],
+  [['W', '↑'], 'Drive: throttle (hold); takes the wheel back from the GPS'],
+  [['S', '↓'], 'Drive: brake (hold); pressed and held at a standstill, U-turn on a two-way road'],
+  [['A', '←', 'D', '→'], 'Drive: turn left / right at the next junction'],
+  [['E', 'Enter'], 'Drive: pick up the passenger beside you, or fill up at a pump'],
+  [['G'], 'Drive: the GPS drives (or finds passengers) / take the wheel back'],
+  [['H'], 'Drive: horn — nearby passengers wave'],
+  [['W', 'A', 'S', 'D'], 'Manage: pan the camera'],
   [['Space'], 'Pause / resume'],
-  [['1', '2', '3', '4', '5'], 'Speed ½× · 1× · 2× · 4× · 8×'],
-  [['F'], 'Follow your tuk-tuk with the camera'],
-  [['M'], 'Manual driving on / off'],
-  [['W', '↑'], 'Manual: throttle (hold)'],
-  [['S', '↓'], 'Manual: brake (hold)'],
-  [['A', '←', 'D', '→'], 'Manual: turn left / right at the next junction'],
-  [['Esc'], 'Close cards, panels and this help'],
+  [['1', '2', '3', '4', '5'], 'Manage: speed ½× · 1× · 2× · 4× · 8×'],
+  [['M'], 'City map planner on / off'],
+  [['F'], 'Manage: follow your tuk-tuk with the camera'],
+  [['Esc'], 'Close cards, panels, the city map and this help'],
   [['?'], 'Open this help'],
 ];
 
 const MOUSE: [string, string][] = [
-  ['Click a waving passenger', 'See their trip, then press Pick up'],
-  ['Right-click the map', 'Drive there (right-click a ⛽ pump to refuel)'],
+  ['Click a waving passenger', 'See their trip, then Pick up (the GPS drives you there) or dispatch a free tuk-tuk'],
+  ['Right-click the map or minimap', 'Drive there (right-click a ⛽ pump to refuel)'],
   ['Click a tuk-tuk', 'Select and follow it'],
   ['Click a landmark', 'Read about the place'],
-  ['Drag · scroll · pinch', 'Pan and zoom the map'],
+  ['Drag · scroll', 'Drive: look around and zoom. Manage: pan and zoom'],
+  ['Click the overview map', 'Manage: fly the camera there'],
 ];
 
 /** "How to play": controls, the ride loop, haggling, growing a fleet, tips and credits. */
@@ -68,7 +74,8 @@ export function HelpModal({ game }: OverlayProps) {
                 <b>Find a passenger.</b> People waving on the map want a ride; the ring shows how long they’ll wait.
               </li>
               <li>
-                <b>Pick them up.</b> Click one, read where they’re going, press <i>Pick up</i>. The pink line is your GPS route.
+                <b>Pick them up.</b> Stop beside one and press <kbd>E</kbd>, or click one, read where they’re going and press{' '}
+                <i>Pick up</i>. The pink line is your GPS route.
               </li>
               <li>
                 <b>Haggle.</b> At the kerb you name a price, then drive them to the pin.
@@ -92,10 +99,13 @@ export function HelpModal({ game }: OverlayProps) {
           <section>
             <h3>Driving</h3>
             <p>
-              Your tuk-tuk follows the GPS by itself. Press <kbd>M</kbd> (or 🕹️ on your card) to take the handlebars: hold
-              throttle, brake, and tap left or right to choose the next junction. You can push to{' '}
-              {Math.round(MANUAL_SPEED_BONUS * 100)}% of the road speed — thrill-seekers love it, elders and retirees don’t.
-              Leave the route and the GPS re-plans from the next junction. <b>Autopilot</b> finds and haggles fares for you.
+              In <b>Drive</b> mode you steer your own tuk-tuk: hold throttle and brake, and tap left or right to choose the
+              next junction. You can push to {Math.round(MANUAL_SPEED_BONUS * 100)}% of the road speed — thrill-seekers love
+              it, elders and retirees don’t. Stop beside a waving passenger and press <kbd>E</kbd>. The clock slows to street
+              pace while you steer and runs at 1× while you’re parked or the GPS drives (<kbd>G</kbd>). Traffic lights stop
+              the traffic; running a red by hand upsets passengers and sometimes earns a police fine. In <b>Manage</b> mode
+              (<kbd>Tab</kbd>) your tuk-tuk runs on autopilot, finding and haggling fares by itself, and the speed buttons
+              run the clock.
             </p>
             <p>
               Watch the LPG bar: refuel before it’s empty or you’ll crawl to the pump. Rent (฿{BALANCE.startRentPerDay}/day for

@@ -5,15 +5,26 @@
 // junction just taken. Passengers who like a thrill rate fast manual driving
 // higher; nervous ones rate it lower (ARCHETYPES[…].thrill).
 //
+// At the kerb the player picks up a waiting passenger by hand (manualPickup:
+// stop within PICKUP_RADIUS_M, the passenger walks over, then the haggle
+// starts) or fills up at a pump (manualRefuel). On a two-way road the
+// tuk-tuk can U-turn from a standstill (uTurn). setAutodrive hands the wheel to
+// the GPS and back.
+//
 // The switch and the controls are runtime-only (not saved): a loaded game
 // starts with the GPS driving.
 
 import { ARCHETYPES } from '../content/archetypes';
+import { VEHICLE_MODELS } from '../content/vehicles';
 import { angleDiff } from '../geo';
+import { BALANCE } from './balance';
+import { findRequest, refuel, releaseClaim } from './dispatch';
 import type { Game, GameSystem, RatingModifier } from './game';
 import { reverseArc, type RoadGraph } from './graph';
+import { beginKerbside } from './kerbside';
+import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
 import { accountDistance, targetSpeed } from './movement';
-import type { Vehicle } from './types';
+import type { Place, RideRequest, Vehicle } from './types';
 
 /** [pacing] Top speed in manual mode relative to the normal road speed. */
 export const MANUAL_SPEED_BONUS = 1.15;
@@ -27,6 +38,16 @@ const STRAIGHT_RAD = 0.35;
 const THRILL_RATING = 1.2;
 /** Driving this much above the road speed counts as fast. */
 const FAST_RATIO = 1.03;
+/** [pacing] A waiting passenger this close (m) to the tuk-tuk can be picked up by hand. */
+export const PICKUP_RADIUS_M = 25;
+/** [pacing] Top speed (m/s) at which a passenger will climb in, and at which the tuk-tuk can refuel or U-turn. */
+export const PICKUP_MAX_SPEED = 1.5;
+/** [pacing] Game seconds a passenger takes to walk over to the tuk-tuk. */
+export const WALK_OVER_S = 20;
+/** A pump or charger this close (m) to the tuk-tuk can be used by hand. */
+export const PUMP_RADIUS_M = 30;
+/** Where a waiting passenger stands: at most this far from the road node, towards their place. */
+const KERB_OFFSET_M = 6;
 
 export type TurnIntent = 'left' | 'right';
 export type TurnKind = 'left' | 'right' | 'straight' | 'uturn';
@@ -42,6 +63,8 @@ export interface ManualControl {
   trip: number;
   tripMetres: number;
   fastMetres: number;
+  /** A passenger walking over to the tuk-tuk: the haggle starts at game time `at`. */
+  kerbside: { requestId: number; at: number } | null;
 }
 
 const controls = new WeakMap<Game, ManualControl>();
@@ -49,7 +72,7 @@ const controls = new WeakMap<Game, ManualControl>();
 export function manualControl(game: Game): ManualControl {
   let c = controls.get(game);
   if (!c) {
-    c = { on: false, vehicleId: null, throttle: false, brake: false, turn: null, trip: -1, tripMetres: 0, fastMetres: 0 };
+    c = { on: false, vehicleId: null, throttle: false, brake: false, turn: null, trip: -1, tripMetres: 0, fastMetres: 0, kerbside: null };
     controls.set(game, c);
   }
   return c;
@@ -283,6 +306,12 @@ export class ManualSystem implements GameSystem {
 
   update(game: Game): void {
     const c = controls.get(game);
+    if (c?.kerbside && game.state.time >= c.kerbside.at) {
+      const { requestId } = c.kerbside;
+      c.kerbside = null;
+      const v = game.playerVehicle();
+      if (v && v.task.kind === 'pickup' && v.task.requestId === requestId) beginKerbside(game, v, requestId);
+    }
     if (!c?.on) return;
     if (game.state.autopilot) {
       setManual(game, false);
@@ -293,4 +322,194 @@ export class ManualSystem implements GameSystem {
     if (!v) setManual(game, false);
     else if (v.id !== c.vehicleId) c.vehicleId = v.id;
   }
+}
+
+// ------------------------------------------------------------ at the kerb
+/** Where a waiting passenger stands: beside the place's road node, a few metres towards the place. */
+export function kerbPoint(game: Game, place: Place): { x: number; y: number } {
+  const g = game.world.graph;
+  const nx = g.nodeX[place.node];
+  const ny = g.nodeY[place.node];
+  const dx = place.x - nx;
+  const dy = place.y - ny;
+  const d = Math.hypot(dx, dy) || 1;
+  const off = Math.min(d, KERB_OFFSET_M);
+  return { x: nx + (dx / d) * off, y: ny + (dy / d) * off };
+}
+
+/** The nearest passenger the tuk-tuk could pick up here: in sight, not taken by another tuk-tuk, within PICKUP_RADIUS_M. */
+export function kerbsidePassenger(game: Game, v: Vehicle): RideRequest | null {
+  const pose = game.vehiclePose(v);
+  let best: RideRequest | null = null;
+  let bestD = PICKUP_RADIUS_M;
+  for (const req of game.visibleTo(v)) {
+    if (req.claimedBy !== null && req.claimedBy !== v.id) continue;
+    const place = game.place(req.from);
+    if (place.offmap) continue;
+    const k = kerbPoint(game, place);
+    const d = Math.hypot(k.x - pose.x, k.y - pose.y);
+    if (d <= bestD) {
+      bestD = d;
+      best = req;
+    }
+  }
+  return best;
+}
+
+export type PickupResult = 'walking' | 'none' | 'moving' | 'busy' | 'climb';
+
+/**
+ * Pick up the nearest waiting passenger by hand: the tuk-tuk must be within
+ * PICKUP_RADIUS_M and slower than PICKUP_MAX_SPEED. The passenger is claimed
+ * and walks over (WALK_OVER_S game seconds while the tuk-tuk waits), then the
+ * kerbside haggle starts — or a booking with a fixed fare simply boards.
+ */
+export function manualPickup(game: Game): PickupResult {
+  const v = game.playerVehicle();
+  if (!v) return 'none';
+  const kind = v.task.kind;
+  if (kind === 'trip' || kind === 'haggle' || kind === 'broken' || kind === 'away' || kind === 'offduty') return 'busy';
+  const req = kerbsidePassenger(game, v);
+  if (!req) return 'none';
+  if (v.speed >= PICKUP_MAX_SPEED) return 'moving';
+  if (climbBlocked(game, v, req)) {
+    game.notify(CLIMB_BLOCKED_TEXT, 'bad');
+    return 'climb';
+  }
+  releaseClaim(game, v);
+  const now = game.state.time;
+  req.claimedBy = v.id;
+  req.expiresAt = Math.max(req.expiresAt, now + 5 * 60);
+  v.task = { kind: 'pickup', requestId: req.id };
+  v.route = null;
+  v.routeIdx = 0;
+  v.speed = 0;
+  v.busyUntil = Math.max(v.busyUntil, now + WALK_OVER_S);
+  manualControl(game).kerbside = { requestId: req.id, at: now + WALK_OVER_S };
+  game.emit('change');
+  return 'walking';
+}
+
+/** The pump (or, for an electric tuk-tuk, the charger) within PUMP_RADIUS_M of a vehicle, if any. */
+export function pumpNearby(game: Game, v: Vehicle): Place | null {
+  const pose = game.vehiclePose(v);
+  const g = game.world.graph;
+  const ev = VEHICLE_MODELS[v.model]?.powertrain === 'ev';
+  const stations = ev ? game.chargers() : game.world.lpgStations;
+  let best: Place | null = null;
+  let bestD = PUMP_RADIUS_M;
+  for (const p of stations) {
+    const d = Math.min(Math.hypot(p.x - pose.x, p.y - pose.y), Math.hypot(g.nodeX[p.node] - pose.x, g.nodeY[p.node] - pose.y));
+    if (d <= bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+export type RefuelResult = 'filling' | 'none' | 'moving' | 'busy' | 'full';
+
+/** Fill up by hand at a pump (or charger) beside the stopped tuk-tuk. */
+export function manualRefuel(game: Game): RefuelResult {
+  const v = game.playerVehicle();
+  if (!v) return 'none';
+  const kind = v.task.kind;
+  if (kind === 'haggle' || kind === 'broken' || kind === 'away' || game.state.time < v.busyUntil) return 'busy';
+  const pump = pumpNearby(game, v);
+  if (!pump) return 'none';
+  if (v.speed >= PICKUP_MAX_SPEED) return 'moving';
+  if (v.fuel >= 0.99) return 'full';
+  const model = VEHICLE_MODELS[v.model];
+  const ev = model?.powertrain === 'ev';
+  refuel(game, v, ev ? BALANCE.fuel.evPerKm : BALANCE.fuel.lpgPerKm, model?.rangeKm ?? BALANCE.fuel.tankKm);
+  v.speed = 0;
+  if (kind === 'refuel') {
+    v.task = { kind: 'idle' };
+    v.route = null;
+  }
+  game.notify(ev ? `Charging at ${pump.name}.` : `Filling up with LPG at ${pump.name}.`, 'info');
+  game.emit('change');
+  return 'filling';
+}
+
+export type InteractResult = PickupResult | RefuelResult;
+
+/** The E key: pick up a passenger at the kerb, else fill up at a pump, else say what is missing. */
+export function manualInteract(game: Game): InteractResult {
+  const pickup = manualPickup(game);
+  if (pickup === 'walking' || pickup === 'climb') return pickup;
+  const fill = manualRefuel(game);
+  if (fill === 'filling') return fill;
+  if (pickup === 'moving' || fill === 'moving') {
+    game.notify('Slow right down and stop at the kerb first.', 'info');
+    return 'moving';
+  }
+  if (fill === 'full') {
+    game.notify('The tank is already full.', 'info');
+    return 'full';
+  }
+  if (pickup === 'busy' && game.playerVehicle()?.task.kind === 'trip') {
+    game.notify('You already have a passenger aboard.', 'info');
+    return 'busy';
+  }
+  game.notify(`Nobody waiting here. Stop within ${PICKUP_RADIUS_M} m of a waving passenger, or beside a ⛽ pump.`, 'info');
+  return 'none';
+}
+
+/** Turn round on the spot: stopped, on a two-way road. The GPS route is re-planned from the new heading. */
+export function uTurn(game: Game): boolean {
+  const v = game.playerVehicle();
+  if (!v || !isManualDriven(game, v) || v.speed >= PICKUP_MAX_SPEED || game.state.time < v.busyUntil) return false;
+  const graph = game.world.graph;
+  const back = reverseArc(v.arc);
+  if (!graph.arcValid(back)) return false;
+  v.s = Math.max(0, graph.arcLen(v.arc) - v.s);
+  v.arc = back;
+  v.speed = 0;
+  manualControl(game).turn = null;
+  if (v.route) {
+    const again = game.world.router.route({ arc: v.arc, s: v.s }, v.route.target, false);
+    if (again) {
+      v.route = again;
+      v.routeIdx = 0;
+    }
+  }
+  game.emit('uturn', v.id);
+  return true;
+}
+
+export type Driving = 'hand' | 'gps' | 'autopilot';
+
+/** Who drives the player's tuk-tuk: the player, the GPS along a route, or autopilot hunting for fares. */
+export function whoDrives(game: Game): Driving {
+  if (game.state.autopilot) return 'autopilot';
+  return manualControl(game).on ? 'hand' : 'gps';
+}
+
+/**
+ * Hand the wheel to the GPS (on) or take it back (off). The GPS follows the
+ * current route; with nowhere to go it looks for passengers by itself
+ * (autopilot). Returns who drives afterwards.
+ */
+export function setAutodrive(game: Game, on: boolean): Driving {
+  const v = game.playerVehicle();
+  if (!v) return whoDrives(game);
+  if (!on) {
+    setManual(game, true);
+    return whoDrives(game);
+  }
+  setManual(game, false);
+  const errand = v.route !== null || v.task.kind === 'trip' || v.task.kind === 'pickup' || v.task.kind === 'haggle';
+  if (!errand) {
+    game.state.autopilot = true;
+    game.emit('change');
+  }
+  return whoDrives(game);
+}
+
+/** The passenger walking over to the tuk-tuk, if any. */
+export function walkingPassenger(game: Game): RideRequest | undefined {
+  const k = controls.get(game)?.kerbside;
+  return k ? findRequest(game, k.requestId) : undefined;
 }

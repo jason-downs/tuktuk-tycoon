@@ -5,6 +5,7 @@ import { calendar } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
+import { setManual, setPedals } from '../src/sim/manual';
 import { installSystems } from '../src/sim/systems';
 import { PANEL_TOUR_GOAL, tutorialSignal, tutorialState } from '../src/sim/tutorial';
 import type { RideRequest } from '../src/sim/types';
@@ -37,23 +38,28 @@ function stepUntil(game: Game, done: () => boolean, limit = 3_600): void {
 }
 
 describe('tutorial', () => {
-  it('coaches a new game through a whole ride and the controls', () => {
+  it('coaches a new game through driving, a whole ride and the switch to managing', () => {
     const game = newGame();
     const st = () => tutorialState(game);
     expect(st().step).toBe('welcome');
     expect(st().done).toBe(false);
 
     tutorialSignal(game, { kind: 'next' });
-    expect(st().step).toBe('select');
-    tutorialSignal(game, { kind: 'select' });
-    expect(st().step).toBe('pickup');
+    expect(st().step).toBe('drive');
+    setManual(game, true);
+    setPedals(game, true, false);
+    stepUntil(game, () => st().step !== 'drive', 120);
+    expect(st().step).toBe('find');
+    setPedals(game, false, false);
+    // Let the GPS drive to the passenger.
+    setManual(game, false);
 
     const req = nearbyRequest(game);
     expect(game.playerClaim(req.id)).toBe(true);
     game.step(1);
-    expect(st().step).toBe('drive');
+    expect(st().step).toBe('approach');
 
-    stepUntil(game, () => st().step !== 'drive');
+    stepUntil(game, () => st().step !== 'approach');
     expect(st().step).toBe('haggle');
     expect(game.playerVehicle()!.task.kind).toBe('haggle');
 
@@ -67,12 +73,10 @@ describe('tutorial', () => {
     expect(st().rating).toBeGreaterThanOrEqual(1);
 
     tutorialSignal(game, { kind: 'next' });
-    expect(st().step).toBe('speed');
-    game.setSpeed(3);
-    expect(st().step).toBe('autopilot');
-
-    game.state.autopilot = true;
-    game.step(1);
+    expect(st().step).toBe('manage');
+    tutorialSignal(game, { kind: 'mode', mode: 'drive' });
+    expect(st().step).toBe('manage');
+    tutorialSignal(game, { kind: 'mode', mode: 'manage' });
     expect(st().step).toBe('panels');
 
     for (const id of ['fleet', 'fleet', 'hire', 'garage', 'business'].slice(0, PANEL_TOUR_GOAL + 1)) tutorialSignal(game, { kind: 'panel', id });
@@ -86,11 +90,11 @@ describe('tutorial', () => {
     const req = nearbyRequest(game);
     game.playerClaim(req.id);
     game.step(1);
-    expect(tutorialState(game).step).toBe('drive');
+    expect(tutorialState(game).step).toBe('approach');
     stepUntil(game, () => game.playerVehicle()!.task.kind === 'haggle');
     game.playerAbandon();
     game.step(1);
-    expect(tutorialState(game).step).toBe('select');
+    expect(tutorialState(game).step).toBe('find');
     expect(tutorialState(game).lost).toBe(true);
   });
 
@@ -109,7 +113,7 @@ describe('tutorial', () => {
     tutorialSignal(game, { kind: 'next' });
     const resumed = Game.load(world, JSON.parse(game.serialize()));
     installSystems(resumed);
-    expect(tutorialState(resumed).step).toBe('select');
+    expect(tutorialState(resumed).step).toBe('drive');
 
     const old = JSON.parse(game.serialize());
     delete old.systems.tutorial;

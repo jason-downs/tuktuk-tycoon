@@ -223,9 +223,11 @@ export class DemandSystem {
     if (!this.cache || this.cache.minute !== minute) {
       const places = game.world.places;
       const weights = this.cache?.weights ?? new Float64Array(places.length);
+      // Weighed at the start of the minute, so a game loaded mid-minute draws the same passengers.
+      const atMinute = calendar(minute * 60);
       let total = 0;
       for (let i = 0; i < places.length; i++) {
-        const w = originWeight(game, places[i], cal);
+        const w = originWeight(game, places[i], atMinute);
         weights[i] = w;
         total += w;
       }

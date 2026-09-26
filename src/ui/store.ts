@@ -1,4 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
+import { DRIVE_PACES, DRIVE_TIME_SCALE, type PlayMode } from '../sim/driveClock';
 import type { Game } from '../sim/game';
 
 /** UI-only state shared by the map view and React panels (not saved). */
@@ -14,9 +15,39 @@ export interface UIState {
   haggle: { vehicleId: number; requestId: number } | null;
   /** Modal dialog id (menu, help, new game…), or null. */
   modal: string | null;
+  /** Drive: you steer your own tuk-tuk with a chase camera. Manage: your tuk-tuk drives itself and the speed buttons rule. */
+  mode: PlayMode;
+  /** The flat city-map planner is shown instead of the 3D view. */
+  planner: boolean;
+  /** Game seconds per real second while you steer by hand (the "Driving pace" setting). */
+  drivePace: number;
+  /** The last toot of your horn: performance.now() and where (sim metres). Waiting passengers nearby wave harder. */
+  horn: { at: number; x: number; y: number } | null;
 }
 
 type Listener = () => void;
+
+const PACE_KEY = 'tuktuk-drive-pace';
+
+/** The saved "Driving pace" setting, or the default when storage is empty or unavailable. */
+export function loadDrivePace(): number {
+  try {
+    const v = Number(localStorage.getItem(PACE_KEY));
+    return (DRIVE_PACES as readonly number[]).includes(v) ? v : DRIVE_TIME_SCALE;
+  } catch {
+    return DRIVE_TIME_SCALE;
+  }
+}
+
+/** Change the "Driving pace" setting and remember it in this browser. */
+export function setDrivePace(pace: number): void {
+  ui.set({ drivePace: pace });
+  try {
+    localStorage.setItem(PACE_KEY, String(pace));
+  } catch {
+    /* storage unavailable: the setting lasts for this session only */
+  }
+}
 
 export class Store<T extends object> {
   private state: T;
@@ -50,6 +81,10 @@ export const ui = new Store<UIState>({
   panel: null,
   haggle: null,
   modal: null,
+  mode: 'drive',
+  planner: false,
+  drivePace: loadDrivePace(),
+  horn: null,
 });
 
 export function useUI<T>(select: (s: UIState) => T): T {

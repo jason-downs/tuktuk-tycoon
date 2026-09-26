@@ -465,6 +465,52 @@ function buildGraph(roads, landmarks) {
   return { origin: ORIGIN, classes: CLASSES, names: full.names, nodes, edges: outEdges, portals: portalsOut, offmap };
 }
 
+// ----------------------------------------------------------------- signals
+/** An OSM traffic-signal node this close (m) to a junction controls that junction. */
+const SIGNAL_SNAP_M = 35;
+/** Extra metres charged to junctions of service lanes and living streets, so a signal snaps to the public road. */
+const SIGNAL_MINOR_PENALTY_M = 15;
+
+/**
+ * Graph nodes controlled by traffic signals, ascending. OSM maps a signal on
+ * the junction node itself or on each approach a few metres out; each one is
+ * snapped to the nearest junction (three or more roads meet) within
+ * SIGNAL_SNAP_M.
+ */
+function signalNodes(furniture, graph) {
+  const n = graph.nodes.length / 2;
+  const neighbours = Array.from({ length: n }, () => new Set());
+  const bestCls = new Uint8Array(n).fill(255);
+  for (const [a, b, cls, , , , , , virtual] of graph.edges) {
+    if (virtual) continue;
+    neighbours[a].add(b);
+    neighbours[b].add(a);
+    bestCls[a] = Math.min(bestCls[a], cls);
+    bestCls[b] = Math.min(bestCls[b], cls);
+  }
+  const minor = CLASSES.indexOf('living_street');
+  const junctions = [];
+  for (let i = 0; i < n; i++) if (neighbours[i].size >= 3) junctions.push(i);
+  const out = new Set();
+  for (const el of furniture.elements) {
+    if (el.type !== 'node' || el.tags?.highway !== 'traffic_signals') continue;
+    const [x, y] = toXY(el.lon, el.lat);
+    let best = -1;
+    let bestD = SIGNAL_SNAP_M;
+    for (const j of junctions) {
+      const d = Math.hypot(graph.nodes[2 * j] - x, graph.nodes[2 * j + 1] - y) + (bestCls[j] >= minor ? SIGNAL_MINOR_PENALTY_M : 0);
+      if (d < bestD) {
+        bestD = d;
+        best = j;
+      }
+    }
+    if (best >= 0) out.add(best);
+  }
+  const signals = [...out].sort((a, b) => a - b);
+  console.log(`signals: ${signals.length} junction nodes from OSM traffic_signals`);
+  return signals;
+}
+
 function roadsGeoJSON(roads) {
   const features = [];
   for (const w of roads.elements) {
@@ -672,6 +718,8 @@ const roads = await loadRaw('roads');
 if (!roads) throw new Error('roads extract is required');
 const landmarks = JSON.parse(await readFile(new URL('../src/content/landmarks.json', import.meta.url), 'utf8'));
 const graph = buildGraph(roads, landmarks);
+const furniture = await loadRaw('furniture');
+graph.signals = furniture ? signalNodes(furniture, graph) : [];
 await write('graph.json', graph);
 await write('roads.geojson', roadsGeoJSON(roads));
 
