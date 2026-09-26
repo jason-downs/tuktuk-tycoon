@@ -1,5 +1,7 @@
 // Shape of public/data/city3d.json (written by scripts/build-city3d.mjs).
-// Coordinates are integer decimetres in sim space (x east, y north).
+// Coordinates are integer decimetres in sim space (x east, y north). Polygon
+// rings are clockwise (holes counter-clockwise) and do not repeat the first
+// vertex.
 
 export interface CityRoads {
   /** x0,y0,x1,y1,… decimetres. */
@@ -17,6 +19,17 @@ export interface CityArea {
   n?: number;
   /** Index into the temple-ground list for temple areas. */
   ti?: number;
+  /** OSM id (temple, worship, market, retail and plaza areas). */
+  id?: number;
+  /** String index of the religion tag (temple and worship areas). */
+  rel?: number;
+}
+
+/** City-wall remnant, gate tower or bastion footprint (closed ring, same orientation as other baked rings). */
+export interface CityWall {
+  r: number[];
+  id: number;
+  n?: number;
 }
 
 export interface CityLine {
@@ -73,6 +86,7 @@ export interface CityData {
   roads: CityRoads;
   areas: CityArea[];
   lines: CityLine[];
+  cityWalls?: CityWall[];
   buildings: CityBuilding[];
   /** x,y dm, speciesIdx triples. */
   trees: number[];
