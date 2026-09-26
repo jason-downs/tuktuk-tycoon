@@ -8,6 +8,7 @@ import { HOUR } from './clock';
 import { completeTrip, findRequest, measureRequest, refuel, startTrip } from './dispatch';
 import { spend } from './economy';
 import type { Game } from './game';
+import { driveManual, isManualDriven } from './manual';
 import { driveVehicle } from './movement';
 import type { Vehicle } from './types';
 
@@ -26,8 +27,9 @@ export class VehicleSystem {
         continue;
       }
       if (v.task.kind === 'offduty' || v.task.kind === 'haggle') continue;
-      const wasMoving = v.route !== null && game.state.time >= v.busyUntil;
-      if (driveVehicle(game, v, dt)) this.arrive(game, v);
+      const manual = isManualDriven(game, v);
+      const wasMoving = (manual ? v.speed > 0.5 : v.route !== null) && game.state.time >= v.busyUntil;
+      if (manual ? driveManual(game, v, dt) : driveVehicle(game, v, dt)) this.arrive(game, v);
       if (wasMoving) this.rollBreakdown(game, v, dt);
     }
   }

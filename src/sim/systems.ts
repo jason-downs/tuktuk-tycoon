@@ -1,4 +1,6 @@
 import type { Game } from './game';
+import { ManualSystem } from './manual';
+import { TutorialSystem } from './tutorial';
 
 /**
  * Registers the optional simulation systems (calendar events, weather,
@@ -6,5 +8,6 @@ import type { Game } from './game';
  * under game.state.systems[<id>].
  */
 export function installSystems(game: Game): void {
-  void game;
+  game.addSystem(new TutorialSystem());
+  game.addSystem(new ManualSystem());
 }

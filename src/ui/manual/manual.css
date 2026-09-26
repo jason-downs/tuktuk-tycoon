@@ -1,0 +1,113 @@
+/* Manual driving: status on the player card and the touch pad (ManualDrive.tsx). */
+.manual-status {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(232, 185, 35, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.manual-speed {
+  font-size: 13px;
+}
+.manual-speed b {
+  font-family: var(--font-head);
+  font-size: 22px;
+  color: var(--gold-2);
+  font-variant-numeric: tabular-nums;
+}
+.manual-next {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.manual-arrow {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--cream);
+  font-size: 15px;
+}
+.manual-next.from-turn .manual-arrow {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.manual-next.from-route .manual-arrow {
+  border-color: var(--pink);
+  color: var(--pink);
+}
+.manual-next.from-arrive .manual-arrow {
+  border-color: var(--green);
+}
+.manual-keys {
+  color: var(--cream-2);
+}
+.manual-keys kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--teak-3);
+  font-family: var(--font-body);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Touch pad: only on touch screens, where there is no keyboard. */
+.manual-pad {
+  position: absolute;
+  right: 12px;
+  bottom: 50%;
+  transform: translateY(50%);
+  z-index: 11;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(43, 29, 18, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pad-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pad-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--teak-3);
+  color: var(--cream);
+  font-size: 20px;
+  cursor: pointer;
+  touch-action: none;
+}
+.pad-btn.on {
+  background: var(--gold);
+  color: var(--teak);
+  border-color: var(--gold);
+}
+@media (pointer: coarse) {
+  .manual-pad {
+    display: flex;
+  }
+  .manual-keys {
+    display: none;
+  }
+}

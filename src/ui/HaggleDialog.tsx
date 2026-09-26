@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ARCHETYPES } from '../content/archetypes';
+import { spokenName } from '../content/dialogue';
 import type { QuoteOutcome } from '../sim/dispatch';
 import type { Game } from '../sim/game';
 import { baht, km } from './format';
+import { SpeechLine } from './SpeechLine';
 import { ui, useUI } from './store';
 
 const PRESETS = [
@@ -34,6 +36,7 @@ export function HaggleDialog({ game }: { game: Game }) {
   const info = ARCHETYPES[req.archetype];
   const from = game.place(req.from);
   const to = game.place(req.to);
+  const names = [from.name, to.name, spokenName(from), spokenName(to)];
   const ratio = req.fairFare ? fare / req.fairFare : 1;
   const close = () => ui.set({ haggle: null });
 
@@ -81,7 +84,7 @@ export function HaggleDialog({ game }: { game: Game }) {
               {info.label}
               {req.party > 1 ? ` · party of ${req.party}` : ''}
             </div>
-            <div className="quote-line">“{req.line}”</div>
+            <SpeechLine line={req.line} protect={names} />
           </div>
         </div>
         <div className="trip-summary">
@@ -95,7 +98,7 @@ export function HaggleDialog({ game }: { game: Game }) {
 
         {outcome ? (
           <div className={`outcome outcome-${outcome.kind}`}>
-            <div className="bubble">{outcome.line}</div>
+            <SpeechLine line={outcome.line} protect={names} className="bubble" quotes={false} />
             {outcome.kind === 'counter' && (
               <div className="row">
                 <button className="btn primary" onClick={takeCounter}>

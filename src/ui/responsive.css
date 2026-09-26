@@ -1,0 +1,221 @@
+/*
+ * Layout that scales from wide desktops to 390 px phones (App.tsx). With all
+ * seven panels, a one-row top bar needs ~1,490 px with tab labels and ~960 px
+ * with icon-only tabs, hence the breakpoints:
+ * - ≤1500 px: panel tabs show icons only (the title is the tooltip).
+ * - ≤1250 px: the brand shows the logo only.
+ * - ≤1080 px: the tabs take a second row, and the cards and panel move down.
+ * - ≤600 px: two compact rows, cards as a bottom sheet, 40 px touch targets.
+ * Rules are scoped under .app so they outrank styles.css, which loads later.
+ */
+
+.app .btn.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.app .topbar .menu {
+  align-items: center;
+}
+
+@media (max-width: 1500px) {
+  .app .panels-nav .tab-label {
+    display: none;
+  }
+  .app .btn.tab {
+    min-width: 38px;
+    justify-content: center;
+    padding: 5px 8px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1250px) {
+  .app .topbar {
+    gap: 10px;
+  }
+  .app .brand > div {
+    display: none;
+  }
+}
+
+@media (max-width: 1080px) {
+  .app .topbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .app .panels-nav {
+    order: 10;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .app .panels-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .app .topbar .menu {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 1080px) and (min-width: 901px) {
+  .app .left-stack {
+    top: 124px;
+    max-height: calc(100% - 134px);
+  }
+  .app .panel {
+    top: 124px;
+  }
+}
+
+/* ---------------------------------------------------------------- phones */
+@media (max-width: 600px) {
+  .app .topbar {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    padding: 6px 8px;
+    gap: 6px 8px;
+  }
+  .app .brand {
+    display: none;
+  }
+  .app .stat {
+    font-size: 15px;
+  }
+  .app .stat.cash {
+    order: 1;
+    font-size: 17px;
+  }
+  .app .topbar > .stat:not(.cash):not(.clock) {
+    order: 2;
+  }
+  .app .stat.clock {
+    order: 3;
+  }
+  .app .stat.clock .small {
+    display: none;
+  }
+  .app .topbar .menu {
+    order: 4;
+    margin-left: auto;
+    gap: 3px;
+  }
+  .app .topbar .speed {
+    order: 5;
+  }
+  .app .panels-nav {
+    order: 6;
+    flex: 1 1 120px;
+    width: auto;
+    min-width: 0;
+  }
+  .app .topbar .btn.tiny,
+  .app .btn.tab {
+    min-height: 40px;
+    min-width: 34px;
+    padding: 4px 6px;
+  }
+  .app .topbar .menu .btn.tiny {
+    min-width: 38px;
+    font-size: 15px;
+  }
+
+  .app .panel {
+    top: 112px;
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    width: auto;
+  }
+
+  .app .left-stack {
+    top: auto;
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    width: auto;
+    max-height: 48%;
+    gap: 6px;
+  }
+  .app .card {
+    padding: 10px 12px;
+  }
+  .app .card.player > .hint {
+    display: none;
+  }
+
+  .app .toasts {
+    width: calc(100% - 20px);
+  }
+
+  /* Dialogs become bottom sheets, leaving the top bar visible. */
+  .app .modal-backdrop {
+    align-items: flex-end;
+  }
+  .app .dialog {
+    width: 100%;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+    max-height: calc(100% - 60px);
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+  }
+  .app .dialog.help {
+    padding: 0;
+  }
+  .app .dialog.haggle .avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 28px;
+  }
+  .app .presets {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .app .fare-picker {
+    gap: 10px;
+  }
+  .app .fare-value {
+    font-size: 32px;
+    min-width: 130px;
+  }
+}
+
+/* ---------------------------------------------------------------- touch */
+@media (max-width: 600px), (pointer: coarse) {
+  .app .left-stack .btn,
+  .app .dialog.haggle .btn {
+    min-height: 40px;
+  }
+  .app .left-stack .btn.tiny {
+    min-width: 40px;
+    font-size: 14px;
+  }
+  .app .left-stack .toggle {
+    min-height: 40px;
+  }
+  .app .left-stack .toggle input {
+    width: 20px;
+    height: 20px;
+  }
+  .app .trip-summary .link {
+    padding: 6px 0;
+  }
+  .app .chip {
+    min-height: 48px;
+    font-size: 12.5px;
+  }
+  .app .btn.round {
+    width: 48px;
+    height: 48px;
+  }
+  .app .slider {
+    height: 32px;
+  }
+  .app .dialog.haggle .row .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}

@@ -86,15 +86,19 @@ export function driveVehicle(game: Game, v: Vehicle, dt: number): boolean {
       v.s = 0;
     }
   }
-  const km = (moved - dist) / 1000;
-  v.odometer += km;
-  const model = VEHICLE_MODELS[v.model];
-  v.fuel = Math.max(0, v.fuel - km / (model?.rangeKm ?? BALANCE.fuel.tankKm));
-  v.condition = Math.max(0, v.condition - km * BALANCE.upkeep.wearPerKm);
-  game.state.stats.distance += km;
+  accountDistance(game, v, (moved - dist) / 1000);
   if (arrived) {
     v.route = null;
     v.speed = 0;
   }
   return arrived;
+}
+
+/** Odometer, fuel, wear and company mileage for km driven (GPS or manual). */
+export function accountDistance(game: Game, v: Vehicle, km: number): void {
+  v.odometer += km;
+  const model = VEHICLE_MODELS[v.model];
+  v.fuel = Math.max(0, v.fuel - km / (model?.rangeKm ?? BALANCE.fuel.tankKm));
+  v.condition = Math.max(0, v.condition - km * BALANCE.upkeep.wearPerKm);
+  game.state.stats.distance += km;
 }

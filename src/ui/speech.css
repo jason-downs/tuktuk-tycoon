@@ -1,0 +1,59 @@
+/* Glossed Thai / Kham Mueang words and narration lines (SpeechLine.tsx). */
+.gloss {
+  position: relative;
+  border-bottom: 1px dotted var(--gold);
+  cursor: help;
+  outline: none;
+  font-style: inherit;
+}
+.gloss:hover::after,
+.gloss:focus::after {
+  content: attr(data-gloss);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--teak);
+  box-shadow: 0 6px 18px rgba(20, 10, 0, 0.35);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+  pointer-events: none;
+}
+.gloss:focus-visible {
+  border-bottom-style: solid;
+}
+.outcome .bubble .gloss {
+  border-bottom-color: var(--teak-3);
+}
+.outcome .bubble .gloss:hover::after,
+.outcome .bubble .gloss:focus::after {
+  background: var(--teak);
+  color: var(--cream);
+}
+.quote-line.narration {
+  font-style: italic;
+  color: var(--cream-2);
+}
+.outcome .bubble.narration {
+  color: var(--teak);
+  font-weight: 500;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

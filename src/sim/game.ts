@@ -1,4 +1,5 @@
 import { VEHICLE_UPGRADES } from '../content/upgrades';
+import { VEHICLE_MODELS } from '../content/vehicles';
 import type { World } from '../data/world';
 import { FleetAI } from './ai';
 import { BALANCE } from './balance';
@@ -35,6 +36,8 @@ type Listener = (payload: any) => void;
 const MAX_STEP = 4;
 /** Start: the Tha Phae Gate rank, where Lung Daeng keeps his tuk-tuks. */
 const START_LANDMARK = 'tha_phae_gate';
+/** A drive-to point this close to an LPG pump (metres) means "go and fill up there". */
+const PUMP_CLICK_M = 60;
 
 export interface NewGameOptions {
   seed?: number;
@@ -397,15 +400,17 @@ export class Game {
     return findRequest(this, v.task.requestId);
   }
 
-  /** Drive the player's tuk-tuk to the road nearest a map point. */
+  /** Drive the player's tuk-tuk to the road nearest a map point; at an LPG pump, fill up. */
   playerDriveTo(x: number, y: number): boolean {
     const v = this.playerVehicle();
     if (!v || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken') return false;
     const node = this.world.graph.nearestNode(x, y, 400);
     if (node < 0) return false;
+    const lpg = VEHICLE_MODELS[v.model]?.powertrain !== 'ev';
+    const pump = lpg ? this.world.lpgStations.find((p) => Math.hypot(p.x - x, p.y - y) < PUMP_CLICK_M) : undefined;
     releaseClaim(this, v);
-    if (!sendTo(this, v, node)) return false;
-    v.task = { kind: 'cruise', place: -1 };
+    if (!sendTo(this, v, pump ? pump.node : node)) return false;
+    v.task = pump ? { kind: 'refuel', place: pump.idx } : { kind: 'cruise', place: -1 };
     return true;
   }
 

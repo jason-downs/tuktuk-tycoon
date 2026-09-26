@@ -1,0 +1,35 @@
+/* Top-bar sound button and popover (SoundControls.tsx). */
+.sound-controls {
+  position: relative;
+}
+.sound-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 15;
+  width: 230px;
+  padding: 10px 12px 12px;
+  background: var(--teak);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.sound-volume {
+  display: grid;
+  grid-template-columns: auto 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.sound-volume input {
+  width: 100%;
+  accent-color: var(--gold);
+  min-height: 28px;
+}
+.sound-volume .small:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sound-popover .btn.wide {
+  margin-top: 10px;
+}
