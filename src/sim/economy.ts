@@ -103,7 +103,7 @@ export class EconomySystem {
         else if (d.vehicleId !== null) earn(game, d.dailyPay, 'rent_income');
         d.earnedToday = 0;
       }
-      for (const d of state.drivers) d.fatigue = Math.max(0, d.fatigue - 60);
+      for (const d of state.drivers) d.fatigue = Math.max(0, d.fatigue - BALANCE.fatigue.overnightRecovery);
       game.emit('day', currentBook(game));
     } finally {
       settlingDay.delete(game);

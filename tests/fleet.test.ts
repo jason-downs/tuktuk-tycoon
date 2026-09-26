@@ -129,24 +129,26 @@ describe('vehicle market', () => {
     expect(whyCantSell(game, game.playerVehicle()!)).toMatch(/Lung Daeng/);
   });
 
-  it('hire-purchase: 25 % down, daily instalments at 04:00, owned once paid off', () => {
+  it('hire-purchase: a deposit, daily instalments at 04:00, owned once paid off', () => {
     const game = newGame(11, 60_000);
+    const { downShare, markup, days } = FLEET.lease;
     const terms = leaseTerms(200_000);
-    expect(terms.down).toBe(50_000);
-    expect(terms.financed).toBe(172_500);
-    expect(terms.instalment).toBe(Math.ceil(172_500 / 120));
+    expect(terms.down).toBe(Math.round(200_000 * downShare));
+    expect(terms.financed).toBe(Math.round((200_000 - terms.down) * markup));
+    expect(terms.instalment).toBe(Math.ceil(terms.financed / days));
+    expect(terms.total).toBe(terms.down + terms.financed);
 
     const cash = game.state.cash;
     const v = buyVehicle(game, 'lpg_used', 'lease')!;
     expect(v.ownership).toBe('leased');
-    expect(game.state.cash).toBe(cash - 50_000);
+    expect(game.state.cash).toBe(cash - terms.down);
     expect(whyCantSell(game, v)).toMatch(/pay it off/);
 
     const book = jumpPastSettlement(game);
     const lease = fleetState(game).leases[v.id];
     expect(book.expense.vehicles).toBe(terms.instalment);
     expect(lease.remaining).toBe(terms.financed - terms.instalment);
-    expect(lease.daysLeft).toBe(119);
+    expect(lease.daysLeft).toBe(days - 1);
 
     // The last instalment is only what is left, and the vehicle becomes the player's.
     lease.remaining = 500;

@@ -70,6 +70,25 @@ export const BALANCE = {
     /** Road distance ≈ straight line × detour factor (estimate before routing). */
     detourFactor: 1.3,
   },
+  fatigue: {
+    /**
+     * [pacing] Fatigue (0–100) a ride adds to its driver: a fixed part, plus a part per km with the passenger that
+     * stamina softens (× (1 − stamina / 200)). A hired driver ends a 12-hour day shift of ~55 rides near 50 (60 on
+     * the busiest days), below the tired and exhausted marks in fleet.ts, so the day shift can be worked every day.
+     */
+    perRide: 0.4,
+    perKm: 0.2,
+    /** [pacing] Rides that end from nightFrom to nightTo (clock hours) tire the driver this much more. */
+    nightFactor: 1.75,
+    nightFrom: 22,
+    nightTo: 5,
+    /**
+     * [pacing] Fatigue shed at the 04:00 settlement. It clears a day shift; a long (07–23) or night shift ends higher
+     * and carries the rest into the next day, so those drivers are sent home exhausted on about half (long) or a third
+     * (night) of their days.
+     */
+    overnightRecovery: 60,
+  },
   rating: {
     start: 4.2,
     /** Ratings kept for the rolling reputation average. */

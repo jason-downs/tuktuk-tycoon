@@ -3,11 +3,13 @@
 // driver applicants, hiring and firing, and the daily morale, fatigue and
 // quitting of hired drivers. State lives in game.state.systems.fleet.
 
+import { RANKS } from '../content/business';
 import { DRIVER_ROSTER, QUIT_LINES, type DriverSkill, type RosterDriver } from '../content/drivers';
 import { RENTAL_NAMES, TUKTUK_NAMES } from '../content/tuktukNames';
 import { VEHICLE_MODELS, type VehicleModel } from '../content/vehicles';
 import { ZONES } from '../content/zones';
 import { BALANCE } from './balance';
+import { currentRank } from './business';
 import { DAY, HOUR } from './clock';
 import { inRide, releaseClaim, type TripResult } from './dispatch';
 import { businessDay, canAfford, earn, spend } from './economy';
@@ -25,14 +27,16 @@ export const FLEET = {
   /**
    * Idle owners around town rent out their plated tuk-tuks. [research] economics.md §9: ~1,040 for-hire tuk-tuks
    * are registered in Chiang Mai (DLT, Aug 2026) but only ~100 work the streets (TCIJ 2024), so most sit idle.
-   * They rent only to an operator with a hired driver; the day rate and the cap are [pacing].
+   * They rent only to an operator with a hired driver, and how many depends on the company's rank (RANKS
+   * ownerRentals); the day rate is [pacing].
    */
-  owners: { rentPerDay: 400, max: 12, model: 'lpg_used' },
+  owners: { rentPerDay: 400, model: 'lpg_used' },
   /**
-   * [pacing] Hire-purchase: 25 % down, the rest plus 15 % repaid daily over 120 game days. The real 2015 Bangkok
-   * offer in economics.md §4 was 50,000 down + ~11,000/month × 60 months.
+   * [pacing] Hire-purchase: 15 % down, the rest plus 15 % repaid daily over 120 game days. The real 2015 Bangkok
+   * offer in economics.md §4 was 50,000 down + ~11,000/month × 60 months. The small deposit puts a first tuk-tuk of
+   * your own within reach of a driver with three hired hands, about two game days after the first hire.
    */
-  lease: { downShare: 0.25, markup: 1.15, days: 120 },
+  lease: { downShare: 0.15, markup: 1.15, days: 120 },
   /** [research] economics.md "Suggested game numbers": resale 60 % of purchase, falling 5 % a year. */
   resale: { share: 0.6, perYear: 0.05 },
   /** [research] economics.md "Hiring and fleet": hiring fee 1,000. */
@@ -405,10 +409,21 @@ export function rentedFrom(game: Game, source: RentalSource): number {
   return game.state.vehicles.filter((v) => v.ownership === 'rented' && (v.lessor ?? 'lung_daeng') === source).length;
 }
 
+/** Tuk-tuks idle owners will rent to the company at its current rank. */
+export function ownerRentalCap(game: Game): number {
+  return RANKS[currentRank(game)].ownerRentals;
+}
+
 export function whyCantRent(game: Game, source: RentalSource = 'lung_daeng'): string | null {
   if (source === 'owner') {
     if (hiredDrivers(game).length === 0) return 'Owners only rent to an operator with a hired driver on the books.';
-    if (rentedFrom(game, 'owner') >= FLEET.owners.max) return `You already rent ${FLEET.owners.max} tuk-tuks from owners around town.`;
+    const cap = ownerRentalCap(game);
+    if (rentedFrom(game, 'owner') >= cap) {
+      const rank = currentRank(game);
+      const next = RANKS[rank + 1];
+      const more = next ? ` As ${next.name} you can rent ${next.ownerRentals} — or buy your own.` : '';
+      return `Owners rent ${cap === 1 ? 'one tuk-tuk' : `${cap} tuk-tuks`} to a company of your rank (${RANKS[rank].name}), and you have ${cap === 1 ? 'it' : 'them all'}.${more}`;
+    }
     if (!canAfford(game, FLEET.owners.rentPerDay)) return `The owner wants to see ${thb(FLEET.owners.rentPerDay)} before handing over the keys.`;
     return null;
   }
@@ -496,7 +511,7 @@ export function whyCantBuy(game: Game, modelId: string, mode: BuyMode): string |
   return null;
 }
 
-/** Buy a model outright, or on hire-purchase (25 % down, daily instalments at 04:00). */
+/** Buy a model outright, or on hire-purchase (a deposit, then daily instalments at 04:00; see FLEET.lease). */
 export function buyVehicle(game: Game, modelId: string, mode: BuyMode = 'cash'): Vehicle | null {
   const reason = whyCantBuy(game, modelId, mode);
   if (reason) {

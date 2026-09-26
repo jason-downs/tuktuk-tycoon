@@ -16,16 +16,25 @@
 
 | Milestone | Target (real time, typical player) |
 |---|---|
-| First ride completed | < 1 min |
+| First ride completed | 3–4 min, driving by hand (a hand-driven ride takes about 3 real minutes, `docs/plan-3d.md`) |
 | First cheap upgrade (garland, cushions, phone mount) | 3–6 min |
 | First hired driver (in a second rented tuk-tuk) | 10–20 min |
 | First owned tuk-tuk | 25–45 min |
 | 5 tuk-tuks | ~1 h (using 2–4× speed) |
 | 20+ tuk-tuks, depots, contracts | 2–3 h |
 
-Real tuk-tuks pay for themselves in more than a year, so capital prices stay realistic while a game day holds many
-more rides than a real one. Hire-purchase and renting make early growth possible. Balance is checked with headless
-simulations (`tests/`).
+The typical player drives by hand until drivers will join (five rides, ~15 min), then manages at 2–4×. Lung Daeng's
+three tuk-tuks and the one an idle owner rents a lone driver make four, so the fifth is the first one bought on
+hire-purchase (~40 min); after that each company rank lets owners rent more (3, 6, 12, 20), and the fleet grows in
+steps — buy to meet the next rank, save the net worth it asks for, fill its rentals — to about 10 tuk-tuks at 1½ h,
+20 at 2 h, 30 at 3 h and 40 by 4½ h.
+
+A hired driver on the day shift works all 12 hours (~55 rides) and nets the company ~฿3,500 a day in a rented
+tuk-tuk, ~฿2,300 while it is on hire-purchase and ~฿3,900 once it is paid off; long and night shifts carry fatigue into
+the next day. Past five tuk-tuks the player's own tuk-tuk earns under a third of the company's takings. Real tuk-tuks
+pay for themselves in more than a year, so capital prices stay realistic while a game day holds many more rides than a
+real one. Balance is checked with headless simulations: `tests/balance.test.ts` plays this typical player and asserts
+the targets.
 
 ## What exists (foundation)
 
@@ -97,7 +106,9 @@ simulations (`tests/`).
 - **A. Fleet (vehicles, drivers, hiring)**:
   - Vehicle market:
     - Rent more of Lung Daeng's tuk-tuks: at most 3, ฿350/day each, rusty model.
-    - Buy the models in `content/vehicles.ts`, or take hire-purchase: 25 % down, daily instalments.
+    - Rent idle owners' plated tuk-tuks at ฿400/day: one for a lone driver, more as the company's rank grows
+      (`RANKS` ownerRentals).
+    - Buy the models in `content/vehicles.ts`, or take hire-purchase: 15 % down, daily instalments.
     - Sell for 60 % of purchase price, falling 5 %/year.
   - EV plate rule: Chiang Mai EV quota plates are one per person (economics.md §6), so EVs ≤ registered people.
   - Drivers:

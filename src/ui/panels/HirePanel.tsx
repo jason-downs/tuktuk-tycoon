@@ -2,10 +2,12 @@
 // dealer's showroom (buy outright or on hire-purchase).
 
 import { useState, useSyncExternalStore } from 'react';
+import { RANKS } from '../../content/business';
 import { DRIVER_ROSTER } from '../../content/drivers';
 import { VEHICLE_MODELS, type VehicleModel } from '../../content/vehicles';
 import { ZONES } from '../../content/zones';
 import { BALANCE } from '../../sim/balance';
+import { currentRank } from '../../sim/business';
 import {
   FLEET,
   MARKET_MODELS,
@@ -16,6 +18,7 @@ import {
   freeVehicles,
   hireCandidate,
   leaseTerms,
+  ownerRentalCap,
   rentVehicle,
   rentedCount,
   rentedFrom,
@@ -235,8 +238,8 @@ function OwnerRentCard({ game }: { game: Game }) {
       </p>
       <ModelChips model={model} rented />
       <p className="fl-note">
-        Plated, in decent shape, no deposit. Needs a hired driver on your books. You rent {rentedFrom(game, 'owner')} of up
-        to {FLEET.owners.max}.
+        Plated, in decent shape, no deposit. Needs a hired driver on your books. Owners rent more to a bigger company:{' '}
+        {ownerRentalCap(game)} at your rank ({RANKS[currentRank(game)].name}), and you rent {rentedFrom(game, 'owner')}.
       </p>
       <div className="fl-actions">
         <button className="btn primary" disabled={!!why} onClick={() => rentVehicle(game, 'owner')}>

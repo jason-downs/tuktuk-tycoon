@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { RANKS } from '../src/content/business';
 import { GOALS } from '../src/content/goals';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { openDepot, partnerHotel, startService, takeLoan } from '../src/sim/business';
@@ -33,7 +34,7 @@ function newGame(): Game {
   return game;
 }
 
-/** A Fleet boss company with a hired driver in each extra tuk-tuk. */
+/** A Fleet boss company: three owned tuk-tuks with a hired driver each, and rented ones parked to make up the fleet. */
 function fleetBoss(): Game {
   const game = newGame();
   const at = world.landmarks.find((l) => l.id === 'tha_phae_gate')!.node;
@@ -43,6 +44,7 @@ function fleetBoss(): Game {
     game.state.drivers.push(d);
     v.driverId = d.id;
   }
+  while (game.state.vehicles.length < RANKS[2].minFleet) game.spawnVehicle('lpg_used', at, { ownership: 'rented' });
   game.state.ratings = [4.6];
   game.state.reputation = 4.6;
   game.state.cash = 400_000;
