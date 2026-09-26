@@ -21,10 +21,12 @@ import {
   PICKUP_RADIUS_M,
   WALK_OVER_S,
   kerbPoint,
+  kerbsidePassenger,
   manualControl,
   manualInteract,
   manualPickup,
   manualRefuel,
+  pumpNearby,
   setAutodrive,
   setManual,
   setPedals,
@@ -231,6 +233,11 @@ describe('picking up by hand', () => {
     const four = waitingAt(game, place);
     four.party = 4;
     parkBefore(v, place.node);
+    // Rolling past, the first thing to do is stop.
+    v.speed = 5;
+    expect(manualInteract(game)).toBe('moving');
+    expect(game.state.notices.at(-1)!.text).toBe('Slow right down and stop at the kerb first.');
+    v.speed = 0;
     expect(manualInteract(game)).toBe('seats');
     expect(game.state.notices.at(-1)!.text).toBe('A party of 4 won’t fit in a 3-seat tuk-tuk.');
     expect(four.claimedBy).toBeNull();
@@ -263,6 +270,34 @@ describe('picking up by hand', () => {
     expect(haggle).toEqual({ vehicleId: v.id, requestId: req.id });
     expect(loaded.playerVehicle()!.task.kind).toBe('haggle');
     expect(loaded.isPaused('haggle')).toBe(true);
+  });
+
+  it('fills up at a pump with a party too big to carry waiting beside it, as the prompt says', () => {
+    const game = newGame();
+    const v = game.playerVehicle()!;
+    setManual(game, true);
+    // A pump with a place's kerb in reach of a tuk-tuk stopped at it.
+    let crowdAt: Place | undefined;
+    const pump = world.lpgStations.find((s) => {
+      parkBefore(v, s.node, 1);
+      const pose = game.vehiclePose(v);
+      crowdAt = world.places.find((p) => {
+        const k = kerbPoint(game, p);
+        return !p.offmap && !p.lpg && Math.hypot(k.x - pose.x, k.y - pose.y) < PICKUP_RADIUS_M - 5;
+      });
+      return !!crowdAt;
+    });
+    expect(pump).toBeDefined();
+    const four = waitingAt(game, crowdAt!);
+    four.party = 4;
+    v.fuel = 0.4;
+    // The drive HUD offers "E  fill up": nobody it could pick up, a pump beside it.
+    expect(kerbsidePassenger(game, v)).toBeNull();
+    expect(kerbsidePassenger(game, v, true)).toBe(four);
+    expect(pumpNearby(game, v)).not.toBeNull();
+    expect(manualInteract(game)).toBe('filling');
+    expect(v.fuel).toBe(1);
+    expect(four.claimedBy).toBeNull();
   });
 
   it('fills up when stopped beside a pump', () => {

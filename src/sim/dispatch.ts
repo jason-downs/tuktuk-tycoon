@@ -52,12 +52,16 @@ export function partyTooBigText(v: Vehicle, req: RideRequest): string {
   return `A party of ${req.party} won’t fit in a ${seatsIn(v)}-seat tuk-tuk.`;
 }
 
+/** The vehicle could take this passenger: it is free of rides and repairs, seats the whole party and can make any climb. */
+export function couldTake(game: Game, v: Vehicle, req: RideRequest): boolean {
+  return !inRide(v) && v.task.kind !== 'broken' && fitsParty(v, req) && !climbBlocked(game, v, req);
+}
+
 /** Send a vehicle to pick up a waiting passenger. */
 export function claimRequest(game: Game, v: Vehicle, requestId: number): boolean {
   const req = findRequest(game, requestId);
   if (!req || (req.claimedBy !== null && req.claimedBy !== v.id)) return false;
-  if (inRide(v) || v.task.kind === 'broken' || !fitsParty(v, req)) return false;
-  if (climbBlocked(game, v, req)) return false;
+  if (!couldTake(game, v, req)) return false;
   releaseClaim(game, v);
   const place = game.world.places[req.from];
   if (!sendTo(game, v, place.node)) return false;

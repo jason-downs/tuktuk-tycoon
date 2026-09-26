@@ -379,7 +379,9 @@ export type PickupResult = 'walking' | 'none' | 'moving' | 'busy' | 'climb' | 's
  * PICKUP_RADIUS_M and slower than PICKUP_MAX_SPEED, with a seat for everyone
  * in the party. The passenger is claimed and walks over (WALK_OVER_S game
  * seconds while the tuk-tuk waits), then the kerbside haggle starts — or a
- * booking with a fixed fare simply boards.
+ * booking with a fixed fare simply boards. 'seats' means the only parties in
+ * reach are too big for the tuk-tuk; like 'moving' and 'none' it posts no
+ * notice, so manualInteract can still fill up at a pump first.
  */
 export function manualPickup(game: Game): PickupResult {
   const v = game.playerVehicle();
@@ -387,13 +389,9 @@ export function manualPickup(game: Game): PickupResult {
   const kind = v.task.kind;
   if (kind === 'trip' || kind === 'haggle' || kind === 'broken' || kind === 'away' || kind === 'offduty') return 'busy';
   const req = kerbsidePassenger(game, v);
-  if (!req) {
-    const crowd = kerbsidePassenger(game, v, true);
-    if (!crowd) return 'none';
-    game.notify(partyTooBigText(v, crowd), 'bad');
-    return 'seats';
-  }
+  if (!req && !kerbsidePassenger(game, v, true)) return 'none';
   if (v.speed >= PICKUP_MAX_SPEED) return 'moving';
+  if (!req) return 'seats';
   if (climbBlocked(game, v, req)) {
     game.notify(CLIMB_BLOCKED_TEXT, 'bad');
     return 'climb';
@@ -460,18 +458,24 @@ export type InteractResult = PickupResult | RefuelResult;
 /** The E key: pick up a passenger at the kerb, else fill up at a pump, else say what is missing. */
 export function manualInteract(game: Game): InteractResult {
   const pickup = manualPickup(game);
-  if (pickup === 'walking' || pickup === 'climb' || pickup === 'seats') return pickup;
+  if (pickup === 'walking' || pickup === 'climb') return pickup;
   const fill = manualRefuel(game);
   if (fill === 'filling') return fill;
   if (pickup === 'moving' || fill === 'moving') {
     game.notify('Slow right down and stop at the kerb first.', 'info');
     return 'moving';
   }
+  const v = game.playerVehicle();
+  const crowd = pickup === 'seats' && v ? kerbsidePassenger(game, v, true) : null;
+  if (v && crowd) {
+    game.notify(partyTooBigText(v, crowd), 'bad');
+    return 'seats';
+  }
   if (fill === 'full') {
     game.notify('The tank is already full.', 'info');
     return 'full';
   }
-  if (pickup === 'busy' && game.playerVehicle()?.task.kind === 'trip') {
+  if (pickup === 'busy' && v?.task.kind === 'trip') {
     game.notify('You already have a passenger aboard.', 'info');
     return 'busy';
   }
