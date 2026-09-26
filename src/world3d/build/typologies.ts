@@ -302,16 +302,21 @@ export function canopy(ctx: BuildContext, s: Site, p: Plan, market: boolean): vo
   const nu = Math.max(1, Math.round(o.L / step));
   const nv = big ? Math.max(1, Math.round(o.W / 8)) : 1;
   const post = big ? 0.3 : 0.16;
-  for (let i = 0; i <= nu; i++) {
-    const u = -hl + 0.3 + ((o.L - 0.6) * i) / nu;
-    for (let j = 0; j <= nv; j++) {
-      if (j > 0 && j < nv && i > 0 && i < nu) continue;
-      const v = -hw + 0.3 + ((o.W - 0.6) * j) / nv;
-      cbox(w, o.b, u, v, post, post, 0, h, BC.steelDark, BC.concreteDark, BC.concreteDark, SIDE.SIDES);
+  // Irregular footprints get a roof that follows the ring, so the posts follow it too.
+  const ringRoof = !rect(s) && s.ring.length > 10;
+  if (ringRoof) ringPosts(w, s.ring, step, post, h);
+  else {
+    for (let i = 0; i <= nu; i++) {
+      const u = -hl + 0.3 + ((o.L - 0.6) * i) / nu;
+      for (let j = 0; j <= nv; j++) {
+        if (j > 0 && j < nv && i > 0 && i < nu) continue;
+        const v = -hw + 0.3 + ((o.W - 0.6) * j) / nv;
+        cbox(w, o.b, u, v, post, post, 0, h, BC.steelDark, BC.concreteDark, BC.concreteDark, SIDE.SIDES);
+      }
     }
   }
   const roofC = p.roofC;
-  if (!rect(s) && s.ring.length > 10) {
+  if (ringRoof) {
     // Irregular roofs: a shallow hipped cover over the footprint.
     ringHipRoof(w, s.ring, h, Math.min(2.5, o.W * 0.15, p.cap - h), Math.min(o.W * 0.25, 4), roofC, BC.concreteDark);
   } else {
@@ -341,6 +346,37 @@ export function canopy(ctx: BuildContext, s: Site, p: Plan, market: boolean): vo
       cbox(w, sb, 0, 0, 2.2, 1.0, 0, 0.9, BC.teak, shade(BC.teak, 1.1), c);
     }
   }
+}
+
+/** Posts round a counter-clockwise ring, about `step` m apart and set 0.3 m in from its edges and corners, skipping any closer than 40% of a step to the last. */
+function ringPosts(w: MeshWriter, ring: [number, number][], step: number, post: number, h: number): void {
+  let lx = Infinity;
+  let ly = Infinity;
+  const first = ring.length > 1 ? inset(ring[0], ring[1], 0.3) : null;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 0.01) continue;
+    const n = Math.max(1, Math.round(len / step));
+    for (let k = 0; k < n; k++) {
+      const [x, y, ang] = inset(a, b, Math.min(0.3, len / 2) + (k / n) * len);
+      if (Math.hypot(x - lx, y - ly) < step * 0.4) continue;
+      // The last post of the loop also keeps clear of the first.
+      if (i === ring.length - 1 && k > 0 && first && Math.hypot(x - first[0], y - first[1]) < step * 0.4) continue;
+      cbox(w, basis(x, y, ang), 0, 0, post, post, 0, h, BC.steelDark, BC.concreteDark, BC.concreteDark, SIDE.SIDES);
+      lx = x;
+      ly = y;
+    }
+  }
+}
+
+/** Point `t` m along edge a→b, 0.3 m to its left (inside a counter-clockwise ring), and the edge's angle. */
+function inset(a: [number, number], b: [number, number], t: number): [number, number, number] {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const dx = (b[0] - a[0]) / len;
+  const dy = (b[1] - a[1]) / len;
+  return [a[0] + dx * t - dy * 0.3, a[1] + dy * t + dx * 0.3, Math.atan2(dy, dx)];
 }
 
 /** Kiosk or roadside shed: a small box with a tin skillion. */

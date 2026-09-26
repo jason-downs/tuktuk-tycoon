@@ -20,7 +20,7 @@ import { buildRoads } from '../src/world3d/build/roads';
 import { BAY_MAX, BAY_MIN, bayLayout } from '../src/world3d/build/shophouse';
 import { siteOf, simplePlan, type Plan } from '../src/world3d/build/site';
 import { lannaHall, templeGroups } from '../src/world3d/build/temples';
-import { house } from '../src/world3d/build/typologies';
+import { canopy, house } from '../src/world3d/build/typologies';
 import { buildCity } from '../src/world3d/build/world';
 import { pointInRing } from '../src/world3d/build/shapes';
 
@@ -323,6 +323,37 @@ describe('building footprints and plans', () => {
 });
 
 describe('roofs sit on their walls', () => {
+  it('an irregular canopy: every post stands inside the footprint its roof covers', () => {
+    // A 12-corner staircase, far from its bounding box: the roof follows the ring.
+    const stair: [number, number][] = [
+      [0, 0],
+      [50, 0],
+      [50, 10],
+      [40, 10],
+      [40, 20],
+      [30, 20],
+      [30, 30],
+      [20, 30],
+      [20, 40],
+      [10, 40],
+      [10, 50],
+      [0, 50],
+    ];
+    const c = synthCity([stair]);
+    const ctx = makeCtx(c);
+    const s = siteOf(c, 0);
+    expect(s.ring.length).toBeGreaterThan(10);
+    const p: Plan = { ...simplePlan(s, 'canopy', 1, 'gable', BC.zinc, BC.roofConcrete), lean: true };
+    canopy(ctx, s, p, false);
+    let posts = 0;
+    for (const { p: tri, n } of triangles(ctx.w.buildings.pack())) {
+      if (Math.abs(n[1]) > 0.05) continue;
+      posts++;
+      for (const q of tri) expect(pointInRing(q[0], -q[2], s.ring)).toBe(true);
+    }
+    expect(posts).toBeGreaterThan(0);
+  });
+
   it('a hip-roofed house: eaves at the wall top minus the overhang drop, ridge at the planned rise', () => {
     const c = synthCity([
       [
