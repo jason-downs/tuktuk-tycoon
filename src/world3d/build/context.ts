@@ -15,6 +15,23 @@ export const LAYERS: LayerId[] = ['backdrop', 'ground', 'water', 'roads', 'struc
 export const TREE_KINDS = ['rain', 'round', 'palm', 'yang', 'bodhi'] as const;
 export type TreeKind = (typeof TREE_KINDS)[number];
 
+/** A temple ground as built: where its viharn, main chedi, gate and bodhi spot are (sim metres). */
+export interface TempleInfo {
+  ti: number;
+  name: string;
+  viharn: { x: number; y: number; ang: number; L: number; W: number; mapped: boolean };
+  chedi: { x: number; y: number; side: number; height: number; mapped: boolean };
+  gate: [number, number] | null;
+  bodhi: [number, number] | null;
+}
+
+/** A hero landmark as built: its landmarks.json id and anchor (sim metres). */
+export interface LandmarkInfo {
+  id: string;
+  x: number;
+  y: number;
+}
+
 /** Shared state threaded through the builders, in the order world.ts runs them. */
 export interface BuildContext {
   city: CityData;
@@ -37,6 +54,10 @@ export interface BuildContext {
    * x, y (sim metres), yaw (radians, sim heading convention), scale per instance.
    */
   props: Record<string, number[]>;
+  /** Temple grounds as built (buildings builder). */
+  temples?: TempleInfo[];
+  /** Hero landmarks as built (buildings builder). */
+  landmarks?: LandmarkInfo[];
 }
 
 /** Record one instance of a prop kind. */

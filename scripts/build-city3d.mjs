@@ -121,7 +121,11 @@ function pointInRing(x, y, ring) {
   return inside;
 }
 
-/** Drop the closing duplicate vertex, simplify, and orient counter-clockwise. */
+/**
+ * Drop the closing duplicate vertex, simplify, and orient: polygonArea is
+ * negative for counter-clockwise rings, so rings come out clockwise (x east,
+ * y north) and hole rings, reversed after cleaning, counter-clockwise.
+ */
 function cleanRing(pts, tol) {
   let ring = pts.slice();
   if (ring.length > 1) {
@@ -323,9 +327,13 @@ function lineKind(t) {
   return null;
 }
 
+const osmIdOf = (t) => Number(String(t.id).replace(/\D/g, '')) % 2147483647;
+
 function bakeAreasAndLines(raws) {
   const areas = [];
   const lines = [];
+  // City-wall remnants, gate towers and bastions are mapped as closed areas.
+  const cityWalls = [];
   const seen = new Set();
   for (const raw of raws) {
     const gj = osmtogeojson(raw, { flatProperties: true });
@@ -334,6 +342,17 @@ function bakeAreasAndLines(raws) {
       const key = t.id;
       if (!f.geometry || f.geometry.type === 'Point') continue;
       const g = f.geometry;
+      if (g.type === 'Polygon' && t.barrier === 'city_wall') {
+        if (seen.has(`w${key}`)) continue;
+        seen.add(`w${key}`);
+        const ring = cleanRing(ringXY(g.coordinates[0]), 0.3);
+        if (!ring || !touchesKeep(ring)) continue;
+        const rec = { r: flat(ring), id: osmIdOf(t) };
+        const name = t['name:en'] || t.name;
+        if (name) rec.n = str(name);
+        cityWalls.push(rec);
+        continue;
+      }
       if ((g.type === 'Polygon' || g.type === 'MultiPolygon') && !t.building && !t['building:part']) {
         const kind = areaKind(t);
         if (!kind) continue;
@@ -352,6 +371,11 @@ function bakeAreasAndLines(raws) {
           if (holes.length) rec.h = holes;
           const name = t['name:en'] || t.name;
           if (name && ['temple', 'worship', 'park', 'market', 'campus', 'school', 'hospital', 'moat', 'river', 'water'].includes(kind)) rec.n = str(name);
+          // OSM ids and religions let the 3D landmarks find their grounds and markets.
+          if (['temple', 'worship', 'market', 'retail', 'plaza'].includes(kind)) {
+            rec.id = osmIdOf(t);
+            if (t.religion) rec.rel = str(t.religion);
+          }
           areas.push(rec);
         }
       } else if (g.type === 'LineString' || g.type === 'MultiLineString' || g.type === 'Polygon') {
@@ -378,7 +402,8 @@ function bakeAreasAndLines(raws) {
   for (const l of lines) lcounts[LINE_KINDS[l.k]] = (lcounts[LINE_KINDS[l.k]] ?? 0) + 1;
   console.log('areas:', counts);
   console.log('lines:', lcounts);
-  return { areas, lines };
+  console.log(`city walls: ${cityWalls.length}`);
+  return { areas, lines, cityWalls };
 }
 
 // ------------------------------------------------------------------ buildings
@@ -650,7 +675,7 @@ function zoneOf(x, y) {
 const roadsRaw = await loadRaw('roads');
 const roads = bakeRoads(roadsRaw);
 const areaRaws = await Promise.all(['water', 'green', 'forest', 'landuse', 'landcover3d', 'barriers', 'paths', 'trees', 'furniture'].map(loadRaw));
-const { areas, lines } = bakeAreasAndLines(areaRaws);
+const { areas, lines, cityWalls } = bakeAreasAndLines(areaRaws);
 const templeGrounds = areas
   .filter((a) => AREA_KINDS[a.k] === 'temple')
   .map((a) => {
@@ -680,6 +705,7 @@ const out = {
   roads,
   areas,
   lines,
+  cityWalls,
   buildings,
   ...points,
 };

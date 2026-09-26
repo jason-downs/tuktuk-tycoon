@@ -8,12 +8,20 @@ import { treeGeometry } from '../treeModels';
 import { PROP_MODELS } from '../propModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
 
-/** City vertex colours are sRGB bytes; convert to linear in the shader. */
-export function cityMaterial(opts: { polygonOffset?: number } = {}): MeshLambertMaterial {
+/**
+ * City vertex colours are sRGB bytes; convert to linear in the shader. With
+ * `emissiveFromColour` the emissive term is tinted by the vertex colour, so
+ * glowing surfaces keep their own colour.
+ */
+export function cityMaterial(opts: { polygonOffset?: number; emissiveFromColour?: boolean } = {}): MeshLambertMaterial {
   const m = new MeshLambertMaterial({ vertexColors: true });
+  const tint = !!opts.emissiveFromColour;
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace('#include <color_vertex>', '#include <color_vertex>\n\tvColor.rgb = pow(vColor.rgb, vec3(2.2));');
+    if (tint) shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;');
   };
+  // Same onBeforeCompile source for every city material: key the tinted variant separately.
+  if (tint) m.customProgramCacheKey = () => 'city-emissive-colour';
   if (opts.polygonOffset) {
     m.polygonOffset = true;
     m.polygonOffsetFactor = opts.polygonOffset;
@@ -46,7 +54,7 @@ export class CityLayer implements WorldLayer {
     for (const id of LAYERS) {
       const packed = built.layers[id];
       if (!packed.index.length) continue;
-      const mat = cityMaterial({ polygonOffset: id === 'roads' ? -2 : id === 'water' ? -1 : id === 'windows' ? -1 : 0 });
+      const mat = cityMaterial({ polygonOffset: id === 'roads' ? -2 : id === 'water' ? -1 : id === 'windows' ? -1 : 0, emissiveFromColour: id === 'glow' });
       if (id === 'backdrop') mat.fog = false;
       if (id === 'windows') mat.emissive.set('#ffd28a');
       if (id === 'glow') mat.emissive.set('#ffffff');
