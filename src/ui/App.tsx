@@ -14,6 +14,7 @@ import type { Notice } from '../sim/types';
 import { ClimbNotice } from './ClimbNotice';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
+import { startGameLoop } from './loop';
 import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
@@ -34,6 +35,7 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
   const [view, setView] = useState<GameView | null>(null);
 
   useEffect(() => bindGameTicks(game), [game]);
+  useEffect(() => startGameLoop(game), [game]);
 
   useEffect(() => {
     if (!mapEl.current) return;

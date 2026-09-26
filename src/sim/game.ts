@@ -56,6 +56,17 @@ export class Game {
   readonly fareModifiers: FareModifier[] = [];
   readonly speedModifiers: SpeedModifier[] = [];
   readonly ratingModifiers: RatingModifier[] = [];
+  /**
+   * Upper bounds on a vehicle's speed right now, m/s (a red light ahead, a slow
+   * car in front). The lowest applies; return Infinity for no limit.
+   */
+  readonly speedCaps: ((v: Vehicle) => number)[] = [];
+  /**
+   * Replaces the speed buttons' time scale while set (e.g. a slower clock while
+   * the player steers by hand). Return null to use the speed buttons. Pauses
+   * and the pause button still stop time.
+   */
+  clockOverride: ((g: Game) => number | null) | null = null;
   readonly sightRules: SightRule[] = [];
   /** Extra EV charging places (e.g. company depots) beyond the public mall chargers. */
   readonly extraChargers: (() => Place[])[] = [];
@@ -177,7 +188,9 @@ export class Game {
   }
 
   get timeScale(): number {
-    if (this.pauses.size) return 0;
+    if (this.pauses.size || this.state.speed === 0) return 0;
+    const override = this.clockOverride?.(this);
+    if (override !== null && override !== undefined) return override;
     return SPEED_STEPS[this.state.speed] * BASE_TIME_SCALE;
   }
 
@@ -322,6 +335,12 @@ export class Game {
     const pose = this.vehiclePose(v);
     if (Math.hypot(from.x - pose.x, from.y - pose.y) <= this.sightRadius(v)) return true;
     return this.sightRules.some((rule) => rule(v, req));
+  }
+
+  /** Requests one vehicle's driver can see or has been told about. */
+  visibleTo(v: Vehicle): RideRequest[] {
+    const hidden = new Set(this.state.hidden);
+    return this.state.requests.filter((r) => !hidden.has(r.id) && this.canSee(v, r));
   }
 
   /** Requests the player can see on the map: anything any fleet tuk-tuk can see. */

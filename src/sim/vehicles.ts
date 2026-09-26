@@ -2,15 +2,16 @@
 // route: pickups, drop-offs, refuelling, ranks. Also rolls breakdowns.
 
 import { VEHICLE_MODELS } from '../content/vehicles';
-import { RANK_WAIT, aiHaggle } from './ai';
+import { RANK_WAIT } from './ai';
 import { BALANCE } from './balance';
 import { repairDiscount } from './business';
 import { HOUR } from './clock';
-import { completeTrip, findRequest, measureRequest, refuel, startTrip } from './dispatch';
+import { completeTrip, findRequest, refuel } from './dispatch';
 import { spend } from './economy';
 import type { Game } from './game';
 import { driveManual, isManualDriven } from './manual';
 import { driveVehicle } from './movement';
+import { beginKerbside } from './kerbside';
 import { goAway, leavesTown } from './offmap';
 import type { Vehicle } from './types';
 
@@ -51,28 +52,9 @@ export class VehicleSystem {
     const driver = v.driverId !== null ? game.driver(v.driverId) : null;
     const playerControlled = !!driver?.isPlayer && !game.state.autopilot;
     switch (task.kind) {
-      case 'pickup': {
-        const req = findRequest(game, task.requestId);
-        if (!req) {
-          v.task = { kind: 'idle' };
-          if (playerControlled) game.notify('The passenger gave up waiting and left.', 'bad');
-          return;
-        }
-        if (!playerControlled && driver) {
-          aiHaggle(game, v, driver);
-          return;
-        }
-        measureRequest(game, req);
-        if (req.fixedFare !== null) {
-          startTrip(game, v, req.fixedFare);
-          game.notify(`${req.channel === 'app' ? 'App booking' : 'Booking'} picked up: fixed fare ฿${req.fixedFare}.`, 'info');
-          return;
-        }
-        v.task = { kind: 'haggle', requestId: req.id };
-        game.pause('haggle');
-        game.emit('haggle', { vehicleId: v.id, requestId: req.id });
+      case 'pickup':
+        beginKerbside(game, v, task.requestId);
         return;
-      }
       case 'trip':
         if (leavesTown(game, task.trip)) goAway(game, v, task.trip);
         else completeTrip(game, v);

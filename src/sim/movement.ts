@@ -29,7 +29,8 @@ export function targetSpeed(game: Game, v: Vehicle): number {
   if (game.edgePenalty) speed /= Math.min(MAX_EDGE_SLOWDOWN, Math.max(1, game.edgePenalty(edge)));
   for (const up of v.upgrades) speed *= game.upgradeSpeed(up);
   if (v.fuel <= 0) speed = Math.min(speed, EMPTY_TANK_SPEED);
-  return speed;
+  for (const cap of game.speedCaps) speed = Math.min(speed, cap(v));
+  return Math.max(0, speed);
 }
 
 /** Route the vehicle to a node. Returns false if unreachable. */

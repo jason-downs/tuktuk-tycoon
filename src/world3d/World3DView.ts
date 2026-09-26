@@ -412,7 +412,6 @@ export class World3DView implements GameView, ViewContext {
     if (this.destroyed) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
-    this.game.update(dt);
     this.updateCamera(dt);
     const info: FrameInfo = { now, dt, hour: calendar(this.game.state.time).hour, ui: ui.get() };
     for (const l of this.layers) l.update(info);

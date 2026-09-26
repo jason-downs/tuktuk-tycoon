@@ -60,7 +60,6 @@ export class MapView implements GameView {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly game: Game;
   private raf = 0;
-  private last = performance.now();
   private dpr = 1;
   private hoverRequest: number | null = null;
   private readonly pose: Pose = { x: 0, y: 0, heading: 0 };
@@ -268,9 +267,6 @@ export class MapView implements GameView {
   // ------------------------------------------------------------------ frame
   private frame = (now: number): void => {
     if (this.destroyed) return;
-    const dt = Math.min(0.1, (now - this.last) / 1000);
-    this.last = now;
-    this.game.update(dt);
     this.followCamera();
     this.applyLighting();
     this.draw(now);
