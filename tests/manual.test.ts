@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { buildWorld, type PoiJSON } from '../src/data/world';
+import { BALANCE } from '../src/sim/balance';
 import { calendar } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
+import { currentBook } from '../src/sim/economy';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { chooseExit, exitsAt, manualControl, manualRating, pickTurn, previewTurn, setManual, setPedals } from '../src/sim/manual';
@@ -185,6 +188,28 @@ describe('manual driving', () => {
     // Anywhere else is just a drive.
     expect(game.playerDriveTo(pump.x + 500, pump.y + 500)).toBe(true);
     expect(v.task).toEqual({ kind: 'cruise', place: -1 });
+  });
+
+  it('charges an electric tuk-tuk at a mall at the public DC rate', () => {
+    const game = newGame();
+    const v = game.playerVehicle()!;
+    v.model = 'ev_new';
+    v.fuel = 0.3;
+    expect(game.playerRefuel()).toBe(true);
+    expect(v.task.kind).toBe('refuel');
+    const mall = game.place((v.task as { place: number }).place);
+    expect(mall.cat).toBe('mall');
+    let before = v.fuel;
+    let spent = 0;
+    for (let t = 0; t < 3_600 && v.fuel < 1; t++) {
+      before = v.fuel;
+      const expense = currentBook(game).expense.fuel ?? 0;
+      game.step(1);
+      spent = (currentBook(game).expense.fuel ?? 0) - expense;
+    }
+    expect(v.fuel).toBe(1);
+    const km = (1 - before) * VEHICLE_MODELS.ev_new.rangeKm;
+    expect(spent / km).toBeCloseTo(BALANCE.fuel.evPublicPerKm, 1);
   });
 
   it('rates fast manual driving by the passenger’s taste for thrills', () => {

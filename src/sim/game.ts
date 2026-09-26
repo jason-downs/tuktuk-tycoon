@@ -3,7 +3,7 @@ import { VEHICLE_MODELS } from '../content/vehicles';
 import type { World } from '../data/world';
 import { FleetAI } from './ai';
 import { BALANCE } from './balance';
-import { BASE_TIME_SCALE, HOUR, SPEED_STEPS, calendar, type CalendarInfo } from './clock';
+import { BASE_TIME_SCALE, HOUR, SPEED_STEPS, calendar, isWeekdayRush, type CalendarInfo } from './clock';
 import { DemandSystem, originWeight, type DemandModifier } from './demand';
 import { abandonRequest, claimRequest, findRequest, fitsParty, inRide, partyTooBigText, quote, releaseClaim, startTrip, type QuoteOutcome } from './dispatch';
 import { EconomySystem } from './economy';
@@ -57,8 +57,8 @@ export class Game {
   readonly speedModifiers: SpeedModifier[] = [];
   readonly ratingModifiers: RatingModifier[] = [];
   /**
-   * Upper bounds on a vehicle's speed right now, m/s (a red light ahead, a slow
-   * car in front). The lowest applies; return Infinity for no limit.
+   * Upper bounds on a vehicle's speed right now, m/s (e.g. a red light ahead).
+   * The lowest applies; return Infinity for no limit.
    */
   readonly speedCaps: ((v: Vehicle) => number)[] = [];
   /**
@@ -68,7 +68,7 @@ export class Game {
    */
   clockOverride: ((g: Game) => number | null) | null = null;
   readonly sightRules: SightRule[] = [];
-  /** Extra EV charging places (e.g. company depots) beyond the public mall chargers. */
+  /** The company's own EV chargers (e.g. depots), besides the public mall chargers; they charge at the home rate. */
   readonly extraChargers: (() => Place[])[] = [];
   /** Per-edge routing time multiplier (road closures); applied to the shared router each step. See Router.edgePenalty. */
   edgePenalty: ((edge: number) => number) | null = null;
@@ -288,10 +288,16 @@ export class Game {
     return this.world.places[idx];
   }
 
-  /** Public chargers for EVs: the big malls (Central, Maya, Promenada…). */
+  /** Chargers for EVs: the public ones at the big malls (Central, Maya, Promenada…), then the extraChargers. */
   chargers(): Place[] {
     const extra = this.extraChargers.flatMap((f) => f());
     return [...this.world.places.filter((p) => p.cat === 'mall' && p.landmark && !p.offmap && p.id !== 'kad_suan_kaew'), ...extra];
+  }
+
+  /** THB per km to charge an EV at a place: the home rate at an extraChargers place (a depot), else the public rate. */
+  evChargePerKm(place: Place | undefined): number {
+    const own = !!place && this.extraChargers.some((f) => f().some((p) => p.idx === place.idx));
+    return own ? BALANCE.fuel.evHomePerKm : BALANCE.fuel.evPublicPerKm;
   }
 
   baseOriginTotal(): number {
@@ -475,14 +481,14 @@ export class Game {
 }
 
 /**
- * [research] calendar.md "Weekday rush": Mon–Fri 07:00–09:00 and 16:00–18:00,
- * speed ×0.6 on arterials; Saturday 11:00–15:00 crawl ×0.65. Side streets suffer less.
+ * [research] calendar.md §8: "Weekday rush" (isWeekdayRush) is speed ×0.6 on arterials, and the "Saturday midday
+ * crawl" 11:00–15:00 ×0.65. [pacing] Side streets suffer less (×0.85, ×0.9), and the empty roads of 22:00–06:00 run
+ * ×1.1.
  */
 export const rushHour: SpeedModifier = (cls, cal) => {
   const arterial = cls <= 3;
   const h = cal.hour;
-  const weekday = cal.weekday >= 1 && cal.weekday <= 5;
-  if (weekday && ((h >= 7 && h < 9) || (h >= 16 && h < 18.5))) return arterial ? 0.6 : 0.85;
+  if (isWeekdayRush(cal)) return arterial ? 0.6 : 0.85;
   if (cal.weekday === 6 && h >= 11 && h < 15) return arterial ? 0.65 : 0.9;
   if (h >= 22 || h < 6) return 1.1;
   return 1;

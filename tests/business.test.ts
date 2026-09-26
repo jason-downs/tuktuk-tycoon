@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { AIRPORT_FARE, AIRPORT_LANDMARK, AIRPORT_MAX_TRIP, DEPOT, HOTEL_FARE_PREMIUM, LOAN, RANKS, SERVICE_BY_ID, TOUR_BY_ID } from '../src/content/business';
+import { AIRPORT_FARE, AIRPORT_LANDMARK, AIRPORT_MAX_TRIP, DEPOT, HOTEL_FARE_PREMIUM, LOAN, RANKS, RATES, SERVICE_BY_ID, TOUR_BY_ID } from '../src/content/business';
 import { GOALS } from '../src/content/goals';
 import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { buildWorld, type PoiJSON } from '../src/data/world';
-import { appFare, roundFare } from '../src/sim/balance';
+import { BALANCE, appFare, roundFare } from '../src/sim/balance';
 import {
   activeDepots,
   businessOf,
@@ -28,14 +28,15 @@ import {
   takeLoan,
   tourDwellText,
 } from '../src/sim/business';
-import { DAY, HOUR, timeOf } from '../src/sim/clock';
+import { DAY, HOUR, calendar, timeOf } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
 import { completeTrip, startTrip } from '../src/sim/dispatch';
 import { businessDay, currentBook } from '../src/sim/economy';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { installSystems } from '../src/sim/systems';
-import type { Driver, Place, RideRequest, Vehicle } from '../src/sim/types';
+import type { DayBook, Driver, Place, RideRequest, Vehicle } from '../src/sim/types';
+import { settledLines } from './helpers';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
@@ -76,11 +77,11 @@ function addTukTuk(game: Game, model = 'ev_new', at = 'tha_phae_gate', ownership
   return v;
 }
 
-/** Run the game to just past the next 04:00 rollover (billing happens there). */
-function nextRollover(game: Game): void {
+/** Run the game to just past the next 04:00 rollover (billing happens there); returns what it booked to the day that closed. */
+function nextRollover(game: Game): DayBook {
   const day = businessDay(game.state.time) + 1;
   game.state.time = day * DAY + 4 * HOUR - 1;
-  game.step(2);
+  return settledLines(game, () => game.step(2));
 }
 
 function setReputation(game: Game, rep: number): void {
@@ -141,10 +142,7 @@ describe('business services', () => {
     expect(startService(game, 'flyers').ok).toBe(true);
     const flyerBill = SERVICE_BY_ID.flyers.running!.amount;
     let spentOnMarketing = 0;
-    for (let d = 1; d <= 7; d++) {
-      nextRollover(game);
-      spentOnMarketing += currentBook(game).expense.marketing ?? 0;
-    }
+    for (let d = 1; d <= 7; d++) spentOnMarketing += nextRollover(game).expense.marketing ?? 0;
     // Paid at signing, then once more on the seventh day.
     expect(spentOnMarketing).toBe(flyerBill);
     game.state.cash = 100;
@@ -168,6 +166,11 @@ describe('business services', () => {
     game.step(60);
     const big = sys.currentRates().app;
     expect(big / small).toBeCloseTo(6 / 3, 1);
+    // Tuk-tuks parked without a driver take no bookings, so they bring none.
+    for (let i = 0; i < 3; i++) addTukTuk(game, 'lpg_used', 'tha_phae_gate', 'rented', false).task = { kind: 'offduty' };
+    game.emit('change');
+    game.step(60);
+    expect(sys.currentRates().app / big).toBeCloseTo(1, 1);
     setReputation(game, 3.6);
     game.emit('change');
     game.step(60);
@@ -182,6 +185,33 @@ describe('business services', () => {
       expect(r.fixedFare).toBe(appFare(r.distance));
       expect(['monk', 'vendor', 'elder']).not.toContain(r.archetype);
     }
+  });
+
+  it('never sells an out-of-town round trip through the app', () => {
+    const game = gameAt(timeOf(2026, 10, 3, 10));
+    for (let i = 0; i < 3; i++) addTukTuk(game, 'ev_new', 'maya');
+    setReputation(game, 4.5);
+    game.state.cash = 100_000;
+    expect(startService(game, 'app').ok).toBe(true);
+    // A booking nearly every step, so the channel sees a few hundred riders.
+    const rate = RATES.appPerVehicle;
+    RATES.appPerVehicle = 300;
+    const seen = new Set<number>();
+    let roundTrips = 0;
+    try {
+      for (let t = 0; t < HOUR; t += 4) {
+        game.step(4);
+        for (const r of game.state.requests) {
+          if (r.channel !== 'app' || seen.has(r.id)) continue;
+          seen.add(r.id);
+          if (game.place(r.to).offmap?.roundTrip) roundTrips++;
+        }
+      }
+    } finally {
+      RATES.appPerVehicle = rate;
+    }
+    expect(seen.size).toBeGreaterThan(300);
+    expect(roundTrips).toBe(0);
   });
 
   it('shares street sightings across the fleet with the dispatch radio', () => {
@@ -256,6 +286,27 @@ describe('business services', () => {
     expect(businessState(game).stats['tour:temples']).toEqual({ trips: 1, fares: 600 });
   });
 
+  it('does not hold a sunset-run tuk-tuk again once it has brought the group back down', () => {
+    const game = gameAt(timeOf(2026, 10, 3, 15));
+    const v = game.playerVehicle()!;
+    v.model = 'ev_new';
+    const req = makeRequest(game, landmark('tha_phae_gate'), landmark('wat_doi_suthep'), 'tourist_west', 'regular', calendar(game.state.time));
+    req.source = 'tour:suthep';
+    req.fixedFare = TOUR_BY_ID.suthep.fare;
+    game.state.requests.push(req);
+    v.task = { kind: 'pickup', requestId: req.id };
+    expect(startTrip(game, v, req.fixedFare)).toBe(true);
+    // Back at the pickup after the wait at the top, which the time away already covered.
+    const task = v.task as Vehicle['task'];
+    if (task.kind === 'trip') task.trip.returning = true;
+    completeTrip(game, v);
+    expect(businessState(game).stats['tour:suthep']).toEqual({ trips: 1, fares: TOUR_BY_ID.suthep.fare });
+    expect(businessState(game).dwell[String(v.id)]).toBeUndefined();
+    expect(v.busyUntil).toBe(game.state.time + BALANCE.trip.alightSeconds);
+    expect(tourDwellText(game, v)).toBeNull();
+    expect(game.state.notices.some((n) => n.text.includes('heads off at'))).toBe(false);
+  });
+
   it('sends Doi Suthep tours only to tuk-tuks that can climb', () => {
     const game = gameAt(timeOf(2026, 10, 3, 15));
     const lpg = addTukTuk(game, 'lpg_used');
@@ -313,6 +364,31 @@ describe('airport counter', () => {
     // Longer runs and the other fifth stay on the kerb.
     expect(street).toBeGreaterThan(0);
   });
+
+  it('leaves out-of-town round trips from the terminal on the kerb', () => {
+    const game = gameAt(timeOf(2026, 10, 3, 10));
+    makeFleetBoss(game);
+    for (let i = 0; i < 2; i++) addTukTuk(game, 'lpg_used', 'maya');
+    expect(startService(game, 'airport').ok).toBe(true);
+    game.step(4);
+    const airport = landmark(AIRPORT_LANDMARK);
+    const cal = calendar(game.state.time);
+    const hail = (to: string) =>
+      Array.from({ length: 10 }, () => {
+        const r = makeRequest(game, airport, landmark(to), 'tourist_west', 'street', cal);
+        // Hailed during the next step, which the counter scans.
+        r.spawnedAt = game.state.time + 1;
+        r.expiresAt = game.state.time + HOUR;
+        game.state.requests.push(r);
+        return r;
+      });
+    const roundTrips = [...hail('night_safari'), ...hail('wat_pha_lat')];
+    const intoTown = hail('tha_phae_gate');
+    for (const r of roundTrips) expect(r.distance).toBeLessThanOrEqual(AIRPORT_MAX_TRIP);
+    game.step(4);
+    expect(intoTown.filter((r) => r.source === 'airport').length).toBeGreaterThan(3);
+    expect(roundTrips.filter((r) => r.source === 'airport')).toEqual([]);
+  });
 });
 
 describe('depots', () => {
@@ -327,6 +403,9 @@ describe('depots', () => {
     expect(game.state.cash).toBe(cash - DEPOT.deposit - DEPOT.rentPerDay);
     expect(activeDepots(game)).toEqual([site]);
     expect(game.chargers()).toContain(site.place);
+    // The depot charges at the home rate; the malls' public chargers cost more.
+    expect(game.evChargePerKm(site.place)).toBe(BALANCE.fuel.evHomePerKm);
+    expect(game.evChargePerKm(landmark('maya'))).toBe(BALANCE.fuel.evPublicPerKm);
     expect(repairDiscount(game)).toBe(DEPOT.repairDiscount);
 
     const v = addTukTuk(game, 'ev_used', 'chiang_mai_gate');
@@ -342,8 +421,7 @@ describe('depots', () => {
     expect(v.fuel).toBe(1);
 
     const before = game.state.cash;
-    nextRollover(game);
-    expect(currentBook(game).expense.business).toBe(DEPOT.rentPerDay);
+    expect(nextRollover(game).expense.business).toBe(DEPOT.rentPerDay);
     expect(game.state.cash).toBeLessThan(before);
     closeDepot(game, 'old_city');
     expect(repairDiscount(game)).toBe(1);
@@ -372,9 +450,9 @@ describe('bank loan', () => {
 
     const instalment = instalmentFor(50_000);
     game.state.cash = 100_000;
-    nextRollover(game);
+    const settled = nextRollover(game);
     const loan = businessState(game).loan!;
-    expect(currentBook(game).expense.loan).toBe(instalment);
+    expect(settled.expense.loan).toBe(instalment);
     expect(loan.balance).toBeCloseTo(50_000 * (1 + LOAN.dailyRate) - instalment, 6);
 
     // A missed payment: late fee and a knock to the company's stars.

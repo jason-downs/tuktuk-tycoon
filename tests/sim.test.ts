@@ -18,17 +18,31 @@ describe('headless simulation', () => {
   it('runs a day on autopilot: passengers appear, trips complete, cash moves', () => {
     const game = Game.create(world, { seed: 42 });
     game.state.autopilot = true;
+    const v = game.state.vehicles[0];
+    const condition = v.condition;
+    const cash = game.state.cash;
     // CPU time rather than wall time: the suite runs files in parallel, often on a busy machine.
     const cpu0 = process.cpuUsage();
     for (let t = 0; t < 24 * HOUR; t += 4) game.step(4);
     const cpu = process.cpuUsage(cpu0);
     const ms = (cpu.user + cpu.system) / 1000;
-    expect(game.state.stats.trips).toBeGreaterThan(10);
+    // The [pacing] notes in content/business.ts and sim/garage.ts quote this day: ~140 trips, ฿10–14k net, ~500 km
+    // and ~25 condition points of wear.
+    expect(game.state.stats.trips).toBeGreaterThan(100);
+    expect(game.state.stats.trips).toBeLessThan(200);
+    expect(game.state.cash - cash).toBeGreaterThan(8_000);
+    expect(game.state.cash - cash).toBeLessThan(16_000);
+    expect(v.odometer).toBeGreaterThan(400);
+    expect(v.odometer).toBeLessThan(650);
+    expect(condition - v.condition).toBeGreaterThan(15);
+    expect(condition - v.condition).toBeLessThan(35);
     expect(game.state.books.length).toBeGreaterThanOrEqual(1);
     expect(Number.isFinite(game.state.cash)).toBe(true);
     // A simulated day stays under 4 s of CPU (about 2 s on a laptop).
     expect(ms).toBeLessThan(4000);
-    console.log(`day sim: ${ms.toFixed(0)} ms CPU, trips ${game.state.stats.trips}, cash ${game.state.cash}, rep ${game.state.reputation.toFixed(2)}, requests alive ${game.state.requests.length}`);
+    console.log(
+      `day sim: ${ms.toFixed(0)} ms CPU, trips ${game.state.stats.trips}, cash ${game.state.cash}, ${v.odometer.toFixed(0)} km, wear ${(condition - v.condition).toFixed(1)}, rep ${game.state.reputation.toFixed(2)}, requests alive ${game.state.requests.length}`,
+    );
   });
 
   it('round-trips through JSON', () => {

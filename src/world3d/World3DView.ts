@@ -37,7 +37,7 @@ import { edgeLanes } from './kinematics';
 import { CityLayer } from './layers/city';
 import { CrowdLayer } from './layers/crowds';
 import { renderPixelRatio } from './env/quality';
-import { Environment } from './layers/environment';
+import { Environment, type EnvState } from './layers/environment';
 import { MarkerLayer } from './layers/markers';
 import { PeopleLayer } from './layers/people';
 import { SignalLayer } from './layers/signals';
@@ -323,6 +323,10 @@ export class World3DView implements GameView, ViewContext {
 
   addLayer(layer: WorldLayer): void {
     this.layers.push(layer);
+  }
+
+  envState(): Readonly<EnvState> {
+    return this.env.state;
   }
 
   // ---------------------------------------------------------------- setup

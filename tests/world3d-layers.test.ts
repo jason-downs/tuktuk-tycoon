@@ -15,8 +15,12 @@ import type { RideRequest } from '../src/sim/types';
 import { ui } from '../src/ui/store';
 import type { CityData } from '../src/world3d/city';
 import { buildCity, tileCity } from '../src/world3d/build/world';
+import { festivalsAt } from '../src/world3d/env/festivals';
+import { timeOfDay } from '../src/world3d/env/lighting';
+import { moonIllumination, moonPhase, moonPosition, solarPosition } from '../src/world3d/env/sun';
 import { edgeLanes } from '../src/world3d/kinematics';
 import { CrowdLayer } from '../src/world3d/layers/crowds';
+import type { EnvState } from '../src/world3d/layers/environment';
 import { PeopleLayer } from '../src/world3d/layers/people';
 import { MarkerLayer } from '../src/world3d/layers/markers';
 import type { ViewContext, WorldLayer } from '../src/world3d/layers/types';
@@ -26,7 +30,15 @@ const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
 const built = tileCity(buildCity(read<CityData>('city3d.json')));
 
-function setup(time: number) {
+/** The darkness the Environment layer publishes for a game time on a clear day: sun and moon for the date. */
+function nightAt(time: number): number {
+  const sun = solarPosition(calendar(time));
+  const phase = moonPhase(time);
+  return timeOfDay(sun.elevation, sun.hourAngle < 0, moonPosition(sun, phase).elevation, moonIllumination(phase)).night;
+}
+
+/** A view on a real game at `time`; `night` overrides the environment's darkness (e.g. a dark storm). */
+function setup(time: number, night?: number) {
   const game = Game.create(world, { seed: 7 });
   game.state.time = time;
   installSystems(game);
@@ -35,6 +47,7 @@ function setup(time: number) {
   const player = game.playerVehicle()!;
   const start = game.vehiclePose(player);
   let vehicles: VehicleLayer | null = null;
+  const env: EnvState = { night: 0, lamps: 0, rain: 0, storm: 0, wet: 0, haze: 0, mist: 0, flash: 0, festivals: festivalsAt(time) };
   const ctx: ViewContext = {
     game,
     scene,
@@ -54,6 +67,7 @@ function setup(time: number) {
     hoverRequest: null,
     city: () => built,
     addLayer: () => {},
+    envState: () => ({ ...env, night: night ?? nightAt(game.state.time) }),
   };
   vehicles = new VehicleLayer(ctx);
   const layers: WorldLayer[] = [vehicles, new PeopleLayer(ctx), new CrowdLayer(ctx)];
@@ -178,6 +192,18 @@ describe('3D layers, headless', () => {
     expect(t.ctx.vehicleMesh(v.id)).toBeDefined();
     expect(rings.playerRing.visible).toBe(true);
     ui.set({ selectedVehicle: null });
+  });
+
+  it('lights headlights by the sun for the date and in a dark storm, not by a November clock', () => {
+    // 21 June 2027, 18:15: the sun is still well up, though November would be past sunset.
+    const summer = setup(timeOf(2027, 5, 21, 18.25));
+    for (let i = 0; i < 60; i++) summer.frame();
+    expect(nightAt(summer.game.state.time)).toBe(0);
+    expect(summer.drawn().cones).toBe(0);
+    // Noon under a storm dark enough to light the lamps.
+    const storm = setup(timeOf(2026, 10, 3, 12), 0.55);
+    for (let i = 0; i < 60; i++) storm.frame();
+    expect(storm.drawn().cones).toBeGreaterThan(0);
   });
 
   it('stays cheap per frame in a busy evening street scene', () => {

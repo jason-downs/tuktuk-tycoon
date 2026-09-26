@@ -6,6 +6,7 @@ import { timeOf } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
 import type { TripResult } from '../src/sim/dispatch';
 import { currentBook, earn } from '../src/sim/economy';
+import { buyVehicle, sellVehicle } from '../src/sim/fleet';
 import { Game } from '../src/sim/game';
 import { goalProgress, goalTrack, isComplete } from '../src/sim/goals';
 import type { GraphJSON } from '../src/sim/graph';
@@ -83,6 +84,17 @@ describe('goals', () => {
     earn(game, 100, 'tips');
     game.step(10);
     expect(isComplete(game, 'day_1000')).toBe(true);
+  });
+
+  it('does not count selling a tuk-tuk as a good day', () => {
+    const game = gameAt();
+    earn(game, 200_000, 'other');
+    const v = buyVehicle(game, 'rusty')!;
+    // One sale is worth more than the biggest one-day target.
+    expect(sellVehicle(game, v.id)).toBeGreaterThan(50_000);
+    game.step(10);
+    expect(currentBook(game).income.vehicles).toBeGreaterThan(0);
+    for (const id of ['day_1000', 'day_10k', 'day_50k']) expect(isComplete(game, id)).toBe(false);
   });
 
   it('counts five-star rides and tours from finished trips', () => {

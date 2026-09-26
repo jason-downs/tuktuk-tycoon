@@ -3,6 +3,7 @@ import type { Game } from '../../sim/game';
 import type { RideRequest } from '../../sim/types';
 import type { UIState } from '../../ui/store';
 import type { TiledCity } from '../build/world';
+import type { EnvState } from './environment';
 
 /** Services the 3D view offers its layers. Positions are sim metres (x east, y north). */
 export interface ViewContext {
@@ -37,6 +38,8 @@ export interface ViewContext {
   city(): TiledCity | null;
   /** Add a layer (e.g. effects that need the city); it is updated every frame from then on. */
   addLayer(layer: WorldLayer): void;
+  /** What the environment published this frame (night level, lamps, rain…); it updates before the other layers. */
+  envState(): Readonly<EnvState>;
 }
 
 export interface FrameInfo {

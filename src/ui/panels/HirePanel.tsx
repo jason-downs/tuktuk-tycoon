@@ -332,7 +332,7 @@ function ModelCard({ game, model }: { game: Game; model: VehicleModel }) {
 /** Specs of a model; `delivered` adds the condition it arrives in, `rented` shows Lung Daeng covering upkeep. */
 function ModelChips({ model, delivered, rented }: { model: VehicleModel; delivered?: boolean; rented?: boolean }) {
   const ev = model.powertrain === 'ev';
-  const perKm = ev ? BALANCE.fuel.evPerKm : BALANCE.fuel.lpgPerKm;
+  const perKm = ev ? BALANCE.fuel.evPublicPerKm : BALANCE.fuel.lpgPerKm;
   const condition = deliveryCondition(model.id);
   return (
     <div className="fl-chips">
@@ -349,7 +349,7 @@ function ModelChips({ model, delivered, rented }: { model: VehicleModel; deliver
       <span className={`fl-chip ${model.breakdownPerDay >= 0.03 ? 'bad' : 'good'}`} title="Chance of a breakdown per day in service, at full condition">
         breakdowns {(model.breakdownPerDay * 100).toFixed(1)}%/day
       </span>
-      <span className="fl-chip" title={ev ? 'Charging cost' : 'LPG cost'}>
+      <span className="fl-chip" title={ev ? `Charging cost at the malls; ฿${BALANCE.fuel.evHomePerKm.toFixed(2)}/km at a company depot` : 'LPG cost'}>
         ฿{perKm.toFixed(2)}/km
       </span>
       {rented ? (

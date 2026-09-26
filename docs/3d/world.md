@@ -287,7 +287,7 @@ Rules run in order; the first match wins.
 **Heights**
 - Height = ground floor (4.0 m commercial, 3.0 m residential) + (levels − 1) × 3.1 m + parapet (1.0 m on flat roofs).
 - `height` and `building:levels` tags always win.
-- Caps for untagged footprints: 12 m in `old_city` and 9 m within 100 m of a temple ground [research: Citylife].
+- Caps for untagged footprints: 12 m in `old_city` and 9 m within 100 m of a temple ground [est: §1.1, from Citylife "In the zone"].
 
 **Roofs by class**
 

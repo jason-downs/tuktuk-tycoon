@@ -54,12 +54,21 @@ export function formatDate(time: number): string {
   return `${WEEKDAYS[c.weekday]} ${c.date} ${MONTHS[c.month]} ${c.year}`;
 }
 
+/** [research] calendar.md §8 "Weekday rush": Mon–Fri 07:00–09:00 and 16:00–18:00. */
+export function isWeekdayRush(cal: CalendarInfo): boolean {
+  const h = cal.hour;
+  return cal.weekday >= 1 && cal.weekday <= 5 && ((h >= 7 && h < 9) || (h >= 16 && h < 18));
+}
+
 /** Game time of a calendar date and hour (local), e.g. timeOf(2026, 10, 24, 18). */
 export function timeOf(year: number, month: number, date: number, hour = 0): number {
   return (Date.UTC(year, month, date) - GAME_EPOCH_UTC) / 1000 + hour * HOUR;
 }
 
-/** 0 at midnight … 1 at noon, smooth; used for lighting. */
+/**
+ * 0 at midnight … 1 at noon, smooth; the flat map's lighting. It keeps November's sunrise and sunset all year; the 3D
+ * view follows the real sun for the date (world3d/env/sun.ts).
+ */
 export function daylight(hour: number): number {
   // Chiang Mai in November: sunrise ≈ 06:25, sunset ≈ 17:50.
   const rise = 6.4;

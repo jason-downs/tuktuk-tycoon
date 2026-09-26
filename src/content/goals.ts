@@ -45,8 +45,8 @@ const n = (v: number) => Math.floor(v).toLocaleString('en-US');
 const thb = (v: number) => `฿${n(v)}`;
 const frac = (have: number, need: number) => Math.max(0, Math.min(1, have / need));
 
-/** Money earned in a business day: everything but loans drawn and goal rewards. */
-const EARNED_EXCLUDED: LedgerCategory[] = ['loan', 'other'];
+/** Money earned in a business day: everything but loans drawn, tuk-tuks sold and goal rewards. */
+const EARNED_EXCLUDED: LedgerCategory[] = ['loan', 'vehicles', 'other'];
 function earned(book: DayBook): number {
   let sum = 0;
   for (const [k, v] of Object.entries(book.income)) if (!EARNED_EXCLUDED.includes(k as LedgerCategory)) sum += v ?? 0;

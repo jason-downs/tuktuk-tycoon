@@ -444,7 +444,7 @@ export function manualRefuel(game: Game): RefuelResult {
   if (v.fuel >= 0.99) return 'full';
   const model = VEHICLE_MODELS[v.model];
   const ev = model?.powertrain === 'ev';
-  refuel(game, v, ev ? BALANCE.fuel.evPerKm : BALANCE.fuel.lpgPerKm, model?.rangeKm ?? BALANCE.fuel.tankKm);
+  refuel(game, v, ev ? game.evChargePerKm(pump) : BALANCE.fuel.lpgPerKm, model?.rangeKm ?? BALANCE.fuel.tankKm);
   v.speed = 0;
   if (kind === 'refuel') {
     v.task = { kind: 'idle' };

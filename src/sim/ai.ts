@@ -10,6 +10,7 @@ import { originWeight } from './demand';
 import type { Game } from './game';
 import { climbBlocked } from './mountain';
 import { sendTo } from './movement';
+import { awaySeconds } from './offmap';
 import type { Driver, Place, RideRequest, Vehicle } from './types';
 
 /** Game seconds between decisions for one idle vehicle. */
@@ -43,7 +44,12 @@ export function requestValue(game: Game, v: Vehicle, req: RideRequest): number {
   const pickup = Math.hypot(from.x - pos.x, from.y - pos.y) * BALANCE.trip.detourFactor;
   const eta = pickup / 6.5;
   if (game.state.time + eta > req.expiresAt + 4 * 60) return 0;
-  const work = eta + req.distance / 7 + 120;
+  const ride = req.distance / 7;
+  let work = eta + ride + 120;
+  // Out of town the tuk-tuk also has to come back: empty after a drop-off, or with the passenger after the wait.
+  const to = game.world.places[req.to];
+  const off = to.offmap;
+  if (off) work += off.roundTrip ? off.waitS + ride : awaySeconds(game, to, off.extraM);
   // What the company keeps: app platforms take their cut of the fixed fare.
   const fare = req.fixedFare === null ? req.fairFare : req.channel === 'app' ? req.fixedFare * (1 - BALANCE.app.platformCut) : req.fixedFare;
   return fare / work;

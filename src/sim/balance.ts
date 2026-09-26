@@ -16,7 +16,11 @@ export const BALANCE = {
     flag: 40,
     perKm: 18,
     min: 60,
-    /** [research] after 22:00 near nightlife, 2–3× quotes are tolerated. */
+    /**
+     * [pacing] Added to a passenger's highest acceptable fare ratio for pickups at nightlife and markets from 22:00
+     * to 04:00, which at the starting 4.2★ lets tourists take about 1.7–2.3×. Softer than the 2–3× late-night
+     * tolerance in economics.md "Suggested game numbers", so late fares do not dominate a day's takings.
+     */
     lateNightBonus: 0.5,
   },
   app: {
@@ -28,8 +32,10 @@ export const BALANCE = {
   fuel: {
     /** [research] LPG ≈ 1.4 THB/km (14 THB/L ÷ ~10 km/L). */
     lpgPerKm: 1.4,
-    /** [research] EV at home ≈ 0.35 THB/km. */
-    evPerKm: 0.35,
+    /** [research] EV at home ≈ 0.35 THB/km: overnight charging at the company's own depots. */
+    evHomePerKm: 0.35,
+    /** [research] EV at a public DC charger ≈ 0.65 THB/km: the chargers at the big malls. */
+    evPublicPerKm: 0.65,
     /** Range on a full tank, km. */
     tankKm: 160,
     /** Game seconds to fill up. */

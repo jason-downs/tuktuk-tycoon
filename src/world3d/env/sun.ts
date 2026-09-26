@@ -1,9 +1,11 @@
 // Sun and moon positions over Chiang Mai from the game calendar. Pure maths,
 // no three.js: the NOAA simplified solar model (declination, equation of time,
 // hour angle) for the map origin at 18.79 N, local time UTC+7. November
-// sunrise comes out at ≈ 06:24 and sunset at ≈ 17:51, matching daylight() in
-// src/sim/clock.ts; noon elevation runs from ≈ 57° on 1 Nov to ≈ 50° on 30 Nov
-// and reaches ≈ 82° at Songkran.
+// sunrise comes out at ≈ 06:24 and sunset at ≈ 17:51. daylight() in
+// src/sim/clock.ts keeps those November times all year and serves only the
+// flat map; the 3D layers read day and night from EnvState.night, which
+// follows this model. Noon elevation runs from ≈ 57° on 1 Nov to ≈ 50° on
+// 30 Nov and reaches ≈ 80° at Songkran.
 //
 // The moon uses a mean synodic month from a known new moon and rides the sun's
 // path shifted by its phase, with the declination mirrored at full moon (a
