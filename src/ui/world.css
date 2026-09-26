@@ -1,0 +1,319 @@
+/* Calendar panel and the event/weather badge under the top bar. */
+
+/* ------------------------------------------------------------- badge */
+.world-badge {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: max(230px, calc(100% - 700px));
+  padding: 5px 13px 5px 10px;
+  background: rgba(43, 29, 18, 0.93);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  color: var(--cream);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.world-badge:hover,
+.world-badge.on {
+  border-color: var(--gold);
+  background: rgba(58, 40, 25, 0.96);
+}
+.world-badge .wb-weather {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-head);
+}
+.world-badge .wb-icon {
+  font-size: 17px;
+}
+.world-badge .wb-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+}
+.world-badge .wb-event {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.world-badge .wb-event.live {
+  color: var(--gold-2);
+  font-weight: 600;
+}
+.world-badge .wb-closed {
+  color: #ffb4a8;
+  font-size: 12px;
+}
+.world-badge .wb-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #b07cf0;
+  vertical-align: middle;
+  animation: wb-pulse 1.6s ease-in-out infinite;
+}
+@keyframes wb-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@media (max-width: 900px) {
+  .world-badge {
+    top: 132px;
+    left: 10px;
+    transform: none;
+    max-width: calc(100% - 20px);
+  }
+}
+
+/* ------------------------------------------------------------ panel */
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cal-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.cal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.cal-big {
+  font-family: var(--font-head);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--gold-2);
+}
+.season-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.season-pill.high {
+  background: rgba(232, 185, 35, 0.2);
+  color: var(--gold-2);
+}
+.season-pill.shoulder {
+  background: rgba(233, 220, 194, 0.12);
+  color: var(--cream-2);
+}
+.season-pill.green {
+  background: rgba(58, 163, 91, 0.2);
+  color: #9fe3b0;
+}
+.season-bars {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+  align-items: end;
+  height: 40px;
+  margin-top: 10px;
+}
+.season-bar {
+  background: rgba(232, 185, 35, 0.28);
+  border-radius: 3px 3px 0 0;
+}
+.season-bar.now {
+  background: var(--gold);
+}
+.season-labels {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+.season-labels .now {
+  color: var(--gold-2);
+  font-weight: 600;
+}
+
+.wx-now {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.wx-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+.wx-temp {
+  font-family: var(--font-head);
+  font-size: 22px;
+  font-weight: 600;
+}
+.wx-label {
+  color: var(--cream-2);
+}
+.forecast {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+.fc {
+  text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 4px 0 5px;
+  font-size: 11px;
+  color: var(--cream-2);
+}
+.fc.wet {
+  background: rgba(61, 111, 182, 0.2);
+}
+.fc-icon {
+  display: block;
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.wchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.wchip {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(232, 185, 35, 0.1);
+  border: 1px solid var(--line);
+  color: var(--cream-2);
+  white-space: nowrap;
+}
+.wchip.closed {
+  background: rgba(214, 69, 61, 0.14);
+  border-color: rgba(214, 69, 61, 0.45);
+  color: #ffc9c2;
+}
+.wchip.calm {
+  color: var(--muted);
+}
+
+.ev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ev-day {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.ev-day:first-child {
+  margin-top: 0;
+}
+.ev-row {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--cream);
+  font: inherit;
+  cursor: pointer;
+}
+.ev-row:hover {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.07);
+}
+.ev-row.live {
+  border-color: rgba(176, 124, 240, 0.45);
+  background: rgba(176, 124, 240, 0.08);
+}
+.ev-icon {
+  font-size: 19px;
+  line-height: 1.2;
+}
+.ev-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+}
+.ev-name {
+  font-weight: 600;
+}
+.ev-th {
+  color: var(--cream-2);
+  font-size: 12px;
+}
+.ev-time {
+  font-size: 12px;
+  color: var(--gold-2);
+  font-variant-numeric: tabular-nums;
+}
+.ev-where {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ev-drivers {
+  display: block;
+  font-size: 12.5px;
+  color: var(--cream-2);
+  line-height: 1.4;
+  margin-top: 3px;
+}
+.tag-approx {
+  font-size: 10px;
+  border: 1px dashed var(--muted);
+  border-radius: 6px;
+  padding: 0 5px;
+  color: var(--muted);
+}
+
+.rival-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  text-align: center;
+}
+.rival-stat {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 5px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.rival-stat b {
+  display: block;
+  font-family: var(--font-head);
+  font-size: 17px;
+  color: var(--cream);
+}

@@ -53,6 +53,8 @@ export class Game {
   readonly sightRules: SightRule[] = [];
   /** Extra EV charging places (e.g. company depots) beyond the public mall chargers. */
   readonly extraChargers: (() => Place[])[] = [];
+  /** Per-edge routing time multiplier (road closures); applied to the shared router each step. See Router.edgePenalty. */
+  edgePenalty: ((edge: number) => number) | null = null;
   readonly systems: GameSystem[] = [];
   private readonly demand = new DemandSystem();
   private readonly vehicleSystem = new VehicleSystem();
@@ -204,6 +206,7 @@ export class Game {
 
   /** Advance the simulation by dt game seconds. */
   step(dt: number): void {
+    this.world.router.edgePenalty = this.edgePenalty;
     this.state.time += dt;
     this.demand.update(this, dt);
     this.vehicleSystem.update(this, dt);

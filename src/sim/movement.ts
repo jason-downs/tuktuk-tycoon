@@ -9,6 +9,8 @@ const DECEL = 4.5;
 const ARRIVAL_SLOWDOWN_M = 25;
 /** Crawl speed when out of fuel ("pushing it to the pump"). */
 const EMPTY_TANK_SPEED = 2.5;
+/** Largest slowdown from an edge penalty: a closed street is crawled at a fifth of normal speed. */
+export const MAX_EDGE_SLOWDOWN = 5;
 
 export function vehiclePosition(v: Vehicle): ArcPosition {
   return { arc: v.arc, s: v.s };
@@ -24,6 +26,7 @@ export function targetSpeed(game: Game, v: Vehicle): number {
   const driver = v.driverId !== null ? game.driver(v.driverId) : null;
   if (driver) speed *= 0.9 + driver.driving / 500;
   speed *= game.speedFactor(cls);
+  if (game.edgePenalty) speed /= Math.min(MAX_EDGE_SLOWDOWN, Math.max(1, game.edgePenalty(edge)));
   for (const up of v.upgrades) speed *= game.upgradeSpeed(up);
   if (v.fuel <= 0) speed = Math.min(speed, EMPTY_TANK_SPEED);
   return speed;
