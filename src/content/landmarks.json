@@ -1,0 +1,882 @@
+[
+ {
+  "id": "tha_phae_gate",
+  "name": "Tha Phae Gate",
+  "th": "ประตูท่าแพ",
+  "lat": 18.787762,
+  "lon": 98.99327,
+  "cat": "gate",
+  "notes": "All day; peaks 16:00-23:00 and Sunday evening (east end of Sunday Walking Street). Plaza hosts festivals: Songkran (12-15 Apr), Flower Festival parade passes 14 Feb 2026 (Nawarat Bridge -> Tha Phae Gate -> Nong Buak Haad, from ~08:00), Yi Peng/Loy Krathong 23-25 Nov 2026 with lantern releases 18:30-22:30 and 30,000+ people on the peak night (beautiful-chiangmai.com). Main tuk-tuk rank for Old City <-> Night Bazaar/Riverside.",
+  "riders": "tourists, backpackers, tour groups, locals at events"
+ },
+ {
+  "id": "chang_phueak_gate",
+  "name": "Chang Phueak Gate (North Gate)",
+  "th": "ประตูช้างเผือก",
+  "lat": 18.795433,
+  "lon": 98.986594,
+  "cat": "gate",
+  "notes": "Evening 17:00-01:00: Chang Phueak night food market + North Gate Jazz Co-op; also daytime traffic to Chang Phueak bus station 500 m north.",
+  "riders": "locals, foodies, backpackers, bar-goers"
+ },
+ {
+  "id": "suan_dok_gate",
+  "name": "Suan Dok Gate (West Gate)",
+  "th": "ประตูสวนดอก",
+  "lat": 18.788836,
+  "lon": 98.978192,
+  "cat": "gate",
+  "notes": "Daytime link between Old City and Suan Dok/Maharaj hospital + Nimman; commuter peaks 07:00-09:00, 16:00-18:00.",
+  "riders": "students, hospital visitors, tourists"
+ },
+ {
+  "id": "saen_pung_gate",
+  "name": "Saen Pung (Suan Prung) Gate",
+  "th": "ประตูแสนปุง",
+  "lat": 18.781545,
+  "lon": 98.981597,
+  "cat": "gate",
+  "notes": "Moderate; SW gate near Suan Prung hospital and Nong Buak Haad park; Saturday evening overflow from Wua Lai Walking Street.",
+  "riders": "locals, hospital visitors, Saturday market visitors"
+ },
+ {
+  "id": "chiang_mai_gate",
+  "name": "Chiang Mai Gate (South Gate)",
+  "th": "ประตูเชียงใหม่",
+  "lat": 18.781355,
+  "lon": 98.988981,
+  "cat": "gate",
+  "notes": "Two peaks: morning market 04:00-12:00, night food market 17:00-24:00 daily; Saturday evening (north end of Wua Lai Walking Street).",
+  "riders": "locals, tourists, foodies"
+ },
+ {
+  "id": "si_phum_corner",
+  "name": "Si Phum Corner (NE bastion)",
+  "th": "แจ่งศรีภูมิ",
+  "lat": 18.795,
+  "lon": 98.993422,
+  "cat": "gate",
+  "notes": "Landmark pickup point for Moon Muang Soi 6-9 guesthouses and the Ratchawithi bar lane; late-night 23:00-01:00 returns.",
+  "riders": "backpackers, hostel guests"
+ },
+ {
+  "id": "hua_lin_corner",
+  "name": "Hua Lin Corner (NW bastion)",
+  "th": "แจ่งหัวลิน",
+  "lat": 18.795365,
+  "lon": 98.979945,
+  "cat": "gate",
+  "notes": "Junction toward Huay Kaew Rd / Nimman / Kad Suan Kaew; commuter peaks, student traffic in term time.",
+  "riders": "students, commuters"
+ },
+ {
+  "id": "ku_hueang_corner",
+  "name": "Ku Hueang Corner (SW bastion)",
+  "th": "แจ่งกู่เฮือง",
+  "lat": 18.781838,
+  "lon": 98.978119,
+  "cat": "gate",
+  "notes": "Low-moderate; next to Nong Buak Haad park and Suan Prung; early morning/evening joggers.",
+  "riders": "locals, park visitors"
+ },
+ {
+  "id": "katam_corner",
+  "name": "Katam Corner (SE bastion)",
+  "th": "แจ่งก๊ะต๊ำ",
+  "lat": 18.781424,
+  "lon": 98.99265,
+  "cat": "gate",
+  "notes": "Moderate; junction between Chiang Mai Gate market, Loi Kroh Rd and Night Bazaar.",
+  "riders": "locals, tourists"
+ },
+ {
+  "id": "wat_phra_singh",
+  "name": "Wat Phra Singh",
+  "th": "วัดพระสิงห์",
+  "lat": 18.788585,
+  "lon": 98.981382,
+  "cat": "temple",
+  "notes": "08:00-17:00 daily; huge spike at Songkran (Phra Buddha Sihing procession & bathing, 12-15 Apr). West end of Sunday Walking Street (Sun evening).",
+  "riders": "tourists, tour groups, Thai pilgrims"
+ },
+ {
+  "id": "wat_chedi_luang",
+  "name": "Wat Chedi Luang",
+  "th": "วัดเจดีย์หลวงวรวิหาร",
+  "lat": 18.786973,
+  "lon": 98.986857,
+  "cat": "temple",
+  "notes": "08:00-17:00 (evening chedi visits popular); monk-chat afternoons (unverified); Inthakin city-pillar festival late May (est. 23-29 May 2026), city pillar enshrined here.",
+  "riders": "tourists, tour groups, monks, pilgrims"
+ },
+ {
+  "id": "wat_chiang_man",
+  "name": "Wat Chiang Man",
+  "th": "วัดเชียงมั่น",
+  "lat": 18.793786,
+  "lon": 98.989393,
+  "cat": "temple",
+  "notes": "OSM tag hours 05:00-18:00; the first temple of Chiang Mai, built by King Mangrai in 1297 (Wikipedia); quieter, near Moon Muang backpacker sois.",
+  "riders": "tourists, backpackers"
+ },
+ {
+  "id": "wat_suan_dok",
+  "name": "Wat Suan Dok",
+  "th": "วัดสวนดอก",
+  "lat": 18.787793,
+  "lon": 98.96755,
+  "cat": "temple",
+  "notes": "Daytime + sunset photography; monk chat 17:00-19:00 Mon/Wed/Fri (unverified).",
+  "riders": "tourists, monks, students (MCU monastic university)"
+ },
+ {
+  "id": "wat_umong",
+  "name": "Wat Umong (Suan Buddha Dhamma)",
+  "th": "วัดอุโมงค์(สวนพุทธรรม)",
+  "lat": 18.783103,
+  "lon": 98.952579,
+  "cat": "temple",
+  "notes": "Daytime, forest temple with tunnels; pairs with Baan Kang Wat (Sun morning).",
+  "riders": "tourists, meditators, CMU students"
+ },
+ {
+  "id": "wat_sri_suphan",
+  "name": "Wat Sri Suphan (Silver Temple)",
+  "th": "วัดศรีสุพรรณ",
+  "lat": 18.778648,
+  "lon": 98.983349,
+  "cat": "temple",
+  "notes": "Daytime + Saturday evening (Wua Lai Walking Street next door); illuminated at night.",
+  "riders": "tourists"
+ },
+ {
+  "id": "wat_lok_molee",
+  "name": "Wat Lok Molee",
+  "th": "วัดโลกโมฬี",
+  "lat": 18.796415,
+  "lon": 98.982569,
+  "cat": "temple",
+  "notes": "Daytime; just north of moat, near Hua Lin/Chang Phueak.",
+  "riders": "tourists"
+ },
+ {
+  "id": "wat_phan_tao",
+  "name": "Wat Phan Tao",
+  "th": "วัดพันเตา",
+  "lat": 18.787692,
+  "lon": 98.987453,
+  "cat": "temple",
+  "notes": "Daytime; teak viharn beside Wat Chedi Luang; free candle-lit chanting from 19:00 each night of Yi Peng (23-25 Nov 2026, beautiful-chiangmai.com); Visakha Bucha lantern event (May) (unverified).",
+  "riders": "tourists"
+ },
+ {
+  "id": "wat_chet_yot",
+  "name": "Wat Chet Yot",
+  "th": "วัดเจ็ดยอด",
+  "lat": 18.808965,
+  "lon": 98.972152,
+  "cat": "temple",
+  "notes": "Daytime; on Superhighway near Maya/Nimman; low foot traffic, good fare distance.",
+  "riders": "tourists"
+ },
+ {
+  "id": "wat_doi_suthep",
+  "name": "Wat Phra That Doi Suthep",
+  "th": "วัดพระธาตุดอยสุเทพราชวรวิหาร",
+  "lat": 18.80492,
+  "lon": 98.922103,
+  "cat": "temple",
+  "notes": "06:00-20:00 daily (OSM tag on way/114651040); morning & sunset peaks; 309 steps from car park, 15 km from city (Wikipedia). Foreigner temple fee 30 THB (unverified). Visakha Bucha (May) overnight walk from Khruba Srivichai Monument, starting ~20:00 (thailandee); ~10,000 walkers (unverified). Mountain road: long uphill fare; most visitors use red songthaew from CMU/zoo (unverified).",
+  "riders": "tourists, Thai pilgrims, tour groups"
+ },
+ {
+  "id": "wat_pha_lat",
+  "name": "Wat Pha Lat",
+  "th": "วัดผาลาด",
+  "lat": 18.799122,
+  "lon": 98.934201,
+  "cat": "temple",
+  "notes": "Daytime; mid-mountain on Monk's Trail; hikers start behind CMU.",
+  "riders": "hikers, backpackers"
+ },
+ {
+  "id": "wat_buppharam",
+  "name": "Wat Buppharam",
+  "th": "วัดบุพพาราม",
+  "lat": 18.787907,
+  "lon": 98.998156,
+  "cat": "temple",
+  "notes": "Daytime on Tha Phae Rd between gate and river.",
+  "riders": "tourists"
+ },
+ {
+  "id": "wat_phan_on",
+  "name": "Wat Phan On",
+  "th": "วัดพันอ้น",
+  "lat": 18.78759,
+  "lon": 98.991168,
+  "cat": "temple",
+  "notes": "Sunday evening food court inside temple grounds during Sunday Walking Street.",
+  "riders": "tourists, market-goers"
+ },
+ {
+  "id": "wat_doi_kham",
+  "name": "Wat Phra That Doi Kham",
+  "th": "วัดพระธาตุดอยคำ",
+  "lat": 18.759436,
+  "lon": 98.918844,
+  "cat": "temple",
+  "notes": "Weekend & holiday peaks; lottery-luck temple; SW near Royal Park Rajapruek/Night Safari.",
+  "riders": "Thai worshippers, tourists"
+ },
+ {
+  "id": "three_kings",
+  "name": "Three Kings Monument",
+  "th": "อนุสาวรีย์สามกษัตริย์",
+  "lat": 18.79023,
+  "lon": 98.987352,
+  "cat": "attraction",
+  "notes": "Daytime; ceremonies/offerings; center of Old City museum cluster; Yi Peng cultural fair and Krathong Yai parade staging area (23-25 Nov 2026, beautiful-chiangmai.com).",
+  "riders": "tourists, officials, school groups"
+ },
+ {
+  "id": "arts_cultural_centre",
+  "name": "Chiang Mai City Arts & Cultural Centre",
+  "th": "หอศิลปวัฒนธรรมเมืองเชียงใหม่",
+  "lat": 18.790226,
+  "lon": 98.986883,
+  "cat": "museum",
+  "notes": "Wed-Sun 08:30-16:30 incl. public holidays, closed Mon-Tue (cmocity.com, 2026); behind Three Kings Monument.",
+  "riders": "tourists, school groups"
+ },
+ {
+  "id": "lanna_folklife",
+  "name": "Lanna Folklife Museum",
+  "th": "พิพิธภัณฑ์พื้นถิ่นล้านนา",
+  "lat": 18.790231,
+  "lon": 98.988409,
+  "cat": "museum",
+  "notes": "Wed-Sun 08:30-16:30 incl. public holidays, closed Mon-Tue (cmocity.com, 2026).",
+  "riders": "tourists"
+ },
+ {
+  "id": "national_museum",
+  "name": "Chiang Mai National Museum",
+  "th": "พิพิธภัณฑ์แห่งชาติ จังหวัดเชียงใหม่",
+  "lat": 18.811607,
+  "lon": 98.976425,
+  "cat": "museum",
+  "notes": "Wed-Sun 09:00-16:00 per OSM tag on way/200414775 (not checked against Fine Arts Dept site: unverified); on Superhighway near Wat Chet Yot.",
+  "riders": "tourists, school groups"
+ },
+ {
+  "id": "baan_kang_wat",
+  "name": "Baan Kang Wat Artist Village",
+  "th": "บ้านข้างวัด",
+  "lat": 18.776551,
+  "lon": 98.948439,
+  "cat": "attraction",
+  "notes": "Daytime Tue-Sun; Sunday morning market (unverified); next to Wat Umong.",
+  "riders": "tourists, digital nomads, Thai weekenders"
+ },
+ {
+  "id": "old_cm_cultural_centre",
+  "name": "Old Chiang Mai Cultural Center (khantoke)",
+  "th": "ศูนย์วัฒนธรรมเชียงใหม่",
+  "lat": 18.77188,
+  "lon": 98.980019,
+  "cat": "attraction",
+  "notes": "Evening 19:00-22:00 khantoke dinner shows (unverified); hotel pickups.",
+  "riders": "tour groups, tourists"
+ },
+ {
+  "id": "warorot_market",
+  "name": "Warorot Market (Kad Luang)",
+  "th": "ตลาดวโรรส",
+  "lat": 18.790225,
+  "lon": 99.000525,
+  "cat": "market",
+  "notes": "06:00-19:00 daily per ChiangMaiTravelHub (403 on re-check), 07:00-18:00 per OSM tag on way/89039067 (conflict); busiest mornings & weekends; pre-festival shopping peaks (unverified). Songthaew hub on Chang Moi/Wichayanon Rd.",
+  "riders": "locals, tourists, shoppers, songthaew hub"
+ },
+ {
+  "id": "ton_lamyai",
+  "name": "Ton Lamyai Market & Flower Market",
+  "th": "ตลาดต้นลำไย",
+  "lat": 18.79043,
+  "lon": 99.001397,
+  "cat": "market",
+  "notes": "Flower market nominally open 24/7, many stalls close off-peak; best early morning when deliveries arrive (catisoutoftheoffice). OSM tag on the market building: 05:00-18:00. Next to Warorot.",
+  "riders": "locals, florists, tourists"
+ },
+ {
+  "id": "night_bazaar",
+  "name": "Chiang Mai Night Bazaar",
+  "th": null,
+  "lat": 18.784779,
+  "lon": 99.000441,
+  "cat": "market",
+  "notes": "Daily ~17:00/18:00-24:00, busiest 19:00-22:00; tuk-tuk rank on Chang Klan Rd (unverified); high season Nov-Feb (unverified).",
+  "riders": "tourists, tour groups"
+ },
+ {
+  "id": "anusarn_market",
+  "name": "Anusarn Market",
+  "th": "ตลาดอนุสาร",
+  "lat": 18.782566,
+  "lon": 99.001506,
+  "cat": "market",
+  "notes": "Evening daily; seafood, cabaret, Anusarn boxing; overlaps Night Bazaar.",
+  "riders": "tourists"
+ },
+ {
+  "id": "kalare_night_bazaar",
+  "name": "Kalare Night Bazaar",
+  "th": null,
+  "lat": 18.785399,
+  "lon": 99.001062,
+  "cat": "market",
+  "notes": "Evening; operating status uncertain (Kalare boxing page shows closed, Oct 2025) (unverified).",
+  "riders": "tourists"
+ },
+ {
+  "id": "somphet_market",
+  "name": "Somphet Market",
+  "th": "ตลาดสมเพชร",
+  "lat": 18.791498,
+  "lon": 98.993082,
+  "cat": "market",
+  "notes": "05:00-19:00 daily per web guide, 06:00-16:00 per OSM tag; morning cooking-school market tours from Moon Muang guesthouses.",
+  "riders": "cooking-class groups, backpackers, locals"
+ },
+ {
+  "id": "chiang_mai_gate_market",
+  "name": "Chiang Mai Gate Market",
+  "th": "ตลาดประตูเชียงใหม่",
+  "lat": 18.781793,
+  "lon": 98.988393,
+  "cat": "market",
+  "notes": "04:00-12:00 fresh market; 17:00-24:00 night food market, daily (twoticketsanywhere, updated Jun 2026; OSM tag says Th-Mo 07:00-22:00, conflict). Stalls line both sides of Bumrung Buri Rd; night food stalls mapped at node/4430138378. Saturday walking-street overflow.",
+  "riders": "locals, tourists, foodies"
+ },
+ {
+  "id": "chang_phueak_market",
+  "name": "Chang Phueak Night Market",
+  "th": "ตลาดช้างเผือก",
+  "lat": 18.796239,
+  "lon": 98.985828,
+  "cat": "market",
+  "notes": "Evening 17:00-late; famous khao kha moo stall; outside North Gate.",
+  "riders": "locals, foodies, backpackers"
+ },
+ {
+  "id": "muang_mai_market",
+  "name": "Muang Mai Market",
+  "th": "ตลาดเมืองใหม่",
+  "lat": 18.797179,
+  "lon": 98.99821,
+  "cat": "market",
+  "notes": "Largest wholesale fruit/veg market; open daily 06:00-19:00, most vendors close at night, arrive early for the freshest produce (catisoutoftheoffice, updated Nov 2024). Pre-dawn wholesale window (unverified). Cargo-heavy trips (vendors with goods).",
+  "riders": "vendors, restaurant buyers, locals"
+ },
+ {
+  "id": "jing_jai_market",
+  "name": "Jing Jai (JJ) Farmers Market",
+  "th": null,
+  "lat": 18.807941,
+  "lon": 98.994917,
+  "cat": "market",
+  "notes": "Sat-Sun 06:30-15:00 (jontotheworld; other sources say 14:00 close); best 07:30-10:30 (same source).",
+  "riders": "expats, tourists, Thai weekenders"
+ },
+ {
+  "id": "kham_thiang_market",
+  "name": "Kham Thiang Flower & Plant Market",
+  "th": "ตลาดคำเที่ยง",
+  "lat": 18.806461,
+  "lon": 98.998457,
+  "cat": "market",
+  "notes": "Daytime, weekend peak; plants = bulky cargo trips.",
+  "riders": "locals, gardeners"
+ },
+ {
+  "id": "sunday_walking_street",
+  "name": "Sunday Walking Street (Ratchadamnoen Rd)",
+  "th": "ถนนคนเดินวันอาทิตย์",
+  "lat": 18.788207,
+  "lon": 98.987988,
+  "cat": "market",
+  "notes": "Sunday 17:00-23:00; crowds peak 19:00-21:00 (chiangmaiambassador 2026); road closed to traffic, pick up at Tha Phae Gate or side sois. Biggest single weekly demand spike.",
+  "riders": "tourists, backpackers, locals"
+ },
+ {
+  "id": "saturday_walking_street",
+  "name": "Saturday Walking Street (Wua Lai Rd)",
+  "th": "ถนนคนเดินวัวลาย",
+  "lat": 18.780905,
+  "lon": 98.987886,
+  "cat": "market",
+  "notes": "Saturday 17:00-23:00; crowds peak 19:00-21:00 (chiangmaiambassador 2026); road closed; pick up at Chiang Mai Gate / Thiphanet Rd.",
+  "riders": "tourists, locals"
+ },
+ {
+  "id": "kad_na_mor",
+  "name": "Kad Na Mor (CMU Front Gate Market)",
+  "th": "กาดหน้ามอ",
+  "lat": 18.808505,
+  "lon": 98.955748,
+  "cat": "market",
+  "notes": "Daily 17:00-22:00, busiest after 18:30 when classes end (chiangmaimaster); term-time peak; student budget fares.",
+  "riders": "students, young locals"
+ },
+ {
+  "id": "lang_mor_market",
+  "name": "University Gate Food Market (Lang Mor)",
+  "th": null,
+  "lat": 18.793268,
+  "lon": 98.953881,
+  "cat": "market",
+  "notes": "Daily evenings; CMU back (engineering) gate area; term-time peak.",
+  "riders": "students"
+ },
+ {
+  "id": "central_airport",
+  "name": "Central Chiangmai Airport (Central Plaza Airport)",
+  "th": "เซ็นทรัลพลาซ่า เชียงใหม่ แอร์พอร์ต",
+  "lat": 18.768963,
+  "lon": 98.975343,
+  "cat": "mall",
+  "notes": "Mall hours per OSM tag Mo-Fr 11:00-21:00, Sa-Su 10:00-21:00 (unverified on mall site); weekend peaks; 0.76 km straight-line from the CNX terminal building. Brand renamed from CentralPlaza Chiang Mai Airport to Central Chiangmai Airport in early 2022 (Wikipedia).",
+  "riders": "shoppers, families, tourists"
+ },
+ {
+  "id": "central_festival",
+  "name": "Central Festival Chiangmai",
+  "th": "เซ็นทรัล เฟสติวัล เชียงใหม่",
+  "lat": 18.807405,
+  "lon": 99.018214,
+  "cat": "mall",
+  "notes": "Hours per OSM tag Mo-Th 11:00-21:30, Fr 11:00-22:00, Sa-Su 10:00-22:00 (unverified on mall site); opened 15 Nov 2013, 250,000 m2 (Central Pattana); CPN page slug is \"central-chiangmai\", so current brand may be \"Central Chiangmai\" (unverified). Superhighway NE near Arcade bus terminal.",
+  "riders": "shoppers, families, Chinese tour groups"
+ },
+ {
+  "id": "promenada",
+  "name": "Promenada Resort Mall",
+  "th": null,
+  "lat": 18.766348,
+  "lon": 99.036736,
+  "cat": "mall",
+  "notes": "Daytime/evening, weekends; far east (San Kamphaeng side) = long fares.",
+  "riders": "expats, families"
+ },
+ {
+  "id": "maya",
+  "name": "MAYA Lifestyle Shopping Center",
+  "th": "เมญ่า",
+  "lat": 18.802458,
+  "lon": 98.967267,
+  "cat": "mall",
+  "notes": "11:00-22:00 (unverified); rooftop bar evenings; Nimman/Rincome junction.",
+  "riders": "students, tourists, young locals"
+ },
+ {
+  "id": "one_nimman",
+  "name": "One Nimman",
+  "th": null,
+  "lat": 18.800064,
+  "lon": 98.968004,
+  "cat": "mall",
+  "notes": "Daytime + evening; weekend market; Nimman soi 1 end.",
+  "riders": "tourists, digital nomads"
+ },
+ {
+  "id": "think_park",
+  "name": "Think Park",
+  "th": null,
+  "lat": 18.80115,
+  "lon": 98.967401,
+  "cat": "mall",
+  "notes": "Evening pop-up market/events; opposite Maya.",
+  "riders": "students, tourists"
+ },
+ {
+  "id": "kad_suan_kaew",
+  "name": "Kad Suan Kaew (Central Kad Suan Kaew)",
+  "th": "กาดสวนแก้ว",
+  "lat": 18.796176,
+  "lon": 98.977296,
+  "cat": "mall",
+  "notes": "CLOSED: the shopping centre ended public operation 30 Jun 2022 and was advertised for sale (3 bn THB) in Sep 2024 (Wikipedia \"Kad Suan Kaew\"). OSM still maps the dept-store node; the building relation/6091082 is now named \"12 Huay Kaew Complex\" (current use unverified). Treat as a landmark with near-zero demand unless reopened.",
+  "riders": "none while closed (formerly locals, students)"
+ },
+ {
+  "id": "cnx_airport",
+  "name": "Chiang Mai International Airport (CNX) terminal",
+  "th": "ท่าอากาศยานนานาชาติเชียงใหม่",
+  "lat": 18.768997,
+  "lon": 98.968111,
+  "cat": "transport",
+  "notes": "~05:00-24:00 flights; peaks around morning & evening banks; high season Nov-Feb & Songkran (unverified). 9.52 M passengers in 2025. Tuk-tuks drop at departures; arrivals use official taxi/app queue (unverified).",
+  "riders": "tourists, business travellers, locals"
+ },
+ {
+  "id": "railway_station",
+  "name": "Chiang Mai Railway Station",
+  "th": "เชียงใหม่",
+  "lat": 18.783522,
+  "lon": 99.016823,
+  "cat": "transport",
+  "notes": "Arrivals cluster early morning (overnight trains from Bangkok) and evening departures (unverified); east of river = long fare to Old City.",
+  "riders": "tourists, backpackers, locals"
+ },
+ {
+  "id": "arcade_2",
+  "name": "Arcade Bus Terminal 2",
+  "th": "สถานีขนส่ง อาเขต (หมายเลข 2)",
+  "lat": 18.800791,
+  "lon": 99.017243,
+  "cat": "transport",
+  "notes": "All day + overnight VIP buses to/from Bangkok; long-distance north/northeast; spikes before/after long weekends and Songkran.",
+  "riders": "backpackers, locals, students going home"
+ },
+ {
+  "id": "arcade_3",
+  "name": "Arcade Bus Terminal 3",
+  "th": "สถานีขนส่ง อาเขต (หมายเลข 3)",
+  "lat": 18.799554,
+  "lon": 99.017835,
+  "cat": "transport",
+  "notes": "Long-distance buses; adjacent to Terminal 2 (~150 m).",
+  "riders": "backpackers, tourists"
+ },
+ {
+  "id": "chang_phueak_bus",
+  "name": "Chang Phueak Bus Station (Terminal 1)",
+  "th": "สถานีขนส่งช้างเผือก",
+  "lat": 18.800138,
+  "lon": 98.986756,
+  "cat": "transport",
+  "notes": "Provincial buses to Mae Rim, Chiang Dao, Fang, Tha Ton, Phrao, Hot, Chom Thong, Samoeng; mornings busiest (unverified); yellow songthaew stands next door.",
+  "riders": "locals, villagers, hikers"
+ },
+ {
+  "id": "cmu_main_gate",
+  "name": "Chiang Mai University Main Gate",
+  "th": "ประตูหน้า มช.",
+  "lat": 18.808185,
+  "lon": 98.95474,
+  "cat": "university",
+  "notes": "Term-time (unverified months) weekdays 07:00-09:00 & 16:00-18:00, nightly Kad Na Mor; 38,269 students (2023).",
+  "riders": "students, staff, Doi Suthep-bound tourists"
+ },
+ {
+  "id": "cmu_rajabhat",
+  "name": "Chiang Mai Rajabhat University",
+  "th": "มหาวิทยาลัยราชภัฏเชียงใหม่",
+  "lat": 18.807299,
+  "lon": 98.986851,
+  "cat": "university",
+  "notes": "Term-time weekday peaks; near Chang Phueak.",
+  "riders": "students"
+ },
+ {
+  "id": "maharaj_hospital",
+  "name": "Maharaj Nakorn Chiang Mai Hospital (CMU Suan Dok)",
+  "th": "โรงพยาบาลมหาราชนครเชียงใหม่",
+  "lat": 18.791843,
+  "lon": 98.974276,
+  "cat": "hospital",
+  "notes": "Weekday morning OPD heaviest (unverified); 24h ER; 1,400 beds.",
+  "riders": "patients, elderly, relatives, medical students"
+ },
+ {
+  "id": "chiang_mai_ram",
+  "name": "Chiang Mai Ram Hospital",
+  "th": "โรงพยาบาลเชียงใหม่ราม",
+  "lat": 18.794938,
+  "lon": 98.977486,
+  "cat": "hospital",
+  "notes": "Daytime weekdays; private hospital on Boonruangrit Rd.",
+  "riders": "patients, expats, medical tourists"
+ },
+ {
+  "id": "bangkok_hospital",
+  "name": "Bangkok Hospital Chiang Mai",
+  "th": "โรงพยาบาลกรุงเทพ",
+  "lat": 18.78873,
+  "lon": 99.026536,
+  "cat": "hospital",
+  "notes": "Daytime; far east on Superhighway = long fares.",
+  "riders": "expats, medical tourists, insured locals"
+ },
+ {
+  "id": "iron_bridge",
+  "name": "Iron Bridge (Khua Lek)",
+  "th": "ขัวเหล็ก",
+  "lat": 18.784019,
+  "lon": 99.004574,
+  "cat": "viewpoint",
+  "notes": "Evening photos; Yi Peng/Loy Krathong 23-25 Nov 2026: krathong floating on the Ping between Nawarat Bridge and Iron Bridge (beautiful-chiangmai.com); at Loi Kroh Rd river end.",
+  "riders": "tourists, photographers"
+ },
+ {
+  "id": "nawarat_bridge",
+  "name": "Nawarat Bridge",
+  "th": "สะพานนวรัฐ",
+  "lat": 18.787635,
+  "lon": 99.004395,
+  "cat": "viewpoint",
+  "notes": "Main Tha Phae Rd river crossing; Flower Festival parade start 14 Feb 2026 (~08:00); Yi Peng/Loy Krathong krathong-floating stretch runs from here to Iron Bridge (23-25 Nov 2026).",
+  "riders": "commuters, tourists"
+ },
+ {
+  "id": "the_riverside",
+  "name": "The Riverside Bar & Restaurant",
+  "th": null,
+  "lat": 18.789824,
+  "lon": 99.003981,
+  "cat": "nightlife",
+  "notes": "OSM opening_hours Mon-Sun 17:00-01:00; live music, dinner cruises (unverified).",
+  "riders": "tourists, expats, locals"
+ },
+ {
+  "id": "good_view",
+  "name": "Good View",
+  "th": "เดอะกู้ดวิว เชียงใหม่",
+  "lat": 18.790305,
+  "lon": 99.003749,
+  "cat": "nightlife",
+  "notes": "Evening, live bands; next to The Riverside on Charoenrat Rd.",
+  "riders": "tourists, locals"
+ },
+ {
+  "id": "zoe_in_yellow",
+  "name": "Zoe in Yellow / Ratchawithi bar lane",
+  "th": null,
+  "lat": 18.790865,
+  "lon": 98.990599,
+  "cat": "nightlife",
+  "notes": "Nightly ~20:00-24:00/01:00 close; 23:30-01:30 exodus to guesthouses.",
+  "riders": "backpackers, young Thais"
+ },
+ {
+  "id": "north_gate_jazz",
+  "name": "North Gate Jazz Co-op",
+  "th": null,
+  "lat": 18.795192,
+  "lon": 98.987003,
+  "cat": "nightlife",
+  "notes": "OSM opening_hours Mo-Su 20:00-02:00; jam nights (unverified).",
+  "riders": "expats, tourists, musicians"
+ },
+ {
+  "id": "loi_kroh_bars",
+  "name": "Loi Kroh Road bar strip",
+  "th": "ถนนลอยเคราะห์",
+  "lat": 18.78409,
+  "lon": 98.998709,
+  "cat": "nightlife",
+  "notes": "Nightly 19:00-02:00; between Kotchasarn Rd and Chang Klan Rd.",
+  "riders": "male tourists, expats"
+ },
+ {
+  "id": "thapae_boxing",
+  "name": "Thapae Boxing Stadium",
+  "th": null,
+  "lat": 18.787211,
+  "lon": 98.992497,
+  "cat": "nightlife",
+  "notes": "Mon-Sat, doors 20:00, fights from 21:00 (chiangmaiboxingstadiums.com); ~7 bouts and ~23:30 finish (unverified).",
+  "riders": "tourists"
+ },
+ {
+  "id": "loi_kroh_boxing",
+  "name": "Loi Kroh Boxing Stadium",
+  "th": null,
+  "lat": 18.78337,
+  "lon": 98.997714,
+  "cat": "nightlife",
+  "notes": "Fights Mon/Wed/Fri 21:00-24:00, closed other nights (occasional Tue/Thu events); tickets 600 THB standard / 1,000 THB ringside (muaythaichiangmai.com). Inside Loi Kroh bar complex.",
+  "riders": "tourists"
+ },
+ {
+  "id": "warm_up_cafe",
+  "name": "Warm Up Cafe (Nimman)",
+  "th": null,
+  "lat": 18.795158,
+  "lon": 98.964841,
+  "cat": "nightlife",
+  "notes": "Nightly club ~21:00-02:00; weekend peak; Nimman soi area.",
+  "riders": "students, young Thais"
+ },
+ {
+  "id": "chiang_mai_zoo",
+  "name": "Chiang Mai Zoo (main entrance)",
+  "th": "สวนสัตว์เชียงใหม่",
+  "lat": 18.81064,
+  "lon": 98.948016,
+  "cat": "attraction",
+  "notes": "Hours conflict: 08:00-17:00 (ChiangMaiTravelHub, 403 on re-check) vs 09:00-17:00 (Wikivoyage); official chiangmaizoo.com unreachable (TLS error) - (unverified). Wikivoyage fees: adult 350 THB / child 120. Weekends/school holidays peak (unverified); Huay Kaew Rd at foot of Doi Suthep.",
+  "riders": "families, school groups, tourists"
+ },
+ {
+  "id": "huay_kaew_waterfall",
+  "name": "Huay Kaew Waterfall",
+  "th": "น้ำตกห้วยแก้ว",
+  "lat": 18.811433,
+  "lon": 98.943549,
+  "cat": "park",
+  "notes": "Afternoons & weekends; Doi Suthep-Pui national-park fee since 1 Oct 2025 (foreign adult 100 THB, Thai adult 20 THB).",
+  "riders": "locals, students, tourists"
+ },
+ {
+  "id": "khruba_monument",
+  "name": "Khruba Srivichai Monument",
+  "th": "อนุสาวรีย์ครูบาศรีวิชัย",
+  "lat": 18.812828,
+  "lon": 98.946133,
+  "cat": "attraction",
+  "notes": "Start of Doi Suthep road; songthaew transfer point (unverified); Visakha Bucha walk starts here ~20:00 (thailandee; ~10,000 walkers unverified).",
+  "riders": "Thai pilgrims, Doi Suthep-bound tourists"
+ },
+ {
+  "id": "ang_kaew",
+  "name": "Ang Kaew Reservoir (CMU)",
+  "th": "อ่างแก้ว",
+  "lat": 18.807283,
+  "lon": 98.949381,
+  "cat": "park",
+  "notes": "Early morning & late afternoon; inside CMU campus.",
+  "riders": "students, joggers, locals"
+ },
+ {
+  "id": "night_safari",
+  "name": "Chiang Mai Night Safari",
+  "th": "เชียงใหม่ไนท์ซาฟารี",
+  "lat": 18.743958,
+  "lon": 98.92327,
+  "cat": "attraction",
+  "notes": "Ticket booth 11:00-21:00, closes 22:00; Safari Tram foreign adult 1,200 THB / Thai adult 300; Jaguar Trail walk foreign 400 / Thai 50 (chiangmainightsafari.com, 2026). Site advises arriving ~17:00; return trips 20:00-22:00. Pickup = OSM entrance=main node/1075186977 inside zoo polygon way/250585255. SW edge (Hang Dong side) = long fares.",
+  "riders": "families, tour groups, tourists"
+ },
+ {
+  "id": "royal_park_rajapruek",
+  "name": "Royal Park Rajapruek",
+  "th": "อุทยานหลวงราชพฤกษ์",
+  "lat": 18.748168,
+  "lon": 98.92505,
+  "cat": "park",
+  "notes": "08:00-18:00 daily; foreign adult 200 THB / child 150, Thai adult 100 / child 70 (royalparkrajapruek.org/Admission, read 2026-09-26); cool-season peak Dec-Feb (unverified). Pickup = OSM main entrance node/1561123863 inside park polygon way/186782433 (\"Royal Flora Ratchaphruek Park\"). Next to Night Safari.",
+  "riders": "tourists, Thai families"
+ },
+ {
+  "id": "huay_tung_tao",
+  "name": "Huay Tung Tao Lake",
+  "th": "ทะเลสาบห้วยตึงเฒ่า",
+  "lat": 18.867912,
+  "lon": 98.941166,
+  "cat": "park",
+  "notes": "Weekends & holidays; hours 08:00-18:00 per OSM tag on relation/9227296, 08:00-20:00 per Holidify (conflict); entry 50 THB (Holidify, no Thai/foreign split; a 20 THB Thai rate is unverified). Point is the lake centroid (in the water): snap to the lakeside road. Lakeside bamboo huts; N of city (Mae Rim).",
+  "riders": "locals, students, weekenders"
+ },
+ {
+  "id": "nong_buak_haad",
+  "name": "Nong Buak Haad Public Park",
+  "th": "สวนบวกหาด",
+  "lat": 18.782289,
+  "lon": 98.979272,
+  "cat": "park",
+  "notes": "06:00-08:00 & 16:00-19:00 (unverified); OSM tag hours 05:00-21:00; Chiang Mai Flower Festival site (13-15 Feb 2026; parade from ~08:00 finishes here 14 Feb).",
+  "riders": "locals, families, joggers"
+ },
+ {
+  "id": "grand_canyon",
+  "name": "Chiang Mai Grand Canyon (water park)",
+  "th": "แกรนด์แคนยอน เชียงใหม่",
+  "lat": 18.697408,
+  "lon": 98.891909,
+  "cat": "attraction",
+  "notes": "Daytime; hot-season Mar-May peak (unverified); far SW (Hang Dong) = long fare.",
+  "riders": "young tourists, backpackers, Thai families"
+ },
+ {
+  "id": "bhubing_palace",
+  "name": "Bhubing Palace",
+  "th": "พระตำหนักภูพิงคราชนิเวศน์",
+  "lat": 18.80506,
+  "lon": 98.901015,
+  "cat": "attraction",
+  "notes": "Daytime; closed when royals in residence (unverified); beyond Doi Suthep (songthaew territory).",
+  "riders": "tourists, Thai visitors"
+ },
+ {
+  "id": "stadium_700",
+  "name": "700th Anniversary Stadium",
+  "th": "สนามกีฬาสมโภชเชียงใหม่ 700 ปี",
+  "lat": 18.839804,
+  "lon": 98.959334,
+  "cat": "attraction",
+  "notes": "Match nights and concerts (unverified); big one-off spikes.",
+  "riders": "sports fans, concert-goers"
+ },
+ {
+  "id": "moon_muang_soi_7",
+  "name": "Moon Muang Soi 6-9 backpacker area",
+  "th": "ถนนมูลเมือง ซอย 7",
+  "lat": 18.793132,
+  "lon": 98.990518,
+  "cat": "hotel_area",
+  "notes": "Mornings (tours/cooking classes/transfers 07:00-09:00), evenings to markets, late-night returns from bars.",
+  "riders": "backpackers, budget tourists"
+ },
+ {
+  "id": "nimman_soi_7_9",
+  "name": "Nimmanhaemin Soi 7-9 hotel & cafe area",
+  "th": "ถนนนิมมานเหมินท์ ซอย 7",
+  "lat": 18.798128,
+  "lon": 98.968865,
+  "cat": "hotel_area",
+  "notes": "Daytime cafe hopping, evening nightlife; U Nimman / Art Mai hotels nearby.",
+  "riders": "digital nomads, Thai & Chinese tourists, students"
+ },
+ {
+  "id": "pillars_137",
+  "name": "137 Pillars House",
+  "th": null,
+  "lat": 18.791894,
+  "lon": 99.004046,
+  "cat": "hotel_area",
+  "notes": "Hotel transfers, dinner trips to Night Bazaar/Old City; east riverside (Wat Ket).",
+  "riders": "luxury tourists"
+ },
+ {
+  "id": "anantara",
+  "name": "Anantara Chiang Mai Resort",
+  "th": null,
+  "lat": 18.781953,
+  "lon": 99.003897,
+  "cat": "hotel_area",
+  "notes": "Riverside on Charoenprathet Rd; evening trips to Night Bazaar (~0.4 km).",
+  "riders": "luxury tourists"
+ },
+ {
+  "id": "shangri_la",
+  "name": "Shangri-La Chiang Mai",
+  "th": null,
+  "lat": 18.778374,
+  "lon": 99.000744,
+  "cat": "hotel_area",
+  "notes": "Chang Klan Rd; Night Bazaar walkable; airport transfers.",
+  "riders": "luxury tourists, conference guests"
+ },
+ {
+  "id": "tamarind_village",
+  "name": "Tamarind Village",
+  "th": null,
+  "lat": 18.78859,
+  "lon": 98.989723,
+  "cat": "hotel_area",
+  "notes": "Old City, Ratchadamnoen Rd; on Sunday Walking Street.",
+  "riders": "upscale tourists"
+ }
+]

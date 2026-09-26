@@ -1,0 +1,20 @@
+// Loading-screen tips, from docs/research/culture.md §11c.
+export const TIPS = [
+  'Chiang Mai means "new city". King Mangrai founded it in 1296.',
+  '"Tha Phae" means raft landing: river goods came ashore at the east gate.',
+  'Inner moat roads run anticlockwise and outer ones clockwise. Pick the right side of the moat.',
+  'A woman shouldn’t sit beside a monk or hand him things directly. Give monks the back bench.',
+  'Red songthaews charge about 30 baht a head in town. Beat them on comfort, not price.',
+  'In Kham Mueang, "jao" makes a sentence polite and "lam" means delicious.',
+  'Hang a jasmine phuang malai on your mirror, an offering to Mae Yanang, goddess of journeys.',
+  'The Doi Suthep road was dug in 5 months 22 days and opened on 30 April 1935.',
+  'A white elephant carried the relic up Doi Suthep, trumpeted three times and died. The temple stands where it fell.',
+  'Wua Lai is the silversmiths’ street; Wat Sri Suphan has a silver ordination hall.',
+  'Sunday Walking Street closes Ratchadamnoen Road from late afternoon. Plan your route around it.',
+  'Burning season (Feb–Apr) means fewer tourists. Mask up and chase the locals’ trips.',
+  'Mahidol Road, Highway 1141, is your six-lane artery to the airport.',
+  'Tipping isn’t expected on a tuk-tuk. Honest fares bring passengers back.',
+  'Yi Peng falls on the full moon of the second Lanna month, usually November. Expect lanterns and crowds.',
+  'The Superhighway is the last 10 km of Highway 11. It ends at Huay Kaew Road.',
+  'Chiang Mai tuk-tuk plates are yellow with green letters.',
+];
