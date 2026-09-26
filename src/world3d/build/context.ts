@@ -28,6 +28,11 @@ export interface BuildContext {
   parkAreas: { ring: Ring; kind: string }[];
   /** Moat water rings (ground builder), for bank trees and the sunken moat. */
   moatRings: Ring[];
+  /**
+   * Water sunk below the street (ground builder): outline, islands and surface
+   * height in metres (negative), e.g. the moat at −1.6 and the Ping at −3.5.
+   */
+  waterBodies?: { kind: string; ring: Ring; islands: Ring[]; level: number; cut: boolean[] }[];
   /** Road polylines in way order (roads builder). */
   roadPts: Ring[];
   /** Tree instances: x, y, scale, kind index. */

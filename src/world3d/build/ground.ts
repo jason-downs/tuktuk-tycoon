@@ -1,17 +1,21 @@
-// Ground, land cover, water and linear features (rail, runway, walls, fences,
-// footpaths).
+// Ground: the far plain, the street-level base with holes where water is sunk
+// (water.ts), painted land cover (surfaces.ts), channels, footpaths, rail, the
+// airport, and walls, fences and hedges.
 
 import { ringOf } from '../city';
+import { buildAirport } from './airport';
 import type { BuildContext } from './context';
 import { shade, type MeshWriter, type RGB } from './mesh';
 import type { Occupancy } from './occupancy';
 import { P } from './palette';
-import { box, dashes, offset, type Ring } from './shapes';
+import { box, type Ring } from './shapes';
+import { buildPaths, buildRail, buildSurfaces } from './surfaces';
+import { buildChannels, buildWater, markWater, planWater, WaterIndex } from './water';
 
 export function buildGround(ctx: BuildContext): void {
   const { city, w, occ } = ctx;
   const [kx0, ky0, kx1, ky1] = ctx.keep;
-  // ---- ground: far plain and urban base
+  // ---- ground: far plain and the street-level base, open over sunken water
   const FAR = 16_000;
   w.ground.polygon(
     [
@@ -31,6 +35,10 @@ export function buildGround(ctx: BuildContext): void {
     -0.02,
     P.groundFar,
   );
+  const water = planWater(city, ctx.keep);
+  ctx.waterBodies = water.bodies;
+  for (const b of water.bodies) if (b.kind === 'moat') ctx.moatRings.push(b.ring);
+  markWater(occ, water.bodies);
   w.ground.polygon(
     [
       [kx0, ky0],
@@ -38,92 +46,24 @@ export function buildGround(ctx: BuildContext): void {
       [kx1, ky1],
       [kx0, ky1],
     ],
-    undefined,
+    water.bodies.map((b) => b.ring),
     0,
     P.groundUrban,
   );
 
-  // ---- land cover and water areas
-  const AREA_STYLE: Record<string, [RGB, number] | null> = {
-    park: [P.grass, 0.03],
-    garden: [P.grass, 0.03],
-    grass: [P.grass, 0.025],
-    golf: [P.grass, 0.03],
-    pitch: [P.pitch, 0.035],
-    forest: [P.forest, 0.03],
-    rural: [P.rural, 0.02],
-    cemetery: [P.cemetery, 0.03],
-    temple: [P.templeSand, 0.02],
-    worship: [P.worship, 0.02],
-    campus: [P.campus, 0.015],
-    school: [P.campus, 0.017],
-    hospital: [P.hospital, 0.015],
-    market: [P.market, 0.018],
-    parking: [P.parking, 0.04],
-    fuel: [P.parking, 0.04],
-    plaza: [P.plaza, 0.045],
-    apron: [P.apron, 0.035],
-    railway: [P.railway, 0.012],
-    construction: [P.construction, 0.012],
-    playground: [P.playground, 0.04],
-    residential: null,
-    commercial: null,
-    retail: null,
-    industrial: null,
-  };
-  const WATER_STYLE: Record<string, [RGB, number]> = {
-    moat: [P.moat, 0.06],
-    river: [P.river, 0.055],
-    water: [P.pond, 0.06],
-    pool: [P.pool, 0.08],
-  };
-  const parkAreas = ctx.parkAreas;
-  const moatRings = ctx.moatRings;
-  for (const a of city.areas) {
-    const kind = city.areaKinds[a.k];
-    const ring = ringOf(a.r);
-    const holes = a.h?.map(ringOf);
-    const water = WATER_STYLE[kind];
-    if (water) {
-      w.water.polygon(ring, holes, water[1], water[0]);
-      if (kind === 'moat') moatRings.push(ring);
-      continue;
-    }
-    const style = AREA_STYLE[kind];
-    if (!style) continue;
-    w.ground.polygon(ring, holes, style[1], style[0]);
-    if (['park', 'garden', 'grass', 'golf', 'forest', 'cemetery', 'temple', 'campus', 'school', 'hospital'].includes(kind)) parkAreas.push({ ring, kind });
-  }
+  // ---- painted ground, in order: land cover, water edges, channels, paths, rail, airport
+  buildSurfaces(ctx);
+  buildWater(ctx, water);
+  buildChannels(ctx, water, new WaterIndex(water.bodies));
+  buildPaths(ctx);
+  buildRail(ctx);
+  buildAirport(ctx);
 
-  // ---- linear features
+  // ---- walls, fences and hedges
   for (const l of city.lines) {
     const kind = city.lineKinds[l.k];
     const pts = ringOf(l.p);
-    const width = l.w ? l.w / 10 : 0;
     switch (kind) {
-      case 'river':
-        w.water.ribbon(pts, (width || 30) / 2, 0.055, P.river, 2);
-        break;
-      case 'canal':
-        w.water.ribbon(pts, (width || 6) / 2, 0.058, P.pond, 1);
-        break;
-      case 'stream':
-      case 'drain':
-        w.water.ribbon(pts, (width || 2.5) / 2, 0.058, P.pond, 0.5);
-        break;
-      case 'rail':
-        w.ground.ribbon(pts, 1.6, 0.05, P.ballast);
-        w.ground.ribbon(offset(pts, 0.72), 0.07, 0.09, P.rail);
-        w.ground.ribbon(offset(pts, -0.72), 0.07, 0.09, P.rail);
-        break;
-      case 'runway':
-        w.roads.ribbon(pts, (width || 45) / 2, 0.06, P.runway, 10);
-        dashes(w.roads, pts, 0.45, 0.08, P.laneWhite, 30, 20);
-        break;
-      case 'taxiway':
-        w.roads.ribbon(pts, (width || 23) / 2, 0.055, P.runway, 5);
-        dashes(w.roads, pts, 0.15, 0.075, P.laneYellow, 1000, 0);
-        break;
       case 'city_wall':
         cityWall(w.structures, pts, !!l.closed, occ);
         break;
@@ -136,15 +76,10 @@ export function buildGround(ctx: BuildContext): void {
       case 'hedge':
         wallLine(w.structures, pts, 0.8, 1.2, P.hedge);
         break;
-      case 'footway':
-      case 'steps':
-        w.ground.ribbon(pts, (width || 1.8) / 2, 0.042, P.pavement);
-        break;
       default:
         break;
     }
   }
-
 }
 
 function wallLine(w: MeshWriter, pts: Ring, thick: number, height: number, c: RGB): void {
