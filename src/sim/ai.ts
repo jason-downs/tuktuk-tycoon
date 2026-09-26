@@ -144,7 +144,7 @@ export class FleetAI {
   }
 
   private think(game: Game, v: Vehicle, driver: Driver, cal: CalendarInfo): void {
-    if (!driver.isPlayer && !onShift(driver, cal)) {
+    if (!driver.isPlayer && (!onShift(driver, cal) || (driver.restUntil ?? 0) > game.state.time)) {
       if (v.task.kind !== 'offduty') {
         v.task = { kind: 'offduty' };
         v.route = null;

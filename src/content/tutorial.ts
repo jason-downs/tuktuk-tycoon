@@ -119,7 +119,7 @@ export const COACH: Record<TutorialStep, CoachStep> = {
 /** What each management panel is for, in top-bar order (panels are registered by other modules). */
 export const PANEL_TOUR: { id: string; blurb: string }[] = [
   { id: 'fleet', blurb: 'Every tuk-tuk you run and what it’s doing.' },
-  { id: 'hire', blurb: 'Drivers looking for work.' },
+  { id: 'hire', blurb: 'Drivers looking for work, and tuk-tuks to rent or buy.' },
   { id: 'garage', blurb: 'Repairs, upgrades and paint.' },
   { id: 'business', blurb: 'Partnerships, permits, depots and loans.' },
   { id: 'goals', blurb: 'Targets, and rewards for reaching them.' },

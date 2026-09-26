@@ -74,7 +74,8 @@ export class EconomySystem {
     for (const d of state.drivers) {
       if (d.isPlayer) continue;
       if (d.payModel === 'salary') spend(game, d.dailyPay, 'wages');
-      else earn(game, d.dailyPay, 'rent_income');
+      // Rent-out drivers pay only while they have a tuk-tuk to work.
+      else if (d.vehicleId !== null) earn(game, d.dailyPay, 'rent_income');
       d.earnedToday = 0;
     }
     for (const d of state.drivers) d.fatigue = Math.max(0, d.fatigue - 60);

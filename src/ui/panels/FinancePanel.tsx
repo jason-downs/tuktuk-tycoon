@@ -13,7 +13,7 @@ const LABELS: Record<LedgerCategory, string> = {
   wages: 'Wages',
   commission: 'Driver commission',
   maintenance: 'Maintenance',
-  vehicles: 'Vehicle purchases',
+  vehicles: 'Vehicles',
   upgrades: 'Upgrades',
   business: 'Business',
   marketing: 'Marketing',
