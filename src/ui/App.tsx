@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { ARCHETYPES } from '../content/archetypes';
+import { spokenName } from '../content/dialogue';
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { MapView } from '../map/MapView';
 import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
 import type { Game } from '../sim/game';
+import { setManual } from '../sim/manual';
 import type { Notice } from '../sim/types';
 import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
 import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
+import { SoundControls } from './audio/SoundControls';
+import { ManualStatus, ManualToggle } from './manual/ManualDrive';
+import { SpeechLine } from './SpeechLine';
+import './responsive.css';
 
 export interface AppProps {
   game: Game;
@@ -119,12 +125,25 @@ function TopBar({ game, onSave, onQuit }: { game: Game; onSave: () => void; onQu
       </div>
       <nav className="panels-nav">
         {PANELS.map((p) => (
-          <button key={p.id} className={`btn tab ${panel === p.id ? 'on' : ''}`} onClick={() => ui.set({ panel: panel === p.id ? null : p.id })}>
-            <span>{p.icon}</span> {p.title}
+          <button
+            key={p.id}
+            className={`btn tab ${panel === p.id ? 'on' : ''}`}
+            onClick={() => ui.set({ panel: panel === p.id ? null : p.id })}
+            title={p.title}
+            aria-label={p.title}
+          >
+            <span className="tab-icon" aria-hidden>
+              {p.icon}
+            </span>
+            <span className="tab-label">{p.title}</span>
           </button>
         ))}
       </nav>
       <div className="menu">
+        <SoundControls />
+        <button className="btn tiny" onClick={() => ui.set({ modal: 'help' })} title="How to play (?)" aria-label="How to play">
+          ?
+        </button>
         <button className="btn tiny" onClick={onSave} title="Save game">
           💾
         </button>
@@ -191,11 +210,13 @@ function PlayerCard({ game, view }: { game: Game; view: MapView | null }) {
         <button className="btn" disabled={d.busy} onClick={() => game.playerRefuel() && game.notify('Off to the LPG pump.', 'info')}>
           ⛽ Refuel
         </button>
+        <ManualToggle game={game} />
         <label className="toggle" title="Let your tuk-tuk find passengers and haggle by itself">
           <input
             type="checkbox"
             checked={d.autopilot}
             onChange={(e) => {
+              if (e.target.checked) setManual(game, false);
               game.state.autopilot = e.target.checked;
               game.emit('change');
             }}
@@ -203,6 +224,7 @@ function PlayerCard({ game, view }: { game: Game; view: MapView | null }) {
           Autopilot
         </label>
       </div>
+      <ManualStatus game={game} />
       <p className="hint small">Click a waving passenger to pick them up. Right-click the map to drive somewhere.</p>
     </section>
   );
@@ -274,7 +296,7 @@ function RequestCard({ game, view }: { game: Game; view: MapView | null }) {
           ✕
         </button>
       </div>
-      <div className="quote-line">“{r.line}”</div>
+      <SpeechLine line={r.line} protect={[from.name, to.name, spokenName(from), spokenName(to)]} />
       <div className="trip-summary compact">
         <button className="link" onClick={() => view?.flyTo(from.x, from.y)}>
           {from.name}

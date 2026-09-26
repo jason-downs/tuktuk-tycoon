@@ -2,6 +2,7 @@
 // drive to the destination, get paid and rated.
 
 import { ARCHETYPES } from '../content/archetypes';
+import { haggleLine } from '../content/dialogue';
 import { BALANCE, appFare, roundFare, streetFare } from './balance';
 import { earn, currentBook, spend } from './economy';
 import type { Game } from './game';
@@ -70,26 +71,22 @@ export function acceptChance(req: RideRequest, ratio: number, reputation: number
   return 1 / (1 + Math.exp((ratio - maxRatio) / 0.05));
 }
 
-const THANKS = ['Deal!', 'Ok, ok. Let’s go.', 'Fine — bpai!', 'Sounds fair. Khop khun!', 'Tao dai jao. Go!'];
-const COUNTERS = ['Too much! How about', 'Paeng bpai! I’ll pay', 'Grab is cheaper… I can do', 'Lot noi dai mai? Say'];
-const LEAVES = ['Forget it, I’ll take a songthaew.', 'No thanks — I’ll walk.', 'Mai ao. I’ll book a Grab.'];
-
 /** The player (or AI) names a price. Passengers counter once, then walk. */
 export function quote(game: Game, v: Vehicle, fare: number, countered: boolean): QuoteOutcome {
   if (v.task.kind !== 'haggle' && v.task.kind !== 'pickup') return { kind: 'leave', line: '' };
   const req = findRequest(game, v.task.requestId);
   if (!req) return { kind: 'leave', line: '' };
   const rng = game.rng;
-  if (req.archetype === 'monk' && fare === 0) return { kind: 'accept', fare: 0, line: 'The monk blesses your tuk-tuk. Merit made.' };
+  if (req.archetype === 'monk' && fare === 0) return { kind: 'accept', fare: 0, line: haggleLine(game, req, 'merit') };
   const ratio = fare / req.fairFare;
   if (rng.chance(acceptChance(req, ratio, game.state.reputation))) {
-    return { kind: 'accept', fare, line: rng.pick(THANKS) };
+    return { kind: 'accept', fare, line: haggleLine(game, req, 'thanks') };
   }
   if (!countered && req.maxRatio > 0.3) {
     const offer = roundFare(req.fairFare * req.maxRatio * rng.range(0.82, 0.97));
-    if (offer < fare) return { kind: 'counter', offer, line: `${rng.pick(COUNTERS)} ฿${offer}?` };
+    if (offer < fare) return { kind: 'counter', offer, line: haggleLine(game, req, 'counter', offer) };
   }
-  return { kind: 'leave', line: rng.pick(LEAVES) };
+  return { kind: 'leave', line: haggleLine(game, req, 'leave') };
 }
 
 /** Passenger walks away (declined, or the driver refused). */

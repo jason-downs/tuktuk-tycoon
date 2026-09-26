@@ -4,6 +4,7 @@
 // relative to the yearly mean (calendar.md §1).
 
 import { ARCHETYPES, DEST_AFFINITY, ORIGIN_MIX } from '../content/archetypes';
+import { requestLine } from '../content/dialogue';
 import { BALANCE, streetFare } from './balance';
 import { calendar, type CalendarInfo } from './clock';
 import type { Game } from './game';
@@ -173,7 +174,7 @@ export function makeRequest(
     fairFare: streetFare(distance),
     fixedFare: null,
     maxRatio,
-    line: rng.pick(info.lines),
+    line: requestLine(game, from, to, arch, cal),
     claimedBy: null,
   };
 }

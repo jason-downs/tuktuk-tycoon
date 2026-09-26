@@ -5,3 +5,4 @@ data-raw/
 *.log
 .vite/
 coverage/
+.claude/worktrees/

@@ -1,7 +1,7 @@
 // Passenger archetypes, from docs/research/culture.md §4 (who rides and what
-// they want) and §11a (dialogue). maxRatio is the highest multiple of the going
-// street fare a passenger will accept; economics.md: tourists accept 1.0–1.5×,
-// locals haggle hard at ~0.8×.
+// they want). What they say lives in dialogue.ts (culture.md §5, §11a). maxRatio
+// is the highest multiple of the going street fare a passenger will accept;
+// economics.md: tourists accept 1.0–1.5×, locals haggle hard at ~0.8×.
 
 import type { Archetype, PlaceCategory } from '../sim/types';
 
@@ -17,7 +17,6 @@ export interface ArchetypeInfo {
   party: [number, number];
   /** How much this passenger values a fast ride (−1 hates speed … 1 loves it). */
   thrill: number;
-  lines: string[];
 }
 
 export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
@@ -30,13 +29,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [10, 20],
     party: [1, 3],
     thrill: 0.8,
-    lines: [
-      'Sawatdee khrap! Tha Phae Gate — how much? Eighty? Paeng bpai… sixty?',
-      "Our hostel's on a Moon Muang soi. The map says it's one-way the wrong way — is that why you're going round the whole moat?",
-      'A guy at the gate said Wat Phra Singh is closed today and a ride to a gem shop is free. That’s… a scam, right?',
-      'Sunday Walking Street, please — we want to get there before the road shuts.',
-      'Loi Kroh Road, then the Night Bazaar. We’ve got one night left!',
-    ],
   },
   tourist_cn: {
     label: 'Chinese tourist',
@@ -47,11 +39,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [20, 40],
     party: [2, 4],
     thrill: 0.1,
-    lines: [
-      'Nǐ hǎo! Chiang Mai University — the one from the film. Can we still go in and look around?',
-      'Can I scan your QR with Alipay? It says they work now.',
-      'Warorot Market — where they filmed the market chase!',
-    ],
   },
   tourist_kr: {
     label: 'Korean tourist',
@@ -62,10 +49,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [20, 40],
     party: [1, 3],
     thrill: 0,
-    lines: [
-      'Annyeong-haseyo! One Nimman, please. We’re staying the whole month this time.',
-      'Tee time is at seven. Can you come back at five-thirty? It’s still dark!',
-    ],
   },
   tourist_west: {
     label: 'Western tourist',
@@ -76,11 +59,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [20, 50],
     party: [1, 4],
     thrill: 0.4,
-    lines: [
-      'Hi! Wat Chedi Luang — is that the big ruined one? How much to get there?',
-      'Take us somewhere for khao soi, then the Night Bazaar. We’re in your hands!',
-      'Yin dee jao! Not a single tailor on the way. I’ll tell everyone at the hostel.',
-    ],
   },
   retiree: {
     label: 'Retiree',
@@ -91,11 +69,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [20, 40],
     party: [1, 2],
     thrill: -0.8,
-    lines: [
-      'Morning, phi. Same as Tuesday: over the river to Wat Ket, then Warorot for coffee.',
-      'Take the river road, would you? No rush. Jai yen yen.',
-      'My knees and that step don’t get on. Hold her steady while I climb in?',
-    ],
   },
   nomad: {
     label: 'Digital nomad',
@@ -106,11 +79,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [10, 20],
     party: [1, 1],
     thrill: 0.3,
-    lines: [
-      'Nimman Soi 9, the café with the good wifi. My call starts in twelve minutes — please hurry!',
-      'Grab says seventy baht. Match it and I’ll book you every morning.',
-      'Is it true the smoke gets bad in March? Everyone’s telling me to go south.',
-    ],
   },
   thai_tourist: {
     label: 'Thai visitor',
@@ -121,11 +89,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [10, 20],
     party: [2, 4],
     thrill: 0.1,
-    lines: [
-      'Phi khrap, bpai Doi Suthep dai mai? Can this tuk-tuk actually make the climb?',
-      'We drove up from Bangkok for the cold. Where’s the khao soi that’s lam khanat?',
-      'Take us out to Bo Sang? My mother wants a painted umbrella.',
-    ],
   },
   student: {
     label: 'CMU student',
@@ -136,11 +99,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [5, 10],
     party: [1, 3],
     thrill: 0.6,
-    lines: [
-      'Phi, CMU front gate — go by Huay Kaew, mai pen rai if it’s slow.',
-      'Three of us to Lang Mor night market. Student price, na?',
-      'Exam at eight, I overslept! Go fast, please!',
-    ],
   },
   vendor: {
     label: 'Market vendor',
@@ -151,11 +109,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [5, 10],
     party: [1, 2],
     thrill: -0.2,
-    lines: [
-      'Sawatdee jao! Kad Luang, jao. Mind the flower baskets, they’re for Ton Lamyai.',
-      'Two sacks of sticky rice and a cooler of sai ua. Tao dai jao?',
-      'Pik ban, jao — back to Nong Hoi before the rain.',
-    ],
   },
   monk: {
     label: 'Monk',
@@ -166,7 +119,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [0, 0],
     party: [1, 2],
     thrill: -0.5,
-    lines: ['Wat Suan Dok, please.', 'The monk nods, gathers his robe and takes the far end of the bench.'],
   },
   elder: {
     label: 'Local elder',
@@ -177,12 +129,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [10, 20],
     party: [1, 2],
     thrill: -0.9,
-    lines: [
-      'Ai, kin khao laew ka? No? Then take me to Fa Ham and I’ll show you real khao soi.',
-      'Aew hue muan noe — have fun, young one. And drive slowly.',
-      'Ror moen bai moen ngao! I waited so long I nearly walked.',
-      'Pi ma kan ki khon? Four of us, jao — and a durian. Sorry about the smell.',
-    ],
   },
   business: {
     label: 'Business traveller',
@@ -193,7 +139,6 @@ export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
     tip: [20, 60],
     party: [1, 2],
     thrill: 0.2,
-    lines: ['Airport, please — and quickly, my flight boards in an hour.', 'Central Festival, the convention hall. I’m late.'],
   },
 };
 
