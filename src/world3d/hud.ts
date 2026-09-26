@@ -8,8 +8,8 @@ import { passengerBadge } from '../map/sprites';
 import type { RideRequest, Vehicle } from '../sim/types';
 import type { FrameInfo, ViewContext } from './layers/types';
 
-/** Flat-map painters the 3D view replaces with scene objects (rivals, closures) or scene fog (weather tint). */
-const SKIP_2D_PAINTERS = new Set(['rivals', 'weather-tint', 'closures']);
+/** Flat-map painters the 3D view replaces with scene objects (rivals, closures, festival decor, rain) or scene fog (weather tint). */
+const SKIP_2D_PAINTERS = new Set(['rivals', 'weather-tint', 'closures', 'weather-fx', 'festival']);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export class Hud {

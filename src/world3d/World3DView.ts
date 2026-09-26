@@ -7,7 +7,7 @@
 import {
   MeshLambertMaterial,
   NeutralToneMapping,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Plane,
   Raycaster,
@@ -35,6 +35,7 @@ import { FrameStats } from './stats';
 import { edgeLanes } from './kinematics';
 import { CityLayer } from './layers/city';
 import { CrowdLayer } from './layers/crowds';
+import { renderPixelRatio } from './env/quality';
 import { Environment } from './layers/environment';
 import { MarkerLayer } from './layers/markers';
 import { PeopleLayer } from './layers/people';
@@ -144,7 +145,7 @@ export class World3DView implements GameView, ViewContext {
     this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.domElement.className = 'world-gl';
     container.appendChild(this.renderer.domElement);
     this.hud = new Hud(this, container);
@@ -176,7 +177,7 @@ export class World3DView implements GameView, ViewContext {
         const city = new CityLayer(this, res.built);
         this.cityLayer = city;
         this.layers.push(city);
-        if (city.materials.backdrop) this.env.setBackdropMaterial(city.materials.backdrop);
+        this.env.setCityMaterials(city.materials);
         this.env.onLight = (light) => city.setNight(1 - light);
         city.setNight(1 - this.env.light);
         this.hud.loading = false;
@@ -322,7 +323,7 @@ export class World3DView implements GameView, ViewContext {
     this.width = Math.max(1, rect.width);
     this.height = Math.max(1, rect.height);
     this.dpr = Math.min(1.75, window.devicePixelRatio || 1);
-    this.renderer.setPixelRatio(this.dpr);
+    this.renderer.setPixelRatio(renderPixelRatio());
     this.renderer.setSize(this.width, this.height);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();

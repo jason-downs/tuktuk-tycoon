@@ -6,6 +6,7 @@ import type { CityData } from '../city';
 import { buildBuildings } from './buildings';
 import { mountains } from './backdrop';
 import { LAYERS, type BuildContext, type LayerId } from './context';
+import { buildEffectAnchors } from './effects';
 import { buildGround } from './ground';
 import { MeshWriter, type PackedMesh } from './mesh';
 import { Occupancy } from './occupancy';
@@ -58,6 +59,7 @@ export function buildCity(city: CityData): BuiltCity {
   scatterTrees(ctx);
   buildProps(ctx);
   buildWalkways(ctx);
+  buildEffectAnchors(ctx);
 
   const layers = {} as Record<LayerId, PackedMesh>;
   const triangles = {} as Record<LayerId, number>;
