@@ -239,3 +239,32 @@ describe('the 🕹️ Drive button', () => {
     expect(whoDrives(game)).toBe('gps');
   });
 });
+
+describe('a focused form control', () => {
+  const input = (type: string) => ({ tagName: 'INPUT', type, isContentEditable: false });
+
+  it('keeps G, E and the pedals working after a click leaves a checkbox or slider focused', () => {
+    for (const target of [input('checkbox'), input('range')]) {
+      const game = newGame();
+      applyMode(game, 'drive');
+      expect(whoDrives(game)).toBe('hand');
+      driveKeyDown(game, asKey(key('g', { target })));
+      expect(whoDrives(game)).not.toBe('hand');
+      driveKeyDown(game, asKey(key('g', { target })));
+      expect(whoDrives(game)).toBe('hand');
+      manualKeyDown(game, asKey(key('w', { target })));
+      expect(manualControl(game).throttle).toBe(true);
+    }
+  });
+
+  it('keeps every key of a text field, and the arrows of a slider', () => {
+    const game = newGame();
+    applyMode(game, 'drive');
+    driveKeyDown(game, asKey(key('g', { target: input('text') })));
+    expect(whoDrives(game)).toBe('hand');
+    manualKeyDown(game, asKey(key('ArrowLeft', { target: input('range') })));
+    expect(manualControl(game).turn).toBeNull();
+    manualKeyDown(game, asKey(key('ArrowLeft')));
+    expect(manualControl(game).turn).not.toBeNull();
+  });
+});

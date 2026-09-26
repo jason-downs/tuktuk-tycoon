@@ -190,6 +190,10 @@ button {
 .brand .logo {
   font-size: 28px;
 }
+/* The name and fleet line may narrow with the brand, so a long name ends in an ellipsis beside the cash. */
+.brand > div {
+  min-width: 0;
+}
 .company {
   font-family: var(--font-head);
   font-weight: 600;

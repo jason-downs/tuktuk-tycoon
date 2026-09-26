@@ -16,10 +16,21 @@ import { focusNavActive, installFocusNav, onFocusedControl } from '../focusNav';
 import { setMode, toggleMode } from '../mode';
 import { ui } from '../store';
 
-/** Keys typed into a text field, select or editable element are not game keys. */
+/** Input types that take no typed text: a click leaves them focused, and the game keys still work. */
+const NON_TEXT_INPUTS: ReadonlySet<string> = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image']);
+
+/**
+ * Whether a key belongs to the focused form control rather than the game: every key in a text field, select or
+ * editable element; only the arrow, Home, End and page keys on a slider; none on a checkbox or button.
+ */
 export function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+  if (!el) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  if (el.tagName !== 'INPUT') return false;
+  const type = (el as HTMLInputElement).type;
+  if (type === 'range') return /^(Arrow|Home$|End$|Page)/.test(e.key);
+  return !NON_TEXT_INPUTS.has(type);
 }
 
 /** Toot the horn; waiting passengers near the tuk-tuk wave harder. */
