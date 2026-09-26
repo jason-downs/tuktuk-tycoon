@@ -31,6 +31,8 @@ import {
   whyCantReturn,
   whyCantSell,
 } from '../src/sim/fleet';
+import { RANKS } from '../src/content/business';
+import { currentRank, ownedCount } from '../src/sim/business';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { installSystems } from '../src/sim/systems';
@@ -48,6 +50,15 @@ function newGame(seed = 11, extraCash = 0): Game {
   game.state.stats.trips = FLEET.ridesBeforeHiring;
   if (extraCash) earn(game, extraCash, 'other');
   return game;
+}
+
+/** Grow the company to the first rank idle owners rent to: Lung Daeng's tuk-tuks, then hire-purchase ones. */
+function reachOwnersRank(game: Game): void {
+  const index = RANKS.findIndex((r) => r.ownerRentals > 0);
+  const rank = RANKS[index];
+  while (game.state.vehicles.length < rank.minFleet - rank.minOwned) expect(rentVehicle(game)).not.toBeNull();
+  while (ownedCount(game) < rank.minOwned) expect(buyVehicle(game, 'lpg_used', 'lease')).not.toBeNull();
+  expect(currentRank(game)).toBe(index);
 }
 
 /** Game time of the next 04:00 settlement. */
@@ -129,24 +140,26 @@ describe('vehicle market', () => {
     expect(whyCantSell(game, game.playerVehicle()!)).toMatch(/Lung Daeng/);
   });
 
-  it('hire-purchase: 25 % down, daily instalments at 04:00, owned once paid off', () => {
+  it('hire-purchase: a deposit, daily instalments at 04:00, owned once paid off', () => {
     const game = newGame(11, 60_000);
+    const { downShare, markup, days } = FLEET.lease;
     const terms = leaseTerms(200_000);
-    expect(terms.down).toBe(50_000);
-    expect(terms.financed).toBe(172_500);
-    expect(terms.instalment).toBe(Math.ceil(172_500 / 120));
+    expect(terms.down).toBe(Math.round(200_000 * downShare));
+    expect(terms.financed).toBe(Math.round((200_000 - terms.down) * markup));
+    expect(terms.instalment).toBe(Math.ceil(terms.financed / days));
+    expect(terms.total).toBe(terms.down + terms.financed);
 
     const cash = game.state.cash;
     const v = buyVehicle(game, 'lpg_used', 'lease')!;
     expect(v.ownership).toBe('leased');
-    expect(game.state.cash).toBe(cash - 50_000);
+    expect(game.state.cash).toBe(cash - terms.down);
     expect(whyCantSell(game, v)).toMatch(/pay it off/);
 
     const book = jumpPastSettlement(game);
     const lease = fleetState(game).leases[v.id];
     expect(book.expense.vehicles).toBe(terms.instalment);
     expect(lease.remaining).toBe(terms.financed - terms.instalment);
-    expect(lease.daysLeft).toBe(119);
+    expect(lease.daysLeft).toBe(days - 1);
 
     // The last instalment is only what is left, and the vehicle becomes the player's.
     lease.remaining = 500;
@@ -481,6 +494,7 @@ describe('hiring gate and owner rentals', () => {
 
   it('a hire waiting without a tuk-tuk takes the wheel of the next one rented or bought', () => {
     const game = newGame(33, 500_000);
+    reachOwnersRank(game);
     const bank = hireFirst(game, 'salary', null);
     expect(bank.vehicleId).toBeNull();
     const rented = rentVehicle(game, 'owner')!;
@@ -495,7 +509,8 @@ describe('hiring gate and owner rentals', () => {
   });
 
   it('idle owners rent plated tuk-tuks only to an operator with a hired driver', () => {
-    const game = newGame(32, 50_000);
+    const game = newGame(32, 500_000);
+    reachOwnersRank(game);
     expect(whyCantRent(game, 'owner')).toMatch(/hired driver/);
     hireFirst(game, 'salary', null);
     const v = rentVehicle(game, 'owner')!;
@@ -503,7 +518,7 @@ describe('hiring gate and owner rentals', () => {
     expect(v.lessor).toBe('owner');
     expect(v.rentPerDay).toBe(FLEET.owners.rentPerDay);
     expect(rentedFrom(game, 'owner')).toBe(1);
-    expect(rentedFrom(game, 'lung_daeng')).toBe(1);
+    expect(rentedFrom(game, 'lung_daeng')).toBe(3);
   });
 });
 

@@ -31,6 +31,7 @@ import {
 import { DAY, HOUR, calendar, timeOf } from '../src/sim/clock';
 import { makeRequest } from '../src/sim/demand';
 import { completeTrip, startTrip } from '../src/sim/dispatch';
+import { FLEET, fleetState, hireCandidate, ownerRentalCap, rentVehicle, whyCantRent } from '../src/sim/fleet';
 import { businessDay, currentBook } from '../src/sim/economy';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
@@ -89,11 +90,13 @@ function setReputation(game: Game, rep: number): void {
   game.state.reputation = rep;
 }
 
-/** Enough fleet, owned tuk-tuks and net worth for the Fleet boss rank. */
+/** Enough fleet, owned tuk-tuks and net worth for the Fleet boss rank (and too few for the one above). */
 function makeFleetBoss(game: Game): void {
+  const boss = RANKS[2];
   addTukTuk(game, 'ev_new');
   addTukTuk(game, 'lpg_used');
-  game.state.cash = 200_000;
+  while (game.state.vehicles.length < boss.minFleet) addTukTuk(game, 'lpg_used', 'tha_phae_gate', 'rented', false);
+  game.state.cash = Math.max(200_000, boss.minNetWorth);
   game.step(60);
 }
 
@@ -311,6 +314,7 @@ describe('business services', () => {
     const game = gameAt(timeOf(2026, 10, 3, 15));
     const lpg = addTukTuk(game, 'lpg_used');
     addTukTuk(game, 'lpg_used');
+    while (game.state.vehicles.length < RANKS[2].minFleet) addTukTuk(game, 'lpg_used', 'tha_phae_gate', 'rented', false);
     game.state.cash = 400_000;
     game.step(60);
     expect(canClimb(lpg)).toBe(false);
@@ -483,12 +487,34 @@ describe('bank loan', () => {
 describe('ranks', () => {
   it('computes rank from fleet, ownership and net worth', () => {
     expect(rankFor(1, 0, 0)).toBe(0);
-    expect(rankFor(1, 1, 0)).toBe(1);
-    expect(rankFor(3, 1, 149_999)).toBe(1);
-    expect(rankFor(3, 1, 150_000)).toBe(2);
-    expect(rankFor(8, 3, 600_000)).toBe(3);
-    expect(rankFor(8, 2, 5_000_000)).toBe(2);
-    expect(rankFor(20, 10, 2_000_000)).toBe(4);
+    for (let i = 1; i < RANKS.length; i++) {
+      const { minFleet, minOwned, minNetWorth } = RANKS[i];
+      const worth = Number.isFinite(minNetWorth) ? minNetWorth : 0;
+      expect(rankFor(minFleet, minOwned, worth)).toBe(i);
+      // Falling one short on any threshold holds the company a rank lower.
+      expect(rankFor(minFleet - 1, minOwned, worth)).toBe(i - 1);
+      expect(rankFor(minFleet, minOwned - 1, worth)).toBe(i - 1);
+      if (Number.isFinite(minNetWorth)) expect(rankFor(minFleet, minOwned, minNetWorth - 1)).toBe(i - 1);
+    }
+  });
+
+  it('lets idle owners rent only to a Fleet boss, and more to a higher-ranked company', () => {
+    for (let i = 1; i < RANKS.length; i++) expect(RANKS[i].ownerRentals).toBeGreaterThanOrEqual(RANKS[i - 1].ownerRentals);
+    const first = RANKS.findIndex((r) => r.ownerRentals > 0);
+    expect(RANKS[first].id).toBe('boss');
+    const game = gameAt();
+    game.state.stats.trips = FLEET.ridesBeforeHiring;
+    game.state.cash = 50_000;
+    const pool = fleetState(game).candidates;
+    hireCandidate(game, pool[0].roster, 'salary', null);
+    expect(ownerRentalCap(game)).toBe(0);
+    expect(whyCantRent(game, 'owner')).toBe(`Owners around town only rent to a ${RANKS[first].name} or above.`);
+    expect(rentVehicle(game, 'owner')).toBeNull();
+    makeFleetBoss(game);
+    expect(ownerRentalCap(game)).toBe(RANKS[first].ownerRentals);
+    expect(whyCantRent(game, 'owner')).toBeNull();
+    for (let n = 0; n < RANKS[first].ownerRentals; n++) expect(rentVehicle(game, 'owner')).not.toBeNull();
+    expect(whyCantRent(game, 'owner')).toMatch(new RegExp(`As ${RANKS[first + 1].name} you can rent ${RANKS[first + 1].ownerRentals}`));
   });
 
   it('promotes once, announces it, and keeps the title', () => {

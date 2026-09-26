@@ -16,16 +16,27 @@
 
 | Milestone | Target (real time, typical player) |
 |---|---|
-| First ride completed | < 1 min |
+| First ride completed | 3–4 min, driving by hand (a hand-driven ride takes about 3 real minutes, `docs/plan-3d.md`) |
 | First cheap upgrade (garland, cushions, phone mount) | 3–6 min |
 | First hired driver (in a second rented tuk-tuk) | 10–20 min |
 | First owned tuk-tuk | 25–45 min |
 | 5 tuk-tuks | ~1 h (using 2–4× speed) |
 | 20+ tuk-tuks, depots, contracts | 2–3 h |
 
-Real tuk-tuks pay for themselves in more than a year, so capital prices stay realistic while a game day holds many
-more rides than a real one. Hire-purchase and renting make early growth possible. Balance is checked with headless
-simulations (`tests/`).
+The typical player drives by hand until drivers will join (five rides, ~15 min), then manages at 2–4×. Lung Daeng's
+three tuk-tuks carry the first hires; idle owners rent only to a Fleet boss, so the fourth and fifth tuk-tuks come on
+hire-purchase (10 % down). When they come depends on how the player spends: the first owned tuk-tuk arrives at
+~25–37 min and the fifth at ~40 min for a player who puts every baht into tuk-tuks, ~70–80 min for one who signs up
+for services as soon as they open. As a Fleet boss (5 tuk-tuks, 2 owned, ฿30k) owners rent 4, then 12 to a Company
+and 20 to a Tycoon, and the fleet grows in steps — buy to meet the next rank, save the net worth it asks for, fill its
+rentals — to about 10 tuk-tuks at 1¼–1½ h, 20 at 2–2½ h and 30 at about 3 h.
+
+A hired driver on the day shift works all 12 hours (~55 rides) and nets the company ~฿3,500 a day in a rented
+tuk-tuk, ~฿2,300 while it is on hire-purchase and ~฿4,000 once it is paid off; long and night shifts carry fatigue into
+the next day. Past five tuk-tuks the player's own tuk-tuk earns under a third of the company's takings. Real tuk-tuks
+pay for themselves in more than a year, so capital prices stay realistic while a game day holds many more rides than a
+real one. Balance is checked with headless simulations: `tests/balance.test.ts` plays this typical player, both ways of
+spending, and asserts the targets.
 
 While you steer your own tuk-tuk in Drive mode, the clock slows to 4 game seconds per real second (3–5 from the drive
 clock chip in the top bar), so the streets pass at a believable speed. It runs at 1× while you are parked, loading or on GPS
@@ -130,7 +141,9 @@ in both modes.
 - **A. Fleet (vehicles, drivers, hiring)**:
   - Vehicle market:
     - Rent more of Lung Daeng's tuk-tuks: at most 3, ฿350/day each, rusty model.
-    - Buy the models in `content/vehicles.ts`, or take hire-purchase: 25 % down, daily instalments.
+    - Rent idle owners' plated tuk-tuks at ฿400/day: one for a lone driver, more as the company's rank grows
+      (`RANKS` ownerRentals).
+    - Buy the models in `content/vehicles.ts`, or take hire-purchase: 15 % down, daily instalments.
     - Sell for 60 % of purchase price, falling 5 %/year.
   - EV plate rule: Chiang Mai EV quota plates are one per person (economics.md §6), so EVs ≤ registered people.
   - Drivers:

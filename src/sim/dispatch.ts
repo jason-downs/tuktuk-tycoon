@@ -5,6 +5,7 @@ import { ARCHETYPES } from '../content/archetypes';
 import { haggleLine } from '../content/dialogue';
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { BALANCE, appFare, roundFare } from './balance';
+import { calendar } from './clock';
 import { fairFareTo } from './demand';
 import { earn, currentBook, spend } from './economy';
 import type { Game } from './game';
@@ -205,7 +206,7 @@ export function completeTrip(game: Game, v: Vehicle): TripResult | null {
     // Every metre driven with the passenger tires the driver, beyond the portal too.
     const off = game.place(req.to).offmap;
     const metres = trip.distance + (off ? off.extraM * (off.roundTrip ? 2 : 1) : 0);
-    driver.fatigue = Math.min(100, driver.fatigue + 2 + (metres / 1000) * (1 - driver.stamina / 200));
+    driver.fatigue = Math.min(100, driver.fatigue + rideFatigue(driver.stamina, metres, calendar(game.state.time).hour));
   }
   addReviews(game, rating, 1);
   const state = game.state;
@@ -219,6 +220,16 @@ export function completeTrip(game: Game, v: Vehicle): TripResult | null {
   const result: TripResult = { vehicleId: v.id, driverId: driver?.id ?? null, fare: trip.fare, tip, rating, request: req, companyTake };
   game.emit('trip', result);
   return result;
+}
+
+/**
+ * Fatigue a ride of `metres` with the passenger adds to a driver of the given stamina, ending at clock `hour`
+ * (BALANCE.fatigue).
+ */
+export function rideFatigue(stamina: number, metres: number, hour: number): number {
+  const f = BALANCE.fatigue;
+  const night = hour >= f.nightFrom || hour < f.nightTo ? f.nightFactor : 1;
+  return (f.perRide + (metres / 1000) * f.perKm * (1 - stamina / 200)) * night;
 }
 
 /** Push `n` reviews of `stars` into the rolling reputation window and recompute the reputation. */

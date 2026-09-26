@@ -366,15 +366,26 @@ export interface RankDef {
   /** Tuk-tuks the company owns or is buying on hire-purchase. */
   minOwned: number;
   minNetWorth: number;
+  /**
+   * Idle tuk-tuks their owners will rent to a company of this rank [pacing]: none until it is a Fleet boss, more for a
+   * bigger name, so past Lung Daeng's three the fleet grows by buying.
+   */
+  ownerRentals: number;
 }
 
-/** Company ranks [pacing]: design.md targets a first owned tuk-tuk at 25–45 min, 5 tuk-tuks at ~1 h, 20+ at 2–3 h. */
+/**
+ * Company ranks [pacing]: design.md targets a first owned tuk-tuk at 25–45 min, 5 tuk-tuks at ~1 h, 20+ at 2–3 h.
+ * Each rank asks for a bigger fleet, more tuk-tuks of your own and some money in hand, and lets idle owners rent you
+ * more tuk-tuks. Owners rent only to a Fleet boss, so tuk-tuks 4 and 5 come on hire-purchase; the Fleet boss's
+ * ฿30k bar stays low because hire-purchase tuk-tuks count toward net worth only once paid off, and a player who
+ * keeps buying on credit holds little cash.
+ */
 export const RANKS: RankDef[] = [
-  { id: 'driver', name: 'Driver', icon: '🛺', blurb: 'You rent Lung Daeng’s tuk-tuk and live fare to fare.', minFleet: 0, minOwned: 0, minNetWorth: -Infinity },
-  { id: 'owner', name: 'Owner-driver', icon: '🔑', blurb: 'Your own yellow plate. Nobody takes a cut of your day.', minFleet: 1, minOwned: 1, minNetWorth: -Infinity },
-  { id: 'boss', name: 'Fleet boss', icon: '🧢', blurb: 'A few tuk-tuks, a few drivers, and a phone that never stops.', minFleet: 3, minOwned: 1, minNetWorth: 150_000 },
-  { id: 'company', name: 'Company', icon: '🏢', blurb: 'Depots, contracts and a name the hotels know.', minFleet: 8, minOwned: 3, minNetWorth: 600_000 },
-  { id: 'tycoon', name: 'Lanna Tuk-Tuk Tycoon', icon: '👑', blurb: 'From Tha Phae Gate to Doi Suthep, the city rides with you.', minFleet: 20, minOwned: 10, minNetWorth: 2_000_000 },
+  { id: 'driver', name: 'Driver', icon: '🛺', blurb: 'You rent Lung Daeng’s tuk-tuk and live fare to fare.', minFleet: 0, minOwned: 0, minNetWorth: -Infinity, ownerRentals: 0 },
+  { id: 'owner', name: 'Owner-driver', icon: '🔑', blurb: 'Your own yellow plate. Nobody takes a cut of your day.', minFleet: 1, minOwned: 1, minNetWorth: -Infinity, ownerRentals: 0 },
+  { id: 'boss', name: 'Fleet boss', icon: '🧢', blurb: 'A few tuk-tuks, a few drivers, and a phone that never stops.', minFleet: 5, minOwned: 2, minNetWorth: 30_000, ownerRentals: 4 },
+  { id: 'company', name: 'Company', icon: '🏢', blurb: 'Depots, contracts and a name the hotels know.', minFleet: 10, minOwned: 3, minNetWorth: 80_000, ownerRentals: 12 },
+  { id: 'tycoon', name: 'Lanna Tuk-Tuk Tycoon', icon: '👑', blurb: 'From Tha Phae Gate to Doi Suthep, the city rides with you.', minFleet: 30, minOwned: 15, minNetWorth: 200_000, ownerRentals: 20 },
 ];
 
 /** [research] economics.md "Suggested game numbers": resale is 60 % of the purchase price, falling 5 % a year. */

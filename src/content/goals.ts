@@ -1,8 +1,10 @@
 // The goal chain shown in the Goals panel. Each goal reads the game state
 // generically (stats, books, vehicles, drivers, unlocks), so goals that depend
 // on the fleet market or the garage simply sit at 0 % until the player can act
-// on them. Rewards are [pacing]: roughly an hour or two of takings at the stage
-// where the goal usually falls, plus a few five-star reviews for the big ones.
+// on them. Rewards are [pacing]: roughly one to three game hours of the
+// company's takings at the stage where the goal usually falls, so they help
+// early on without outweighing a day's fares, plus a few five-star reviews for
+// the big ones.
 // Yi Peng dates: calendar.md §4 (23–25 Nov 2026, full moon Tue 24 Nov).
 
 import { RANKS } from './business';
@@ -104,15 +106,15 @@ export const GOALS: GoalDef[] = [
   flag('comfort', '🛋️', 'Creature comforts', 'Fit a comfort upgrade, such as cushions, to a tuk-tuk.', 1, (g) => hasUpgrade(g, (u) => (VEHICLE_UPGRADES[u]?.comfort ?? 0) > 0), { cash: 1_000 }),
   count('first_hire', '🤝', 'Hire your first driver', 'Take on a driver to work a second tuk-tuk.', 1, 1, 'drivers', hired, { cash: 2_000 }),
   count('own', '🔑', 'Own a tuk-tuk', 'Buy a tuk-tuk outright or on hire-purchase.', 1, 1, 'owned', (g) => ownedCount(g), { cash: 3_000, reviews: 2 }),
-  count('hundred_rides', '💯', 'Hundred fares', 'Complete 100 rides across the company.', 1, 100, 'rides', (g) => g.state.stats.trips, { cash: 2_000 }),
-  flag('rep_45', '🌟', 'Word of mouth', 'Hold a 4.5★ rating after at least 50 rides.', 1, (g) => g.state.stats.trips >= 50 && g.state.reputation >= 4.5, { cash: 3_000 }),
-  flag('join_app', '📱', 'Go digital', 'Sign the fleet up to the TukGo app (Business panel).', 1, (g) => unlocked(g, (u) => u === 'app'), { cash: 3_000 }),
-  money('day_10k', '💵', 'Big day', 'Earn ฿10,000 in one business day.', 1, 10_000, bestDay, { cash: 5_000 }),
+  count('hundred_rides', '💯', 'Hundred fares', 'Complete 100 rides across the company.', 1, 100, 'rides', (g) => g.state.stats.trips, { cash: 1_500 }),
+  flag('rep_45', '🌟', 'Word of mouth', 'Hold a 4.5★ rating after at least 50 rides.', 1, (g) => g.state.stats.trips >= 50 && g.state.reputation >= 4.5, { cash: 2_000 }),
+  flag('join_app', '📱', 'Go digital', 'Sign the fleet up to the TukGo app (Business panel).', 1, (g) => unlocked(g, (u) => u === 'app'), { cash: 2_000 }),
+  money('day_10k', '💵', 'Big day', 'Earn ฿10,000 in one business day.', 1, 10_000, bestDay, { cash: 3_000 }),
   // ------------------------------------------------------------ chapter 2
-  count('five_tuktuks', '🛺', 'Run 5 tuk-tuks', 'Grow the fleet to five tuk-tuks.', 2, 5, 'tuk-tuks', fleet, { cash: 10_000 }),
-  flag('hotel', '🏨', 'Hotel partner', 'Sign a partnership with a hotel (Business panel).', 2, (g) => unlocked(g, (u) => u.startsWith('hotel:')), { cash: 10_000, reviews: 3 }),
-  flag('depot', '🏠', 'Home base', 'Rent a depot for your fleet (Business panel).', 2, (g) => unlocked(g, (u) => u.startsWith('depot:')), { cash: 10_000 }),
-  count('tours', '🛕', 'Tour operator', 'Complete 5 tour charters.', 2, 5, 'tours', (_g, t) => t.tours, { cash: 8_000 }),
+  count('five_tuktuks', '🛺', 'Run 5 tuk-tuks', 'Grow the fleet to five tuk-tuks.', 2, 5, 'tuk-tuks', fleet, { cash: 5_000 }),
+  flag('hotel', '🏨', 'Hotel partner', 'Sign a partnership with a hotel (Business panel).', 2, (g) => unlocked(g, (u) => u.startsWith('hotel:')), { cash: 6_000, reviews: 3 }),
+  flag('depot', '🏠', 'Home base', 'Rent a depot for your fleet (Business panel).', 2, (g) => unlocked(g, (u) => u.startsWith('depot:')), { cash: 6_000 }),
+  count('tours', '🛕', 'Tour operator', 'Complete 5 tour charters.', 2, 5, 'tours', (_g, t) => t.tours, { cash: 4_000 }),
   {
     id: 'yi_peng',
     chapter: 2,
@@ -121,14 +123,14 @@ export const GOALS: GoalDef[] = [
     desc: `Complete ${YI_PENG_TRIPS} trips on one Yi Peng night (23–25 Nov, 17:00–01:00).`,
     progress: (_g, t) => frac(Math.max(0, ...Object.values(t.yiPeng)), YI_PENG_TRIPS),
     detail: (_g, t) => `Best night: ${Math.min(YI_PENG_TRIPS, Math.max(0, ...Object.values(t.yiPeng)))} / ${YI_PENG_TRIPS} trips`,
-    reward: { cash: 20_000, reviews: 5 },
+    reward: { cash: 10_000, reviews: 5 },
   },
-  count('thousand_rides', '🎟️', 'A thousand fares', 'Complete 1,000 rides across the company.', 2, 1_000, 'rides', (g) => g.state.stats.trips, { cash: 15_000 }),
+  count('thousand_rides', '🎟️', 'A thousand fares', 'Complete 1,000 rides across the company.', 2, 1_000, 'rides', (g) => g.state.stats.trips, { cash: 6_000 }),
   // ------------------------------------------------------------ chapter 3
-  count('ten_tuktuks', '🚦', 'Run 10 tuk-tuks', 'Grow the fleet to ten tuk-tuks.', 3, 10, 'tuk-tuks', fleet, { cash: 30_000 }),
-  flag('airport', '✈️', 'Arrivals hall', 'Win the CNX airport taxi-counter permit.', 3, (g) => unlocked(g, (u) => u === 'airport'), { cash: 30_000 }),
-  money('day_50k', '🪙', 'Golden day', 'Earn ฿50,000 in one business day.', 3, 50_000, bestDay, { cash: 25_000 }),
-  money('millionaire', '💎', 'Millionaire', 'Reach ฿1,000,000 net worth (cash + tuk-tuks − loans).', 3, 1_000_000, (g) => netWorth(g), { cash: 50_000 }),
+  count('ten_tuktuks', '🚦', 'Run 10 tuk-tuks', 'Grow the fleet to ten tuk-tuks.', 3, 10, 'tuk-tuks', fleet, { cash: 8_000 }),
+  flag('airport', '✈️', 'Arrivals hall', 'Win the CNX airport taxi-counter permit.', 3, (g) => unlocked(g, (u) => u === 'airport'), { cash: 8_000 }),
+  money('day_50k', '🪙', 'Golden day', 'Earn ฿50,000 in one business day.', 3, 50_000, bestDay, { cash: 6_000 }),
+  money('millionaire', '💎', 'Millionaire', 'Reach ฿1,000,000 net worth (cash + tuk-tuks − loans).', 3, 1_000_000, (g) => netWorth(g), { cash: 25_000 }),
   {
     id: 'tycoon',
     chapter: 3,
@@ -137,7 +139,7 @@ export const GOALS: GoalDef[] = [
     desc: 'Reach the top company rank.',
     progress: (g) => currentRank(g) / (RANKS.length - 1),
     detail: (g) => `Rank: ${RANKS[currentRank(g)].name}`,
-    reward: { cash: 100_000, reviews: 5 },
+    reward: { cash: 50_000, reviews: 5 },
   },
 ];
 

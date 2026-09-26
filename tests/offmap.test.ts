@@ -4,7 +4,7 @@ import { buildWorld, type PoiJSON } from '../src/data/world';
 import { requestValue } from '../src/sim/ai';
 import { makeRequest } from '../src/sim/demand';
 import { awaySeconds } from '../src/sim/offmap';
-import { claimRequest, inRide, startTrip, type TripResult } from '../src/sim/dispatch';
+import { claimRequest, inRide, rideFatigue, startTrip, type TripResult } from '../src/sim/dispatch';
 import { calendar, HOUR } from '../src/sim/clock';
 import { whyCantAssign, whyCantReturn } from '../src/sim/fleet';
 import { workshopBlock } from '../src/sim/garage';
@@ -127,7 +127,11 @@ describe('out-of-town trips through portals', () => {
     const player = game.player();
     const fatigue0 = player.fatigue;
     let result: TripResult | null = null;
-    game.on('trip', (r: TripResult) => (result = r));
+    let endHour = 0;
+    game.on('trip', (r: TripResult) => {
+      result = r;
+      endHour = calendar(game.state.time).hour;
+    });
     const { req } = tripTo(game, 'wat_doi_suthep');
     let inTown = 0;
     for (let t = 0; t < 6 * HOUR && !result; t += 2) {
@@ -143,7 +147,7 @@ describe('out-of-town trips through portals', () => {
     expect(inTown).toBeGreaterThan(portal * 1.5);
     const off = landmark('wat_doi_suthep').offmap!;
     const km = (inTown + 2 * off.extraM) / 1000;
-    expect(player.fatigue - fatigue0).toBeCloseTo(2 + km * (1 - player.stamina / 200), 6);
+    expect(player.fatigue - fatigue0).toBeCloseTo(rideFatigue(player.stamina, km * 1000, endHour), 6);
     expect(req.fairFare).toBe(400);
   });
 
