@@ -4,12 +4,10 @@
 // back from the node, the rounded kerb corners between neighbouring arms, and
 // the junction surface polygon (docs/3d/architecture.md §5).
 
+import { armSetbacks, giveWayPaint, junctionCorners, PAVEMENT_BY_CLASS, signalPaint, sortArms } from '../../sim/junctionShape';
 import { ROAD_FLAG, type CityData } from '../city';
 import { convexHull, Path, ringArea2, ringSimple, segDist, subtractIntervals, type Pt } from './paths';
 import type { Ring } from './shapes';
-
-/** Pavement width by road class when the way has no sidewalk tags, m. */
-const WALK_BY_CLASS = [3.0, 2.8, 2.4, 2.0, 1.2, 0, 0, 0];
 
 export interface RoadWay {
   idx: number;
@@ -43,6 +41,8 @@ export interface Arm {
   ux: number;
   uy: number;
   hw: number;
+  /** The way's road class. */
+  cls: number;
   /** Distance along the way to the next junction or the end of the way. */
   len: number;
   /** Distance from the node at which the plain carriageway resumes. */
@@ -154,7 +154,7 @@ export function buildRoadNet(city: CityData): RoadNet {
     const oneway = (flags & ROAD_FLAG.ONEWAY) !== 0;
     const width = widthDm / 10;
     const tagged = flags & (ROAD_FLAG.SIDEWALK_L | ROAD_FLAG.SIDEWALK_R);
-    const base = WALK_BY_CLASS[cls] ?? 0;
+    const base = PAVEMENT_BY_CLASS[cls] ?? 0;
     const walkL = tagged ? (flags & ROAD_FLAG.SIDEWALK_L ? Math.max(1.8, base) : 0) : base;
     const walkR = tagged ? (flags & ROAD_FLAG.SIDEWALK_R ? Math.max(1.8, base) : 0) : base;
     for (let i = 0; i < refs.length; i++) degree[refs[i]] = Math.min(255, degree[refs[i]] + (i > 0 ? 1 : 0) + (i < refs.length - 1 ? 1 : 0));
@@ -209,6 +209,7 @@ export function buildRoadNet(city: CityData): RoadNet {
           ux: (px - nx) / l,
           uy: (py - ny) / l,
           hw: way.hw,
+          cls: way.cls,
           len,
           setback: 0,
           paint: 0,
@@ -265,8 +266,8 @@ export function buildRoadNet(city: CityData): RoadNet {
   // stop lines where a minor road meets a bigger one.
   for (const j of junctions) {
     for (const a of j.arms) {
-      if (j.signals && a.hw >= 2.5 && a.way.cls <= 5) a.paint = Math.min(6.5, Math.max(0, a.len * 0.45 - a.setback));
-      else if (a.way.cls > j.cls && a.inbound && a.hw >= 2.5) a.paint = Math.min(1.6, Math.max(0, a.len * 0.45 - a.setback));
+      if (j.signals && a.hw >= 2.5 && a.way.cls <= 5) a.paint = signalPaint(a, a.setback);
+      else if (a.way.cls > j.cls && a.inbound && a.hw >= 2.5) a.paint = giveWayPaint(a, a.setback);
     }
   }
 
@@ -301,59 +302,17 @@ export function buildRoadNet(city: CityData): RoadNet {
   return { ways, junctions, degree, nearest: segmentGrid(ways) };
 }
 
-/** Kerb fillet radius between two arms, m. */
-function filletRadius(a: Arm, b: Arm, kerb: boolean): number {
-  if (!kerb) return 1.2;
-  return Math.min(a.way.cls, b.way.cls) <= 2 ? 6 : 4;
-}
-
 function junctionAt(node: number, x: number, y: number, arms: Arm[]): Junction {
-  arms.sort((p, q) => Math.atan2(p.uy, p.ux) - Math.atan2(q.uy, q.ux));
+  sortArms(arms);
   const m = arms.length;
   const corners: Corner[] = [];
-  // Raw corner geometry between arm k's left kerb line and arm k+1's right kerb line.
-  const raw: { t: number; s: number; phi: number; c: Pt | null }[] = [];
-  for (let k = 0; k < m; k++) {
+  // Corner geometry between arm k's left kerb line and arm k+1's right kerb line; c is where they meet.
+  const raw = junctionCorners(arms).map((r, k) => {
     const a = arms[k];
-    const b = arms[(k + 1) % m];
-    let phi = Math.atan2(b.uy, b.ux) - Math.atan2(a.uy, a.ux);
-    while (phi <= 1e-9) phi += Math.PI * 2;
-    // Left kerb line of a: node + nL·hw + t·u; right kerb line of b: node + nR·hw + s·u.
-    const pa: Pt = [x - a.uy * a.hw, y + a.ux * a.hw];
-    const pb: Pt = [x + b.uy * b.hw, y - b.ux * b.hw];
-    const sin = a.ux * b.uy - a.uy * b.ux;
-    if (phi > (175 * Math.PI) / 180 || sin < 1e-6) {
-      raw.push({ t: 0, s: 0, phi, c: null });
-      continue;
-    }
-    const dx = pb[0] - pa[0];
-    const dy = pb[1] - pa[1];
-    let t = (dx * b.uy - dy * b.ux) / sin;
-    let s = (dx * a.uy - dy * a.ux) / sin;
-    if (phi < (15 * Math.PI) / 180) {
-      // Nearly parallel arms (merging carriageways): no kerb corner between them.
-      raw.push({ t: Math.min(Math.max(t, 0), 12), s: Math.min(Math.max(s, 0), 12), phi, c: null });
-      continue;
-    }
-    t = Math.max(0, t);
-    s = Math.max(0, s);
-    raw.push({ t, s, phi, c: [pa[0] + a.ux * t, pa[1] + a.uy * t] });
-  }
-  // Setbacks: the larger of the two corner needs, plus fillets.
-  const fil: { d: number; kerb: boolean }[] = raw.map((r, k) => {
-    const a = arms[k];
-    const b = arms[(k + 1) % m];
-    const kerb = a.walkL > 0 && b.walkR > 0;
-    if (!r.c) return { d: 0, kerb };
-    const R = filletRadius(a, b, kerb);
-    return { d: Math.min(R / Math.tan(r.phi / 2), 14), kerb };
+    return { ...r, c: r.round ? ([x - a.uy * a.hw + a.ux * r.t, y + a.ux * a.hw + a.uy * r.t] as Pt) : null };
   });
-  for (let k = 0; k < m; k++) {
-    const a = arms[k];
-    const left = raw[k].t + fil[k].d;
-    const right = raw[(k + m - 1) % m].s + fil[(k + m - 1) % m].d;
-    a.setback = Math.min(30, a.len * 0.45, Math.max(left, right) + 0.3);
-  }
+  const fil = raw.map((r) => ({ d: r.fillet, kerb: r.kerb }));
+  armSetbacks(arms, raw).forEach((setback, k) => (arms[k].setback = setback));
   // Corners, shrunk where the setbacks were capped.
   for (let k = 0; k < m; k++) {
     const a = arms[k];

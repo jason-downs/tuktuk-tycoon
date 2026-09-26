@@ -169,7 +169,7 @@ I measured the existing `data-raw/` extracts inside the core bbox.
 - **Food carts.** Glass-cased carts, red and blue plastic stools, big parasols, gas bottles.
 - **Convenience stores.** Unbranded. A white glare shopfront with a fictional fascia (for example teal and yellow "24 ชม."). Never 7-Eleven's stripes.
 - **On the street:**
-  - Traffic lights with red countdown digits (112 OSM signals).
+  - Traffic lights with countdown digits in the colour of the light (112 OSM signals).
   - Red/white and yellow/white kerb paint.
   - Sala-style bus shelters, Thai and Buddhist flags, green/yellow bins, pigeons at Tha Phae Gate, soi dogs.
 

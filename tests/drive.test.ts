@@ -18,10 +18,14 @@ import {
 import { fleetState, hireCandidate, rentVehicle } from '../src/sim/fleet';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import { pointInRing } from '../src/world3d/build/shapes';
+import type { CityData } from '../src/world3d/city';
 import { dispatchNearest } from '../src/sim/manage';
 import {
   PICKUP_RADIUS_M,
   WALK_OVER_S,
+  kerbCandidates,
   kerbPoint,
   kerbsidePassenger,
   manualControl,
@@ -164,6 +168,48 @@ describe('drive clock', () => {
 });
 
 describe('picking up by hand', () => {
+  it('stands waiting passengers on the pavement beside the drawn road, facing it', () => {
+    const game = newGame();
+    const net = buildRoadNet(read<CityData>('city3d.json'));
+    // Inside a drawn carriageway, or a junction surface, by more than 5 cm.
+    const onRoad = (x: number, y: number) => {
+      const near = net.nearest(x, y, 30);
+      if (near && near.d < near.way.hw - 0.05) return true;
+      return net.junctions.some((j) => j.simple && Math.hypot(j.x - x, j.y - y) < 40 && pointInRing(x, y, j.ring));
+    };
+    let n = 0;
+    let bad = 0;
+    let facing = 0;
+    for (const place of world.places) {
+      if (place.offmap) continue;
+      const k = kerbPoint(game, place);
+      n++;
+      if (onRoad(k.x, k.y)) bad++;
+      // Facing the carriageway: two steps ahead is on the road.
+      if (onRoad(k.x + Math.cos(k.face) * 1.5, k.y + Math.sin(k.face) * 1.5)) facing++;
+      // Near enough the place's node for the pickup radius to cover a tuk-tuk stopped there.
+      expect(Math.hypot(k.x - graph.nodeX[place.node], k.y - graph.nodeY[place.node])).toBeLessThan(PICKUP_RADIUS_M);
+    }
+    expect(n).toBeGreaterThan(3000);
+    expect(bad / n).toBeLessThan(0.02);
+    expect(facing / n).toBeGreaterThan(0.95);
+  });
+
+  it('offers the 3D build other kerb spots, starting with kerbPoint and all within reach of it', () => {
+    const game = newGame();
+    let more = 0;
+    for (const place of world.places) {
+      if (place.offmap) continue;
+      const k = kerbPoint(game, place);
+      const list = kerbCandidates(graph, place);
+      expect(list[0]).toEqual(k);
+      more += list.length - 1;
+      // A tuk-tuk drawn up beside any of them is within the pickup radius of kerbPoint.
+      for (const c of list) expect(Math.hypot(c.x - k.x, c.y - k.y) + 4.5).toBeLessThan(PICKUP_RADIUS_M);
+    }
+    expect(more / world.places.length).toBeGreaterThan(10);
+  });
+
   it('stops within reach, the passenger walks over and the haggle starts', () => {
     const game = newGame();
     const v = game.playerVehicle()!;

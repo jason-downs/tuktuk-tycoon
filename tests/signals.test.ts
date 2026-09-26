@@ -10,7 +10,7 @@ import {
   AMBER_S,
   RINCOME_CYCLE_S,
   SIGNAL_CYCLE_S,
-  STOP_LINE_M,
+  STOP_BEHIND_LINE_M,
   groupLight,
   lightChangesIn,
   redLightsRun,
@@ -20,6 +20,9 @@ import {
 } from '../src/sim/signals';
 import { installSystems } from '../src/sim/systems';
 import type { Vehicle } from '../src/sim/types';
+import type { CityData } from '../src/world3d/city';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import { SIGNAL_PAINT } from '../src/sim/junctionShape';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
@@ -63,7 +66,7 @@ function greenFor(j: SignalJunction, group: number, t: number, hold: number): nu
 /** Put the player's tuk-tuk on the approach, `toLine` metres before the stop line, on a GPS route through the junction. */
 function onApproach(v: Vehicle, arc: number, exit: number, toLine: number): void {
   v.arc = arc;
-  v.s = graph.arcLen(arc) - STOP_LINE_M - toLine;
+  v.s = graph.arcLen(arc) - map.stopAt[arc] - toLine;
   v.speed = 8;
   v.busyUntil = 0;
   v.task = { kind: 'cruise', place: -1 };
@@ -100,6 +103,32 @@ describe('traffic signals', () => {
     expect(green0).toBe(j.cycle / 2 - AMBER_S);
   });
 
+  it('stops traffic at the stop line the 3D streets paint, clear of the junction', () => {
+    // Match each approach to the arm of the drawn junction at its node that it arrives along.
+    const net = buildRoadNet(read<CityData>('city3d.json'));
+    let matched = 0;
+    let onLine = 0;
+    let clear = 0;
+    for (const arc of map.approaches) {
+      const node = graph.arcTo(arc);
+      const j = net.junctions.find((k) => Math.hypot(k.x - graph.nodeX[node], k.y - graph.nodeY[node]) < 1);
+      if (!j || !j.signals) continue;
+      const h = graph.arcEndHeading(arc) + Math.PI;
+      const arm = j.arms.reduce((a, b) => (b.ux * Math.cos(h) + b.uy * Math.sin(h) > a.ux * Math.cos(h) + a.uy * Math.sin(h) ? b : a));
+      if (!arm.inbound || arm.paint < SIGNAL_PAINT.crossing) continue;
+      matched++;
+      // The far edge of the painted stop line, behind the zebra crossing.
+      const painted = arm.setback + SIGNAL_PAINT.line[1];
+      if (Math.abs(map.lineAt[arc] - painted) < 1) onLine++;
+      // Waiting traffic's front stays out of the junction surface.
+      if (map.stopAt[arc] - STOP_BEHIND_LINE_M >= arm.setback) clear++;
+    }
+    expect(matched).toBeGreaterThan(150);
+    expect(onLine / matched).toBeGreaterThan(0.95);
+    expect(clear / matched).toBeGreaterThan(0.97);
+    for (const arc of map.approaches) expect(map.stopAt[arc]).toBeGreaterThan(0);
+  });
+
   it('stops a GPS-driven tuk-tuk at the line on red and lets it through on green', () => {
     const game = newGame();
     const v = game.playerVehicle()!;
@@ -110,7 +139,7 @@ describe('traffic signals', () => {
     for (let t = 0; t < 30; t++) game.step(1);
     expect(v.arc).toBe(arc);
     expect(v.speed).toBe(0);
-    const toLine = graph.arcLen(arc) - STOP_LINE_M - v.s;
+    const toLine = graph.arcLen(arc) - map.stopAt[arc] - v.s;
     expect(toLine).toBeGreaterThanOrEqual(0);
     expect(toLine).toBeLessThan(2);
 
@@ -129,7 +158,7 @@ describe('traffic signals', () => {
     v.speed = 13;
     for (let t = 0; t < 40; t += 4) game.step(4);
     expect(v.arc).toBe(arc);
-    expect(graph.arcLen(arc) - STOP_LINE_M - v.s).toBeGreaterThanOrEqual(0);
+    expect(graph.arcLen(arc) - map.stopAt[arc] - v.s).toBeGreaterThanOrEqual(0);
   });
 
   it('lets the player steer through a red, at a cost to the passenger’s rating', () => {

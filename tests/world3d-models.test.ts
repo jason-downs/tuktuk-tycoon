@@ -121,13 +121,6 @@ describe('prop models', () => {
     expect(g.boundingBox!.max.y).toBeLessThan(STREET_LAMP_HEAD.height + 0.6);
   });
 
-  it('reaches the signal arm over the road on the model’s left (−Z)', () => {
-    const g = PROP_MODELS.traffic_light();
-    g.computeBoundingBox();
-    expect(g.boundingBox!.min.z).toBeLessThan(-4);
-    expect(g.boundingBox!.max.z).toBeLessThan(0.5);
-  });
-
   it('spans the power-pole crossarm across the road (model Z) at the published height', () => {
     const g = PROP_MODELS.power_pole();
     g.computeBoundingBox();

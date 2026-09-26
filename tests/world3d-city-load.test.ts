@@ -1,16 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildWorld, type PoiJSON } from '../src/data/world';
+import type { GraphJSON } from '../src/sim/graph';
 import type { CityStatus } from '../src/world3d/hud';
+
+const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
+const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
 
 /** Stands in for the city-build worker: records what it was asked and lets the test answer. */
 class FakeWorker {
   static made: FakeWorker[] = [];
   onmessage: ((e: { data: unknown }) => void) | null = null;
   onerror: ((e: { message: string }) => void) | null = null;
-  posted: { url: string } | null = null;
+  posted: { url: string; anchors?: unknown } | null = null;
   constructor() {
     FakeWorker.made.push(this);
   }
-  postMessage(m: { url: string }): void {
+  postMessage(m: { url: string; anchors?: unknown }): void {
     this.posted = m;
   }
   terminate(): void {}
@@ -30,11 +36,13 @@ afterEach(() => {
 describe('building the 3D city', () => {
   it('starts while the title screen shows, and the 3D view picks up the same build', async () => {
     const m = await freshView();
-    m.preloadCity('http://game/', '?view=map');
+    m.preloadCity('http://game/', '?view=map', world);
     expect(FakeWorker.made.length).toBe(0);
-    m.preloadCity('http://game/', '');
+    m.preloadCity('http://game/', '', world);
     expect(FakeWorker.made.length).toBe(1);
     expect(FakeWorker.made[0].posted?.url).toBe('http://game/data/city3d.json');
+    // The simulation's traffic-light and kerb spots go with it, for the build to settle.
+    expect(FakeWorker.made[0].posted?.anchors).toBeDefined();
     const again = m.loadCityMeshes('http://game/');
     expect(FakeWorker.made.length).toBe(1);
     FakeWorker.made[0].onmessage?.({ data: { ok: true, built: { tiles: [] }, play: [0, 0, 1, 1], keep: [0, 0, 1, 1] } });
@@ -43,7 +51,7 @@ describe('building the 3D city', () => {
 
   it('a build that fails during the title screen is retried when the 3D view asks for it', async () => {
     const m = await freshView();
-    m.preloadCity('http://game/', '');
+    m.preloadCity('http://game/', '', world);
     FakeWorker.made[0].onerror?.({ message: 'network down' });
     await new Promise((r) => setTimeout(r, 0));
     const retry = m.loadCityMeshes('http://game/');

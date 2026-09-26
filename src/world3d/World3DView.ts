@@ -21,13 +21,15 @@ import {
   type Object3D,
 } from 'three';
 import { calendar } from '../sim/clock';
+import type { World } from '../data/world';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
-import { kerbPoint, manualControl, whoDrives } from '../sim/manual';
+import { kerbPoint, manualControl, whoDrives, type KerbPoint } from '../sim/manual';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { canPanWithKeys, sendPlayerTo } from '../ui/mode';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
+import { anchorBuffers, KERB_FLOATS, type SimAnchors } from './build/anchors';
 import type { TiledCity } from './build/world';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
 import { aimCutaway, applyCutaway, compileCutaway, createCutaway } from './cutaway';
@@ -46,6 +48,8 @@ import { SignalLayer } from './layers/signals';
 import type { FrameInfo, ViewContext, WorldLayer } from './layers/types';
 import { VehicleLayer } from './layers/vehicles';
 import { ShaderWarmup } from './shaderWarmup';
+import { unpackSpots } from './signalSpots';
+import { simAnchors } from './simAnchors';
 
 export interface World3DOptions {
   base: string;
@@ -65,9 +69,9 @@ let cityPromise: Promise<BuildResult> | null = null;
  * ?view=map page never shows it. A failed build here is retried when the 3D
  * view opens, which reports it.
  */
-export function preloadCity(base: string, search: string): void {
+export function preloadCity(base: string, search: string, world: World): void {
   if (new URLSearchParams(search).get('view') === 'map') return;
-  loadCityMeshes(base).catch(() => {});
+  loadCityMeshes(base, () => simAnchors(world)).catch(() => {});
 }
 
 /**
@@ -95,8 +99,12 @@ export function trackCityBuild(
     });
 }
 
-/** Build the static city once per page (in a worker); remounts reuse it. */
-export function loadCityMeshes(base: string): Promise<BuildResult> {
+/**
+ * Build the static city once per page (in a worker); remounts reuse it.
+ * `anchors` gives the simulation's candidate spots for traffic lights and
+ * waiting passengers, which the build settles against the city it draws.
+ */
+export function loadCityMeshes(base: string, anchors?: () => SimAnchors): Promise<BuildResult> {
   if (!cityPromise) {
     cityPromise = new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./build/worker.ts', import.meta.url), { type: 'module' });
@@ -109,7 +117,8 @@ export function loadCityMeshes(base: string): Promise<BuildResult> {
         worker.terminate();
         reject(new Error(e.message));
       };
-      worker.postMessage({ url: new URL('data/city3d.json', base).href });
+      const a = anchors?.();
+      worker.postMessage({ url: new URL('data/city3d.json', base).href, anchors: a }, a ? anchorBuffers(a) : []);
     });
     cityPromise.catch(() => (cityPromise = null));
   }
@@ -222,12 +231,12 @@ export class World3DView implements GameView, ViewContext {
     ro.observe(container);
     this.cleanups.push(() => ro.disconnect());
     this.bindInput();
-    this.addLayer(new SignalLayer(this));
 
-    void trackCityBuild(loadCityMeshes(opts.base), this.hud, game, () => !this.destroyed, (res) => {
+    void trackCityBuild(loadCityMeshes(opts.base, () => simAnchors(game.world)), this.hud, game, () => !this.destroyed, (res) => {
       const city = new CityLayer(this, res.built);
       this.cityLayer = city;
       this.layers.push(city);
+      this.addLayer(new SignalLayer(this, unpackSpots(res.built.signals)));
       for (const id of ['buildings', 'structures', 'windows', 'glow'] as const) {
         const mat = city.materials[id];
         if (mat) applyCutaway(mat, this.cutaway);
@@ -359,8 +368,13 @@ export class World3DView implements GameView, ViewContext {
     return this.screenOf(x, y, h);
   }
 
-  kerbOf(req: RideRequest): { x: number; y: number } {
-    return kerbPoint(this.game, this.game.place(req.from));
+  kerbOf(req: RideRequest): KerbPoint {
+    const place = this.game.place(req.from);
+    // The stand point the city build settled clear of buildings and street furniture, else the simulation's own.
+    const kerbs = this.cityLayer?.built.kerbs;
+    const k = place.idx * KERB_FLOATS;
+    if (kerbs && k + 2 < kerbs.length && !Number.isNaN(kerbs[k])) return { x: kerbs[k], y: kerbs[k + 1], face: kerbs[k + 2] };
+    return kerbPoint(this.game, place);
   }
 
   vehicleMesh(id: number): Object3D | undefined {

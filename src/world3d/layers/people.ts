@@ -94,15 +94,13 @@ export class PeopleLayer implements WorldLayer {
     const time = game.state.time;
     const env = lookEnvAt(game);
     const now = (this.now = frame.now / 1000);
-    const g = game.world.graph;
     this.batch.begin();
     this.blobs.begin();
     for (const r of game.visibleRequests()) {
       if (r.claimedBy !== null && r.claimedBy !== player?.id) continue;
       const k = this.ctx.kerbOf(r);
       if (!this.inSight(k.x, k.y, scale)) continue;
-      const place = game.place(r.from);
-      const face = Math.atan2(g.nodeY[place.node] - k.y, g.nodeX[place.node] - k.x) || 0;
+      const face = k.face;
       const dist = pp ? Math.hypot(pp.x - k.x, pp.y - k.y) : Infinity;
       const claimed = player !== undefined && r.claimedBy === player.id;
       const hailing = dist < HAIL_RADIUS || (claimed && dist < APPROACH_RADIUS) || frame.ui.selectedRequest === r.id || this.ctx.hoverRequest === r.id;

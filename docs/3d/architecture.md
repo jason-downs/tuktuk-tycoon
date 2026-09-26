@@ -125,7 +125,7 @@ buffers. Vehicles, people and the HUD draw while it works; the HUD shows a loadi
 |---|---|
 | `city3d.json` | 4.3 MB raw, 1.5 MB gzipped |
 | `buildCity` in the worker (Chrome, the development Mac) | 1.0 s |
-| `buildCity` under Vitest (Node) | 2.5–3.6 s of CPU, depending on how busy the machine is; the buildings test holds it under 4 s of CPU |
+| `buildCity` under Vitest (Node) | 2.5–3.6 s of CPU, depending on how busy the machine is (CPU time rises under heavy parallel load too); the buildings test holds it under 6 s of CPU, which catches a doubling |
 | `tileCity` under Vitest | about 0.4 s |
 
 ## 4. Static world: layers, tiles, culling, render order
@@ -386,7 +386,7 @@ Draw calls, the shadow pass and CPU time are within budget at every distance.
 | Water / ground | < 40k / < 20k (`world3d-ground`) | 6.7k / 2.6k |
 | Trees (instanced) | < 1.4 M triangles (`world3d-props`) | 1.24 M (23.7k trees) |
 | Props (instanced) | < 1.0 M triangles, < 40k instances (`world3d-props`) | 0.85 M (23.9k props) |
-| Whole build | < 4 s CPU (`world3d-buildings`) | 2.5–3.6 s CPU, depending on how busy the machine is |
+| Whole build | < 6 s CPU (`world3d-buildings`) | 2.5–3.6 s CPU, depending on how busy the machine is |
 
 **Draw calls by group (street level):**
 

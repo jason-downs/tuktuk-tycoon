@@ -45,30 +45,6 @@ function powerPole(): BufferGeometry {
   return k.geometry();
 }
 
-/** Signal head facing +X: black box with lit red and dim amber/green lenses. */
-function signalHead(k: Kit, x: number, y: number, z: number): void {
-  k.box(x, y, z, 0.3, 0.95, 0.32, '#1d1f20', '#1d1f20', { bottom: '#1d1f20' });
-  const f = x + 0.155;
-  const lens = (yy: number, c: Paint) => k.quad([f, yy - 0.1, z - 0.1], [f, yy - 0.1, z + 0.1], [f, yy + 0.1, z + 0.1], [f, yy + 0.1, z - 0.1], c, [x, yy, z]);
-  lens(y + 0.3, '#ff3b2f');
-  lens(y, '#6d5a1c');
-  lens(y - 0.3, '#1d5a2a');
-}
-
-/** Signal pole on the kerb: an arm over the carriageway (model −Z), overhead and pole heads, countdown. */
-function trafficLight(): BufferGeometry {
-  const k = new Kit();
-  const pole = '#3b3f42';
-  k.prism([0, 0, 0], [0, 5.6, 0], 0.12, 0.1, 4, pole, { rot: Q, capTop: true });
-  k.box(0, 5.45, -2.3, 0.1, 0.1, 4.6, pole);
-  signalHead(k, 0.1, 4.95, -3.6);
-  k.box(0.1, 4.95, -4.15, 0.25, 0.5, 0.5, '#1d1f20', '#1d1f20', { bottom: '#1d1f20' });
-  const f = 0.23;
-  k.quad([f, 4.8, -4.33], [f, 4.8, -3.97], [f, 5.1, -3.97], [f, 5.1, -4.33], '#ff4a2a', [0.1, 4.95, -4.15]);
-  signalHead(k, 0.14, 3.0, 0);
-  return k.geometry();
-}
-
 /** San phra phum: a gilded miniature Lanna house on a pillar, facing the street (+X). */
 function spiritHouse(): BufferGeometry {
   const k = new Kit();
@@ -260,7 +236,7 @@ function bench(): BufferGeometry {
 /**
  * Factory per prop kind; kinds without a factory are not drawn. Kinds:
  * street_lamp (head at STREET_LAMP_HEAD along +X), heritage_lamp (lamp at
- * HERITAGE_LAMP_HEAD on the post), power_pole, traffic_light, spirit_house,
+ * HERITAGE_LAMP_HEAD on the post), power_pole, spirit_house,
  * parked_bike (a group of three scooters), food_cart, parasol, bus_shelter,
  * flag_pole (a Thai and a Buddhist flag), fountain (moat jet; starts below
  * the water surface), stall, pea_cabinet, bench. Lighting reads street_lamp /
@@ -270,7 +246,6 @@ export const PROP_MODELS: Record<string, () => BufferGeometry> = {
   street_lamp: streetLamp,
   heritage_lamp: heritageLamp,
   power_pole: powerPole,
-  traffic_light: trafficLight,
   spirit_house: spiritHouse,
   parked_bike: parkedBikes,
   food_cart: foodCart,

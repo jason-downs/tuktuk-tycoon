@@ -1,4 +1,6 @@
 import type { CityData } from '../city';
+import type { SimAnchors } from './anchors';
+import type { RoadNet } from './junctions';
 import type { MeshWriter } from './mesh';
 import type { Occupancy } from './occupancy';
 import type { Ring } from './shapes';
@@ -66,6 +68,8 @@ export interface BuildContext {
   waterBodies?: { kind: string; ring: Ring; islands: Ring[]; level: number; cut: boolean[] }[];
   /** Road polylines in way order (roads builder). */
   roadPts: Ring[];
+  /** Ways and junction surfaces as the roads builder draws them. */
+  roadNet?: RoadNet;
   /** Tree instances: x, y, scale, kind index. */
   trees: number[];
   /**
@@ -77,6 +81,10 @@ export interface BuildContext {
   temples?: TempleInfo[];
   /** Hero landmarks as built (buildings builder). */
   landmarks?: LandmarkInfo[];
+  /** Candidate spots from the simulation for traffic lights and waiting passengers (anchors.ts). */
+  anchors?: SimAnchors;
+  /** Traffic lights as placed: SPOT_FLOATS per signalled approach that found room (anchors.ts). */
+  signals?: number[];
 }
 
 /** Record one instance of a prop kind. */

@@ -4,6 +4,7 @@
 // junctions, stop lines, one-way arrows every ~60 m in each lane, and the
 // painted tuk-tuk rank at Tha Phae Gate. Lines stop at junction setbacks.
 
+import { SIGNAL_PAINT } from '../../sim/junctionShape';
 import { ROAD_FLAG, type CityData } from '../city';
 import landmarks from '../../content/landmarks.json';
 import type { BuildContext } from './context';
@@ -66,9 +67,9 @@ export function buildMarkings(ctx: BuildContext, net: RoadNet): KerbZone[] {
   for (const j of net.junctions) {
     if (!j.signals) continue;
     for (const a of j.arms) {
-      if (a.paint < 5) continue;
+      if (a.paint < SIGNAL_PAINT.crossing) continue;
       const list = armZebras.get(a.way) ?? [];
-      list.push(armS(a, a.setback + 2));
+      list.push(armS(a, a.setback + SIGNAL_PAINT.zebra));
       armZebras.set(a.way, list);
     }
   }
@@ -126,14 +127,10 @@ export function buildMarkings(ctx: BuildContext, net: RoadNet): KerbZone[] {
   // ---- crossings and stop lines at junctions
   for (const j of net.junctions) {
     for (const a of j.arms) {
-      if (a.paint <= 0.5) continue;
-      if (j.signals && a.paint >= 5) {
-        const [o0, o1] = inboundSpan(a);
-        if (a.inbound) strip(w, a.way, Math.min(armS(a, a.setback + 4.2), armS(a, a.setback + 4.65)), Math.max(armS(a, a.setback + 4.2), armS(a, a.setback + 4.65)), o0, o1, G.lineWhite);
-      } else if (a.inbound) {
-        const [o0, o1] = inboundSpan(a);
-        strip(w, a.way, Math.min(armS(a, a.setback + 0.5), armS(a, a.setback + 0.9)), Math.max(armS(a, a.setback + 0.5), armS(a, a.setback + 0.9)), o0, o1, G.lineWhite);
-      }
+      if (a.paint <= SIGNAL_PAINT.min || !a.inbound) continue;
+      const [d0, d1] = j.signals && a.paint >= SIGNAL_PAINT.crossing ? SIGNAL_PAINT.line : SIGNAL_PAINT.shortLine;
+      const [o0, o1] = inboundSpan(a);
+      strip(w, a.way, Math.min(armS(a, a.setback + d0), armS(a, a.setback + d1)), Math.max(armS(a, a.setback + d0), armS(a, a.setback + d1)), o0, o1, G.lineWhite);
     }
   }
   for (const [way, list] of [...zebras, ...armZebras]) for (const s of list) zebra(w, way, s);

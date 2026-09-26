@@ -3,6 +3,7 @@
 // Suthep backdrop and tree placements. Pure: no three.js, no DOM.
 
 import type { CityData } from '../city';
+import { settleKerbs, type SimAnchors } from './anchors';
 import { buildBuildings } from './buildings';
 import { mountains } from './backdrop';
 import { LAYERS, type BuildContext, type LayerId } from './context';
@@ -13,6 +14,7 @@ import { Occupancy } from './occupancy';
 import { buildProps } from './props';
 import { buildRoads } from './roads';
 import { scatterTrees } from './scatter';
+import { placeEnv } from './streets';
 import { buildWalkways } from './walkways';
 
 export { LAYERS, TREE_KINDS, addProp, type LayerId, type TreeKind } from './context';
@@ -23,6 +25,10 @@ export interface BuiltCity {
   trees: Float32Array;
   /** Street props by kind: x, y, yaw, scale per instance. */
   props: Record<string, Float32Array>;
+  /** Traffic lights: SPOT_FLOATS per signalled approach that found room (anchors.ts); empty without anchors. */
+  signals: Float32Array;
+  /** Waiting-passenger stand points by place index: KERB_FLOATS each, NaN where the simulation's own kerb point stands. */
+  kerbs: Float32Array;
   stats: { triangles: Record<LayerId, number>; trees: number; buildings: number; ms: number };
 }
 
@@ -59,7 +65,12 @@ export function tileCity(built: BuiltCity, size = TILE_SIZE): TiledCity {
   return { ...built, layers, farBuildings };
 }
 
-export function buildCity(city: CityData): BuiltCity {
+/**
+ * Build the static city. `anchors` are the simulation's candidate spots for
+ * traffic lights and waiting passengers; the build settles them against what
+ * it draws and returns them as `signals` and `kerbs`.
+ */
+export function buildCity(city: CityData, anchors?: SimAnchors): BuiltCity {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const keep = city.keep.map((v) => v / 10) as [number, number, number, number];
   const ctx: BuildContext = {
@@ -82,6 +93,7 @@ export function buildCity(city: CityData): BuiltCity {
     roadPts: [],
     trees: [],
     props: {},
+    anchors,
   };
   // Order matters: roads and buildings mark the occupancy raster that tree
   // scattering reads; the ground builder collects parks and moat rings.
@@ -93,6 +105,7 @@ export function buildCity(city: CityData): BuiltCity {
   buildProps(ctx);
   buildWalkways(ctx);
   buildEffectAnchors(ctx);
+  const kerbs = settleKerbs(ctx, placeEnv(ctx));
 
   const layers = {} as Record<LayerId, PackedMesh>;
   const triangles = {} as Record<LayerId, number>;
@@ -103,5 +116,5 @@ export function buildCity(city: CityData): BuiltCity {
   const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
   const props: Record<string, Float32Array> = {};
   for (const [kind, arr] of Object.entries(ctx.props)) props[kind] = new Float32Array(arr);
-  return { layers, trees: new Float32Array(ctx.trees), props, stats: { triangles, trees: ctx.trees.length / 4, buildings: built, ms } };
+  return { layers, trees: new Float32Array(ctx.trees), props, signals: new Float32Array(ctx.signals ?? []), kerbs, stats: { triangles, trees: ctx.trees.length / 4, buildings: built, ms } };
 }

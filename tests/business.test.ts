@@ -347,7 +347,8 @@ describe('airport counter', () => {
     const airport = landmark(AIRPORT_LANDMARK);
     const seen = new Map<number, RideRequest>();
     let street = 0;
-    for (let t = 0; t < 3 * HOUR; t += 4) {
+    // Hails convert at random (AIRPORT_COUNTER_SHARE): run until both kinds have turned up.
+    for (let t = 0; t < 8 * HOUR && (seen.size <= 3 || street === 0); t += 4) {
       game.step(4);
       for (const r of game.state.requests) {
         if (r.from !== airport.idx || seen.has(r.id)) continue;

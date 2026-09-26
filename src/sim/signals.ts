@@ -4,15 +4,16 @@
 // together (the two halves of a dual carriageway) form one junction with one
 // cycle, offset and axis. The roads into a junction split into two groups by
 // angle — along the main road's axis and across it — which take turns on
-// green. Every simulated vehicle stops at the line STOP_LINE_M before the
-// junction on red, except the tuk-tuk the player steers by hand: running a red
-// with a passenger aboard costs rating, and now and then the police are
-// watching.
+// green. Every simulated vehicle stops on red with its front at the stop line
+// the 3D streets paint on its approach (junctionShape.ts), except the tuk-tuk
+// the player steers by hand: running a red with a passenger aboard costs
+// rating, and now and then the police are watching.
 
 import { angleDiff } from '../geo';
 import { spend } from './economy';
 import type { Game, GameSystem } from './game';
 import { reverseArc, type RoadGraph } from './graph';
+import { graphJunction, signalPaint, stopLineBack } from './junctionShape';
 import { chooseExit, isManualDriven, manualControl } from './manual';
 import type { Vehicle } from './types';
 
@@ -25,8 +26,10 @@ export const SIGNAL_CYCLE_S = 90;
 export const RINCOME_CYCLE_S = 150;
 /** Amber at the end of each green, seconds. */
 export const AMBER_S = 3;
-/** Where vehicles wait: metres before the junction node. */
-export const STOP_LINE_M = 6;
+/** Nearest to the junction node (m) that a waiting vehicle's centre stops, where no stop line is painted further out. */
+export const MIN_STOP_M = 6;
+/** A waiting vehicle's centre stops this far (m) behind the painted stop line, so its front is at the line. */
+export const STOP_BEHIND_LINE_M = 2;
 /** [research] calendar.md: Rin Kham junction signals at 18.80124 N, 98.96778 E (OSM node 240531057). */
 const RINCOME = { lat: 18.80124, lon: 98.96778 };
 /** A junction whose centre is this close (m) to the Rin Kham point runs the long cycle. */
@@ -80,6 +83,10 @@ export interface SignalMap {
   arcGroup: Int8Array;
   /** Every controlled arc, ascending. */
   approaches: number[];
+  /** Per arc: metres before the junction node at which traffic waits on red (its centre); 0 when uncontrolled. */
+  stopAt: Float32Array;
+  /** Per arc: metres before the junction node of the far edge of the painted stop line; 0 when uncontrolled. */
+  lineAt: Float32Array;
 }
 
 const maps = new WeakMap<RoadGraph, SignalMap>();
@@ -162,7 +169,27 @@ function buildSignalMap(graph: RoadGraph): SignalMap {
     }
   }
   approaches.sort((a, b) => a - b);
-  return { junctions, junctionOf, arcGroup, approaches };
+  const stopAt = new Float32Array(graph.edges.length * 2);
+  const lineAt = new Float32Array(graph.edges.length * 2);
+  for (const arc of approaches) {
+    const line = paintedStopLine(graph, arc);
+    lineAt[arc] = line;
+    stopAt[arc] = Math.max(MIN_STOP_M, line + STOP_BEHIND_LINE_M);
+  }
+  return { junctions, junctionOf, arcGroup, approaches, stopAt, lineAt };
+}
+
+/**
+ * Metres before the node at the end of a signalled approach to the far edge
+ * of its painted stop line: past the junction's rounded kerb corners and the
+ * zebra crossing, as the 3D streets draw them.
+ */
+function paintedStopLine(graph: RoadGraph, arc: number): number {
+  const arms = graphJunction(graph, graph.arcTo(arc));
+  const back = reverseArc(arc);
+  const arm = arms.length >= 3 ? arms.find((a) => a.arc === back) : undefined;
+  if (!arm) return 0;
+  return stopLineBack(arm.setback, signalPaint(arm, arm.setback), true);
 }
 
 /** The light a group sees at a junction at a game time. Group 0 is green first in each cycle. */
@@ -222,7 +249,7 @@ export function signalAhead(game: Game, v: Vehicle, maxMetres = LOOKAHEAD_M): Si
     const group = map.arcGroup[arc];
     if (group >= 0) {
       const junction = map.junctions[map.junctionOf[graph.arcTo(arc)]];
-      return { arc, junction, group, light: groupLight(junction, group, game.state.time), toLine: ahead - STOP_LINE_M };
+      return { arc, junction, group, light: groupLight(junction, group, game.state.time), toLine: ahead - map.stopAt[arc] };
     }
     if (ahead >= maxMetres) return null;
     if (route && graph.arcTo(arc) === route.target) return null;

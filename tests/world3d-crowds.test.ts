@@ -6,7 +6,7 @@ import type { GraphJSON } from '../src/sim/graph';
 import type { Place } from '../src/sim/types';
 import { ROAD_FLAG, ringOf, type CityData } from '../src/world3d/city';
 import { buildCity } from '../src/world3d/build/world';
-import { CrowdSim, WALK_KIND, WalkNet, isAlmsTime, walkingStreetOpen, type CrowdFrame } from '../src/world3d/crowd';
+import { CrowdSim, WALK_KIND, WALK_PROPS, WalkNet, isAlmsTime, walkingStreetOpen, type CrowdFrame } from '../src/world3d/crowd';
 import { pointInRing } from '../src/world3d/build/shapes';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
@@ -97,6 +97,25 @@ describe('walkways for the crowds', () => {
     }
     expect(checked).toBeGreaterThan(100);
     expect(inside).toBe(0);
+  });
+
+  it('walks nobody through the brick city walls, gates and bastions', () => {
+    const walls = (city.cityWalls ?? []).map((w) => ringOf(w.r));
+    expect(walls.length).toBeGreaterThan(10);
+    let through = 0;
+    for (const kind of WALK_PROPS) {
+      const walk = built.props[kind] ?? new Float32Array(0);
+      for (let i = 0; i + 4 <= walk.length; i += 4) {
+        const [x, y, heading, len] = [walk[i], walk[i + 1], walk[i + 2], walk[i + 3]];
+        // Every 0.5 m along the stretch to the next vertex.
+        for (let d = 0; d <= len; d += 0.5) {
+          const px = x + Math.cos(heading) * d;
+          const py = y + Math.sin(heading) * d;
+          if (walls.some((r) => pointInRing(px, py, r))) through++;
+        }
+      }
+    }
+    expect(through).toBe(0);
   });
 
   it('crosses only minor roads at links', () => {

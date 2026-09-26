@@ -5,6 +5,8 @@ import { buildBuildings } from '../src/world3d/build/buildings';
 import { mountains } from '../src/world3d/build/backdrop';
 import { LAYERS, TREE_KINDS, type BuildContext, type LayerId } from '../src/world3d/build/context';
 import { buildGround } from '../src/world3d/build/ground';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import { HEROES } from '../src/world3d/build/landmarks3d';
 import { MeshWriter } from '../src/world3d/build/mesh';
 import { Occupancy } from '../src/world3d/build/occupancy';
 import { buildProps } from '../src/world3d/build/props';
@@ -101,6 +103,18 @@ city.roads.ways.forEach((way, wi) => {
   }
 });
 const inBuilding = (x: number, y: number) => footprints.at(x, y).some((r) => pointInRing(x, y, r));
+// Junction surfaces as roads.ts paints them, rounded kerb corners included.
+const junctionRings = new Grid<Ring>(30);
+for (const j of buildRoadNet(city).junctions) {
+  const xs = j.ring.map((p) => p[0]);
+  const ys = j.ring.map((p) => p[1]);
+  junctionRings.add(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), j.ring);
+}
+// The brick city walls and gate towers, and the corner bastions (whose tops carry trees).
+const bastionIds = new Set(HEROES.filter((h) => h.kind === 'bastion').flatMap((h) => h.walls ?? []));
+const cityWalls = (city.cityWalls ?? []).map((w) => ({ ring: ringOf(w.r), bastion: bastionIds.has(w.id) }));
+/** On a junction surface by more than `tol` metres. */
+const onJunction = (x: number, y: number, tol = 0.3) => junctionRings.at(x, y).some((r) => pointInRing(x, y, r) && distToRing(x, y, r) > tol);
 /** Inside a carriageway rectangle by more than `tol` metres. */
 const onCarriageway = (x: number, y: number, tol = 0.05, only?: (way: number) => boolean) =>
   carriageways.at(x, y).some((s) => {
@@ -189,12 +203,14 @@ describe('trees and street furniture', () => {
     expect(nOut).toBeGreaterThan(250);
   });
 
-  it('keeps trunks and props out of buildings, carriageways and water', () => {
+  it('keeps trunks and props out of buildings, city walls, carriageways, junctions and water', () => {
     const bad: string[] = [];
     for (let j = 0; j < trees.length; j += 4) {
       const [x, y] = [trees[j], trees[j + 1]];
       if (inBuilding(x, y)) bad.push(`tree in building at ${x.toFixed(1)},${y.toFixed(1)}`);
       if (onCarriageway(x, y)) bad.push(`tree on road at ${x.toFixed(1)},${y.toFixed(1)}`);
+      if (onJunction(x, y)) bad.push(`tree on a junction at ${x.toFixed(1)},${y.toFixed(1)}`);
+      if (cityWalls.some((w) => !w.bastion && pointInRing(x, y, w.ring))) bad.push(`tree in a city wall at ${x.toFixed(1)},${y.toFixed(1)}`);
       if (moatRings.some((r) => pointInRing(x, y, r))) bad.push(`tree in moat at ${x.toFixed(1)},${y.toFixed(1)}`);
     }
     for (const [kind, arr] of Object.entries(props)) {
@@ -203,11 +219,17 @@ describe('trees and street furniture', () => {
         const [x, y] = [arr[j], arr[j + 1]];
         if (inBuilding(x, y)) bad.push(`${kind} in building at ${x.toFixed(1)},${y.toFixed(1)}`);
         if (onCarriageway(x, y)) bad.push(`${kind} on road at ${x.toFixed(1)},${y.toFixed(1)}`);
+        if (onJunction(x, y)) bad.push(`${kind} on a junction at ${x.toFixed(1)},${y.toFixed(1)}`);
+        if (cityWalls.some((w) => pointInRing(x, y, w.ring))) bad.push(`${kind} in a city wall at ${x.toFixed(1)},${y.toFixed(1)}`);
         const inMoat = moatRings.some((r) => pointInRing(x, y, r));
         if (inMoat !== (kind === 'fountain')) bad.push(`${kind} ${inMoat ? 'in' : 'out of'} the moat at ${x.toFixed(1)},${y.toFixed(1)}`);
       }
     }
     expect(bad.slice(0, 20)).toEqual([]);
+    // The corner bastions keep the trees growing out of their flat tops (world.md §1.4).
+    let onBastions = 0;
+    for (let j = 0; j < trees.length; j += 4) if (cityWalls.some((w) => w.bastion && pointInRing(trees[j], trees[j + 1], w.ring))) onBastions++;
+    expect(onBastions).toBeGreaterThan(4);
   });
 
   it('classifies the buried-cable roads by name', () => {
@@ -251,7 +273,6 @@ describe('trees and street furniture', () => {
       street_lamp: 1000,
       heritage_lamp: 300,
       power_pole: 5000,
-      traffic_light: 100,
       bus_shelter: 60,
       spirit_house: 1000,
       parked_bike: 400,
@@ -288,7 +309,7 @@ describe('trees and street furniture', () => {
     expect(Object.keys(props).length + TREE_KINDS.length).toBeLessThanOrEqual(40);
   });
 
-  it('turns lamps, lights, shrines and shelters towards the street', () => {
+  it('turns lamps, shrines and shelters towards the street', () => {
     const env = placeEnv(staged.ctx);
     const roadDist = (x: number, y: number) => {
       let d = Infinity;
@@ -309,19 +330,6 @@ describe('trees and street furniture', () => {
       }
       expect(toward / (arr.length / 4), kind).toBeGreaterThan(0.9);
     }
-    // Signal poles stand beyond the junction on the approach and face back along it.
-    const sig: [number, number][] = [];
-    const k = city.propKinds.indexOf('traffic_signals');
-    for (let i = 0; i < city.props.length; i += 3) if (city.props[i] === k) sig.push([city.props[i + 1] / 10, city.props[i + 2] / 10]);
-    const tl = props.traffic_light;
-    let facing = 0;
-    for (let j = 0; j < tl.length; j += 4) {
-      const [x, y, yaw] = [tl[j], tl[j + 1], tl[j + 2]];
-      let best = sig[0];
-      for (const s of sig) if (Math.hypot(s[0] - x, s[1] - y) < Math.hypot(best[0] - x, best[1] - y)) best = s;
-      if ((x - best[0]) * Math.cos(yaw) + (y - best[1]) * Math.sin(yaw) > 0) facing++;
-    }
-    expect(facing / (tl.length / 4)).toBeGreaterThan(0.9);
     expect(env.streets.length).toBe(city.roads.ways.length);
   });
 

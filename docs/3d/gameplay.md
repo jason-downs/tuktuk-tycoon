@@ -141,7 +141,7 @@
 ### 2.4 Driving on the LEFT
 - The simulation keeps every vehicle on the road graph's centrelines at `(arc, s)`; the lane is presentation only.
 - `src/world3d/kinematics.ts` draws traffic on the left: in the middle of the left half of a two-way road and in the leftmost lane of a one-way road, with the pose smoothed through corners and junctions (`stepKinematics`) and stopped vehicles queued along the kerb.
-- `kerbPoint(game, place)` (`src/sim/manual.ts`) is where a passenger waits to be picked up.
+- `kerbPoint(game, place)` (`src/sim/manual.ts`) is where a passenger waits to be picked up: on the pavement of whichever road at the place's node, and whichever side, is nearest the POI, set back from the node, just outside the drawn kerb and facing the road. The 3D city build settles each passenger on the first of `kerbCandidates(place)` (the same spot, then others along the pavements, all within 20 m) that is clear of buildings, walls, water, carriageways and street furniture, and the view draws them there.
 
 ### 2.5 Time scale: yes, 1× is about 10× too fast for street level
 - **Today**: a tuk-tuk at 24–50 km/h moves 6.7–13.9 m/s in game time. At 30 game s per real s that is 200–420 m/s on screen, roughly 900 km/h or 85 tuk-tuk lengths per second.
@@ -229,7 +229,7 @@
 6. **Signals at clustered OSM signal junctions**, in `src/sim/signals.ts`:
    - Stateless phases: `phase = (time + offset) mod cycle`. Cycle 90 s (Rincome 150 s: calendar.md cites "the longest wait for a green light") [pacing].
    - Approaches split into two groups by the junction axis.
-   - A cap in `game.speedCaps` makes *all* simulated vehicles stop at the line 6 m before the junction (`STOP_LINE_M`). Seeing fleet tuk-tuks run reds in 3D would look wrong.
+   - A cap in `game.speedCaps` makes *all* simulated vehicles stop at each approach's painted stop line (`src/sim/junctionShape.ts`: past the rounded kerb corners and the zebra crossing, as the 3D streets draw them; never nearer than 6 m to the node). Seeing fleet tuk-tuks run reds in 3D would look wrong.
    - The player may run a red, with a rating hit and a chance of a police-checkpoint fine [pacing]. Research mentions checkpoints on the Superhighway, Huay Kaew and Old City exits, but not a fine amount.
    - Recheck rush-hour factors in the harness. Average added delay is about 11 s per signalised passage.
 

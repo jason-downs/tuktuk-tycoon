@@ -1,10 +1,12 @@
 // Exact obstacle index for placing trees and street props: road carriageways
 // (the same ribbons roads.ts draws, mitres and end caps included), building
-// footprints, water, rail and runways, walls and footpaths. Complements the
-// coarse Occupancy raster, which also blocks pavements and so cannot place
-// kerbside props. Pure TypeScript; built once per BuildContext.
+// footprints, water, rail and runways, walls (the brick city walls too) and
+// footpaths. Complements the coarse Occupancy raster, which also blocks
+// pavements and so cannot place kerbside props. Pure TypeScript; built once
+// per BuildContext.
 
 import { ringOf, type CityData } from '../city';
+import { HEROES } from './landmarks3d';
 import type { Ring } from './shapes';
 
 /** Obstacle kinds (bit flags) for Clearance queries. */
@@ -23,12 +25,14 @@ export const OB = {
   BURIED: 128,
   /** Plazas and the airport apron: open paving, no trees. */
   PLAZA: 256,
+  /** The Old City's corner bastions: brick masses whose flat tops carry trees (docs/3d/world.md §1.4). */
+  BASTION: 512,
 } as const;
 
 /** Everything a tree trunk must avoid. */
 export const TREE_BLOCK = OB.ROAD | OB.BUILDING | OB.WATER | OB.TRACK | OB.WALL | OB.PATH | OB.PITCH | OB.PLAZA;
 /** Everything a kerbside prop must avoid. */
-export const PROP_BLOCK = OB.ROAD | OB.BUILDING | OB.WATER | OB.TRACK | OB.WALL;
+export const PROP_BLOCK = OB.ROAD | OB.BUILDING | OB.WATER | OB.TRACK | OB.WALL | OB.BASTION;
 
 /**
  * Left and right outlines of the ribbon MeshWriter.ribbon draws for a
@@ -386,6 +390,8 @@ export class Placed {
 }
 
 const WATER_AREAS = new Set(['water', 'moat', 'river', 'pool']);
+/** OSM ids of the city-wall areas that are corner bastions. */
+const BASTION_WALLS = new Set(HEROES.filter((h) => h.kind === 'bastion').flatMap((h) => h.walls ?? []));
 
 /** Obstacle index for a city; `buried` marks the ways whose carriageways get OB.BURIED too. */
 export function buildClearance(city: CityData, keep: [number, number, number, number], buried: (wayIndex: number) => boolean): Clearance {
@@ -397,6 +403,8 @@ export function buildClearance(city: CityData, keep: [number, number, number, nu
     cl.addRibbon(pts, half, cap, OB.ROAD | (buried(wi) ? OB.BURIED : 0));
   });
   for (const b of city.buildings) cl.addPoly(ringOf(b.r), OB.BUILDING);
+  // The city walls, gate towers and bastions, mapped as closed areas; trees grow on the bastions only.
+  for (const cw of city.cityWalls ?? []) cl.addPoly(ringOf(cw.r), BASTION_WALLS.has(cw.id) ? OB.BASTION : OB.WALL);
   for (const a of city.areas) {
     const kind = city.areaKinds[a.k];
     if (WATER_AREAS.has(kind)) cl.addPoly(ringOf(a.r), OB.WATER);

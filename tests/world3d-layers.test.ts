@@ -3,7 +3,7 @@
 // Checks what each layer would draw and that nothing throws or goes NaN.
 
 import { readFileSync } from 'node:fs';
-import { Fog, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, type BufferGeometry, type Material } from 'three';
+import { Color, Fog, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, type BufferGeometry, type Material } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
@@ -17,6 +17,8 @@ import { ui } from '../src/ui/store';
 import { PERSON_DETAIL_SIGHT, type BlobShadows } from '../src/world3d/batches';
 import type { CityData } from '../src/world3d/city';
 import { buildCity, tileCity } from '../src/world3d/build/world';
+import { KERB_FLOATS } from '../src/world3d/build/anchors';
+import { buildClearance, OB, PROP_BLOCK } from '../src/world3d/build/clearance';
 import { festivalsAt } from '../src/world3d/env/festivals';
 import { timeOfDay } from '../src/world3d/env/lighting';
 import { moonIllumination, moonPhase, moonPosition, solarPosition } from '../src/world3d/env/sun';
@@ -25,6 +27,13 @@ import { CrowdLayer } from '../src/world3d/layers/crowds';
 import type { EnvState } from '../src/world3d/layers/environment';
 import { MarkerLayer } from '../src/world3d/layers/markers';
 import { PeopleLayer } from '../src/world3d/layers/people';
+import { ARM_Y, countdownDigits, LAMP_HEIGHT, segmentLit, SignalLayer } from '../src/world3d/layers/signals';
+import { arcLight, lightChangesIn, signalMap, STOP_BEHIND_LINE_M } from '../src/sim/signals';
+import { kerbPoint, PICKUP_RADIUS_M } from '../src/sim/manual';
+import { simAnchors } from '../src/world3d/simAnchors';
+import { unpackSpots } from '../src/world3d/signalSpots';
+import { buildRoadNet } from '../src/world3d/build/junctions';
+import { pointInRing } from '../src/world3d/build/shapes';
 import type { ViewContext, WorldLayer } from '../src/world3d/layers/types';
 import { VehicleLayer } from '../src/world3d/layers/vehicles';
 import { personGeometry } from '../src/world3d/personModels';
@@ -32,7 +41,9 @@ import { tuktukGeometry } from '../src/world3d/vehicleModels';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
-const built = tileCity(buildCity(read<CityData>('city3d.json')));
+const city = read<CityData>('city3d.json');
+// Built with the simulation's anchors, as the view's worker does: traffic lights and waiting passengers settled against the city.
+const built = tileCity(buildCity(city, simAnchors(world)));
 
 /** The darkness the Environment layer publishes for a game time on a clear day: sun and moon for the date. */
 function nightAt(time: number): number {
@@ -65,7 +76,7 @@ function setup(time: number, night?: number) {
     screenOf: () => null,
     kerbOf: (req: RideRequest) => {
       const place = game.place(req.from);
-      return { x: world.graph.nodeX[place.node] + 3, y: world.graph.nodeY[place.node] };
+      return { x: world.graph.nodeX[place.node] + 3, y: world.graph.nodeY[place.node], face: Math.PI };
     },
     vehicleMesh: (id) => vehicles?.meshOf(id),
     hoverRequest: null,
@@ -408,5 +419,201 @@ describe('3D layers, headless', () => {
       expect(b.long).toBeGreaterThan(b.wide);
       expect(b.wide).toBeGreaterThan(0.3 * scale);
     }
+  });
+});
+
+describe('traffic lights', () => {
+  const graph = world.graph;
+  const map = signalMap(graph);
+  const spots = unpackSpots(built.signals);
+  const keep = city.keep.map((v) => v / 10) as [number, number, number, number];
+  const net = buildRoadNet(city);
+  // Everything a pole may not stand in: carriageways and junction surfaces as drawn, buildings, walls, water, rail.
+  const clear = buildClearance(city, keep, () => false);
+  for (const j of net.junctions) clear.addPoly(j.ring, OB.ROAD);
+  const onRoad = (x: number, y: number) => {
+    const near = net.nearest(x, y, 30);
+    if (near && near.d < near.way.hw) return true;
+    return net.junctions.some((j) => j.simple && Math.hypot(j.x - x, j.y - y) < 40 && pointInRing(x, y, j.ring));
+  };
+  /** Metres back from the junction node along an approach to the point of it nearest (x, y), and how far off it (x, y) lies. */
+  const along = (arc: number, x: number, y: number) => {
+    const e = graph.edges[arc >> 1];
+    let off = Infinity;
+    let s = 0;
+    for (let k = 1; k < e.cum.length; k++) {
+      const [ax, ay, bx, by] = [e.pts[2 * k - 2], e.pts[2 * k - 1], e.pts[2 * k], e.pts[2 * k + 1]];
+      const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1e-9;
+      const u = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / l2));
+      const d = Math.hypot(ax + (bx - ax) * u - x, ay + (by - ay) * u - y);
+      if (d < off) {
+        off = d;
+        s = e.cum[k - 1] + u * Math.sqrt(l2);
+      }
+    }
+    return { back: arc & 1 ? s : e.len - s, off };
+  };
+
+  it('stands a light for every signalled approach where the city leaves room: off every road, building and other prop', () => {
+    const n = map.approaches.length;
+    expect(n).toBeGreaterThan(150);
+    // The static city has no signal props of its own, so no second, unsynchronised set.
+    expect(built.props.traffic_light).toBeUndefined();
+    const arcs = spots.map((s) => s.arc);
+    expect(new Set(arcs).size).toBe(arcs.length);
+    for (const arc of arcs) expect(map.arcGroup[arc]).toBeGreaterThanOrEqual(0);
+    console.log(`signals: ${spots.length} of ${n} approaches have a light, ${spots.filter((s) => s.far).length} across the junction`);
+    expect(spots.length).toBe(n);
+    let headOverRoad = 0;
+    for (const s of spots) {
+      expect(clear.hit(s.poleX, s.poleY, 0.25, PROP_BLOCK)).toBe(false);
+      expect(Math.hypot(s.headX - s.poleX, s.headY - s.poleY)).toBeCloseTo(s.arm, 3);
+      if (onRoad(s.headX, s.headY)) headOverRoad++;
+    }
+    expect(headOverRoad / spots.length).toBeGreaterThan(0.97);
+    // No lamp, power pole, shelter, cart or market stall stands on a signal pole, and no two poles share a spot.
+    // Reach (m) of a prop around its anchor: a bus shelter's roof, a stall's canopy (its size), a cart and its stools.
+    const reach = (kind: string, size: number) => (kind === 'bus_shelter' ? 1.9 : kind.startsWith('fx_stall') ? size / 2 : kind === 'food_cart' ? 0.9 : 0.5);
+    const crowded: string[] = [];
+    for (const [kind, a] of Object.entries(built.props)) {
+      if (kind.startsWith('walk')) continue;
+      for (let i = 0; i < a.length; i += 4) {
+        const r = reach(kind, a[i + 3]);
+        for (const s of spots) if (Math.abs(a[i] - s.poleX) < r && Math.hypot(a[i] - s.poleX, a[i + 1] - s.poleY) < r) crowded.push(`${kind} at ${s.arc}`);
+      }
+    }
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) if (Math.hypot(spots[i].poleX - spots[j].poleX, spots[i].poleY - spots[j].poleY) < 0.5) crowded.push(`poles ${spots[i].arc}, ${spots[j].arc}`);
+    }
+    expect(crowded).toEqual([]);
+  });
+
+  it('hangs each near-side head over the front of the traffic waiting at the stop line, not behind the queue', () => {
+    let near = 0;
+    for (const s of spots) {
+      if (s.far) continue;
+      const { back, off } = along(s.arc, s.headX, s.headY);
+      // Heads on the road behind a short approach project onto its far end; the approach itself holds the rest.
+      if (off > 8 || back >= graph.arcLen(s.arc) - 0.01) continue;
+      near++;
+      const front = map.stopAt[s.arc] - STOP_BEHIND_LINE_M;
+      expect(back - front).toBeLessThan(2.6);
+    }
+    expect(near).toBeGreaterThan(200);
+  });
+
+  it('shows each approach its light and a countdown to the change, and cleans up', () => {
+    const t = setup(timeOf(2026, 10, 3, 10));
+    const instanced = () => {
+      const out: InstancedMesh[] = [];
+      t.scene.traverse((o) => {
+        if ((o as InstancedMesh).isInstancedMesh) out.push(o as InstancedMesh);
+      });
+      return out;
+    };
+    const before = new Set(instanced());
+    const layer = new SignalLayer(t.ctx, spots);
+    const n = spots.length;
+    expect(layer.approaches.length).toBe(n);
+    const meshes = instanced().filter((m) => !before.has(m));
+    // Poles, arms, plates, lamps, countdown boxes and countdown segments.
+    expect(meshes.length).toBe(6);
+    expect(meshes.map((m) => m.count)).toEqual([n, n, n, n, n, n * 14]);
+    expect(finiteMatrices(meshes)).toBe(true);
+    // Each arm runs from the top of its pole to over the head, and each head faces back along the approach.
+    const [, arms, , lampMesh, , segs] = meshes;
+    const m = new Matrix4();
+    for (let i = 0; i < n; i += 7) {
+      const s = layer.approaches[i];
+      arms.getMatrixAt(i, m);
+      const start = new Vector3(0, 0, 0).applyMatrix4(m);
+      const end = new Vector3(1, 0, 0).applyMatrix4(m);
+      expect(Math.hypot(start.x - s.poleX, -start.z - s.poleY)).toBeLessThan(1e-3);
+      expect(Math.hypot(end.x - s.headX, -end.z - s.headY)).toBeLessThan(1e-3);
+      expect(end.y).toBeCloseTo(ARM_Y, 5);
+      lampMesh.getMatrixAt(i, m);
+      const facing = new Vector3(0, 0, 1).transformDirection(m);
+      expect(facing.x * Math.cos(s.heading) - facing.z * Math.sin(s.heading)).toBeLessThan(-0.99);
+    }
+    expect(ARM_Y).toBeGreaterThan(LAMP_HEIGHT + 0.95);
+    // The lit lamp shows each approach's current light: high on the plate for red, low for green.
+    const colour = new Color();
+    const lit = (i: number, d: number) =>
+      Array.from({ length: 7 }, (_, k) => {
+        segs.getColorAt(i * 14 + d * 7 + k, colour);
+        return colour.r + colour.g > 0.5;
+      });
+    let seen = 0;
+    for (let k = 0; k < 90 && seen < 2; k++) {
+      t.game.state.time += 7;
+      layer.update({ now: 0, dt: 1 / 60, hour: 10, ui: ui.get() });
+      const lights = layer.approaches.map((s) => arcLight(t.game, s.arc) ?? 'red');
+      const red = lights.indexOf('red');
+      const green = lights.indexOf('green');
+      if (red < 0 || green < 0) continue;
+      const y = (i: number) => lampMesh.instanceMatrix.array[i * 16 + 13];
+      expect(y(red)).toBeGreaterThan(LAMP_HEIGHT + 0.3);
+      expect(y(green)).toBeLessThan(LAMP_HEIGHT - 0.3);
+      // The countdown's digits read the seconds until the light changes.
+      for (const i of [red, green]) {
+        const arc = layer.approaches[i].arc;
+        const j = map.junctions[map.junctionOf[graph.arcTo(arc)]];
+        const digits = countdownDigits(lightChangesIn(j, map.arcGroup[arc], t.game.state.time));
+        digits.forEach((digit, d) => expect(lit(i, d)).toEqual(Array.from({ length: 7 }, (_, seg) => segmentLit(digit, seg))));
+      }
+      seen++;
+    }
+    expect(seen).toBe(2);
+    // Zoomed out, the lights hide.
+    (t.ctx.rig as { dist: number }).dist = 5000;
+    layer.update({ now: 0, dt: 1 / 60, hour: 10, ui: ui.get() });
+    for (const mesh of meshes) expect(mesh.visible).toBe(false);
+    layer.dispose();
+    expect(instanced().filter((mesh) => !before.has(mesh)).length).toBe(0);
+  });
+
+  it('draws the digits 0 to 9 on seven segments and counts down whole seconds', () => {
+    expect(countdownDigits(42.2)).toEqual([4, 3]);
+    expect(countdownDigits(0)).toEqual([0, 0]);
+    expect(countdownDigits(140)).toEqual([9, 9]);
+    const lit = (d: number) => Array.from({ length: 7 }, (_, k) => segmentLit(d, k)).filter(Boolean).length;
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(lit)).toEqual([6, 2, 5, 5, 4, 5, 6, 3, 7, 6]);
+  });
+});
+
+describe('waiting passengers', () => {
+  it('stand where the city build settled them: clear of buildings, walls, water and carriageways', () => {
+    const keep = city.keep.map((v) => v / 10) as [number, number, number, number];
+    const blocks = buildClearance(city, keep, () => false);
+    const net = buildRoadNet(city);
+    for (const j of net.junctions) blocks.addPoly(j.ring, OB.ROAD);
+    const inKeep = (x: number, y: number) => x > keep[0] && x < keep[2] && y > keep[1] && y < keep[3];
+    let onMap = 0;
+    let settled = 0;
+    let moved = 0;
+    let onRoad = 0;
+    for (const place of world.places) {
+      if (place.offmap) continue;
+      const sim = kerbPoint({ world } as Game, place);
+      if (!inKeep(sim.x, sim.y)) continue;
+      onMap++;
+      const k = place.idx * KERB_FLOATS;
+      if (Number.isNaN(built.kerbs[k])) continue;
+      settled++;
+      const [x, y, face] = [built.kerbs[k], built.kerbs[k + 1], built.kerbs[k + 2]];
+      expect(blocks.hit(x, y, 0.1, OB.BUILDING | OB.WALL | OB.BASTION | OB.WATER | OB.TRACK)).toBe(false);
+      // Only where buildings cover every pavement nearby does a passenger wait at the edge of a road.
+      if (blocks.hit(x, y, 0.15, OB.ROAD)) onRoad++;
+      // Near enough the kerb point the pickup is judged from that a tuk-tuk drawn up beside the passenger can take them.
+      expect(Math.hypot(x - sim.x, y - sim.y) + 4.5).toBeLessThan(PICKUP_RADIUS_M);
+      const road = net.nearest(x, y, 12);
+      expect(road).not.toBeNull();
+      if (Math.hypot(x - sim.x, y - sim.y) > 0.01) moved++;
+      expect(Number.isFinite(face)).toBe(true);
+    }
+    console.log(`waiting passengers: ${settled} of ${onMap} places settled, ${moved} moved off the simulation's kerb point, ${onRoad} at a road's edge`);
+    expect(settled).toBe(onMap);
+    expect(onRoad / settled).toBeLessThan(0.01);
+    expect(moved).toBeGreaterThan(100);
   });
 });

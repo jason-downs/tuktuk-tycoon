@@ -21,7 +21,7 @@ import { angleDiff } from '../geo';
 import { BALANCE } from './balance';
 import { findRequest, fitsParty, partyTooBigText, refuel, releaseClaim } from './dispatch';
 import type { Game, GameSystem, RatingModifier } from './game';
-import { reverseArc, type RoadGraph } from './graph';
+import { edgeWidth, reverseArc, type RoadGraph } from './graph';
 import { beginKerbside } from './kerbside';
 import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
 import { accountDistance, targetSpeed } from './movement';
@@ -47,8 +47,18 @@ export const PICKUP_MAX_SPEED = 1.5;
 export const WALK_OVER_S = 20;
 /** A pump or charger this close (m) to the tuk-tuk can be used by hand. */
 export const PUMP_RADIUS_M = 30;
-/** Where a waiting passenger stands: at most this far from the road node, towards their place. */
-const KERB_OFFSET_M = 6;
+/** Where a waiting passenger stands: at least this far back from the junction node along the road… */
+const KERB_BACK_M = 6;
+/** …and this far beyond the edge of any crossing carriageway, clear of the rounded kerb corners (up to 6 m radius). */
+const KERB_JUNCTION_CLEAR_M = 4;
+/** Distance (m) from the carriageway edge to where the passenger stands: on the pavement, just behind the kerb. */
+const KERB_STAND_M = 0.7;
+/** Other spots kerbCandidates offers: further from the junction (m, added to the setback; negative is nearer)… */
+const KERB_MORE_BACK_M = [-2, 3, 6, 10];
+/** …and nearer the kerb (m outside it), where a building is mapped over the back of the pavement. */
+const KERB_NEAR_STAND_M = 0.4;
+/** Farthest (m) any of those spots lies from kerbPoint, which the pickup distance is measured to (within PICKUP_RADIUS_M). */
+const KERB_MAX_SHIFT_M = 20;
 
 export type TurnIntent = 'left' | 'right';
 export type TurnKind = 'left' | 'right' | 'straight' | 'uturn';
@@ -340,16 +350,91 @@ export class ManualSystem implements GameSystem {
 }
 
 // ------------------------------------------------------------ at the kerb
-/** Where a waiting passenger stands: beside the place's road node, a few metres towards the place. */
-export function kerbPoint(game: Game, place: Place): { x: number; y: number } {
+const _kerbPose = { x: 0, y: 0, heading: 0 };
+
+/** Where a waiting passenger stands (sim metres) and the heading (radians) that faces the carriageway. */
+export interface KerbPoint {
+  x: number;
+  y: number;
+  face: number;
+}
+
+/**
+ * Stand points on both pavements of every road at a node: `more` metres
+ * further from the junction than the base setback (KERB_BACK_M, or past the
+ * widest crossing carriageway by KERB_JUNCTION_CLEAR_M; never beyond half the
+ * road), `stand` metres outside the drawn kerb, each facing the carriageway.
+ */
+function kerbSpots(g: RoadGraph, node: number, more: readonly number[], stand: readonly number[], out: KerbPoint[] = []): KerbPoint[] {
+  const edges = g.edgesAt(node);
+  for (const ei of edges) {
+    const e = g.edges[ei];
+    if (e.virtual) continue;
+    let cross = 0;
+    for (const oi of edges) if (oi !== ei && !g.edges[oi].virtual) cross = Math.max(cross, edgeWidth(g.edges[oi]) / 2);
+    const base = Math.max(KERB_BACK_M, cross + KERB_JUNCTION_CLEAR_M);
+    for (const m of more) {
+      // The arc leaving the node along this edge; its pose gives the road direction there.
+      const p = g.poseAt(ei * 2 + (e.a === node ? 0 : 1), Math.min(base + m, e.len / 2), _kerbPose);
+      for (const st of stand) {
+        const off = edgeWidth(e) / 2 + st;
+        const lx = -Math.sin(p.heading) * off;
+        const ly = Math.cos(p.heading) * off;
+        for (const side of [1, -1]) out.push({ x: p.x + lx * side, y: p.y + ly * side, face: Math.atan2(-ly * side, -lx * side) });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Where a waiting passenger stands: on the pavement of one of the roads that
+ * meet at the place's node, set back from the junction beyond the crossing
+ * carriageways, KERB_STAND_M outside the drawn kerb, on whichever road and
+ * side is nearest the place.
+ */
+export function kerbPoint(game: Game, place: Place): KerbPoint {
   const g = game.world.graph;
-  const nx = g.nodeX[place.node];
-  const ny = g.nodeY[place.node];
-  const dx = place.x - nx;
-  const dy = place.y - ny;
-  const d = Math.hypot(dx, dy) || 1;
-  const off = Math.min(d, KERB_OFFSET_M);
-  return { x: nx + (dx / d) * off, y: ny + (dy / d) * off };
+  const node = place.node;
+  let best: KerbPoint = { x: g.nodeX[node], y: g.nodeY[node], face: Math.atan2(g.nodeY[node] - place.y, g.nodeX[node] - place.x) || 0 };
+  let bestD = Infinity;
+  for (const k of kerbSpots(g, node, [0], [KERB_STAND_M])) {
+    const d = Math.hypot(k.x - place.x, k.y - place.y);
+    if (d < bestD) {
+      bestD = d;
+      best = k;
+    }
+  }
+  return best;
+}
+
+/**
+ * Every spot a waiting passenger at a place may stand, best first: kerbPoint's
+ * spots nearest the place first (the first is kerbPoint), then spots further
+ * along each pavement (KERB_MORE_BACK_M) and nearer the kerb
+ * (KERB_NEAR_STAND_M), nearest the place first, then the kerbs at the far
+ * ends of short roads from the place's node; none further than
+ * KERB_MAX_SHIFT_M from kerbPoint. The 3D city build takes the first one
+ * clear of the buildings, walls and street furniture it draws.
+ */
+export function kerbCandidates(graph: RoadGraph, place: Place): KerbPoint[] {
+  const byDistance = (list: KerbPoint[]) =>
+    list
+      .map((k) => ({ k, d: Math.hypot(k.x - place.x, k.y - place.y) }))
+      .sort((a, b) => a.d - b.d)
+      .map((e) => e.k);
+  const first = byDistance(kerbSpots(graph, place.node, [0], [KERB_STAND_M]));
+  const more = kerbSpots(graph, place.node, KERB_MORE_BACK_M, [KERB_STAND_M]);
+  kerbSpots(graph, place.node, [0, ...KERB_MORE_BACK_M], [KERB_NEAR_STAND_M], more);
+  // Then the kerbs at the far ends of the place's roads: a dead-end lane under a building leads out to a street.
+  const beyond: KerbPoint[] = [];
+  for (const ei of graph.edgesAt(place.node)) {
+    const e = graph.edges[ei];
+    if (!e.virtual && e.len <= KERB_MAX_SHIFT_M) kerbSpots(graph, e.a === place.node ? e.b : e.a, [0], [KERB_STAND_M, KERB_NEAR_STAND_M], beyond);
+  }
+  const [k] = first;
+  const near = (list: KerbPoint[]) => (k ? list.filter((c) => Math.hypot(c.x - k.x, c.y - k.y) <= KERB_MAX_SHIFT_M) : list);
+  return first.slice(0, 1).concat(near(first.slice(1)), byDistance(near(more)), byDistance(near(beyond)));
 }
 
 /**

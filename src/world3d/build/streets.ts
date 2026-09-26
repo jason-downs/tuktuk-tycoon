@@ -6,7 +6,7 @@
 // registry of placed items.
 
 import { ringOf } from '../city';
-import { buildClearance, Placed, roadHalf, segDist, type Clearance } from './clearance';
+import { buildClearance, OB, Placed, roadHalf, segDist, type Clearance } from './clearance';
 import type { BuildContext } from './context';
 import type { Ring } from './shapes';
 
@@ -142,6 +142,8 @@ export function placeEnv(ctx: BuildContext): PlaceEnv {
     return { i, pts, nodes: refs, cls, flags, half: roadHalf(widthDm).half, lanes, name, len, ...rules };
   });
   const clear = buildClearance(city, ctx.keep, (wi) => streets[wi].buried);
+  // Junction surfaces, whose rounded kerb corners and gores reach past the carriageway ribbons into the blocks.
+  for (const j of ctx.roadNet?.junctions ?? []) clear.addPoly(j.ring, OB.ROAD | (j.arms.some((a) => streets[a.way.idx].buried) ? OB.BURIED : 0));
   const env: PlaceEnv = { streets, clear, placed: new Placed(), moatRings };
   envs.set(ctx, env);
   return env;

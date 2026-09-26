@@ -1,13 +1,16 @@
 // Street furniture (docs/3d/world.md §1.6, §2.7): concrete power poles with
 // sagging cable bundles (none on the buried-cable roads, which get green PEA
-// cabinets), arm street lamps and heritage lanterns, traffic lights at OSM
-// signals, bus shelters, moat fountains, spirit houses and parked motorbikes
-// at shop fronts, flags and motorbikes at temple gates, market stalls, food
-// carts with parasols at soi mouths, and benches. Props are instanced
-// (addProp + src/world3d/propModels.ts); the cables are static geometry in
-// the structures layer.
+// cabinets), arm street lamps and heritage lanterns, bus shelters, moat
+// fountains, spirit houses and parked motorbikes at shop fronts, flags and
+// motorbikes at temple gates, market stalls, food carts with parasols at soi
+// mouths, and benches. Props are instanced (addProp +
+// src/world3d/propModels.ts); the cables are static geometry in the
+// structures layer. Traffic-light poles are placed here from the
+// simulation's candidates (anchors.ts) and drawn by the signals layer
+// (src/world3d/layers/signals.ts), which follows the simulated signals.
 
 import { ringOf, ROAD_FLAG } from '../city';
+import { placeSignals } from './anchors';
 import { OB, PROP_BLOCK } from './clearance';
 import { addProp, type BuildContext } from './context';
 import { hash01, hex, type MeshWriter, type RGB } from './mesh';
@@ -67,7 +70,8 @@ function put(ctx: BuildContext, env: PlaceEnv, kind: string, x: number, y: numbe
 
 export function buildProps(ctx: BuildContext): void {
   const env = placeEnv(ctx);
-  trafficLights(ctx, env);
+  // Traffic-light poles first: they stand where the signals need them, and everything else keeps off.
+  placeSignals(ctx, env);
   busShelters(ctx, env);
   fountains(ctx, env);
   moatPromenade(ctx, env);
@@ -89,94 +93,6 @@ function osmPoints(ctx: BuildContext, kind: string): [number, number, number][] 
   if (k < 0) return out;
   for (let i = 0; i < city.props.length; i += 3) if (city.props[i] === k) out.push([city.props[i + 1] / 10, city.props[i + 2] / 10, i / 3]);
   return out;
-}
-
-const nodeGrids = new WeakMap<PlaceEnv, Map<number, { st: Street; k: number }[]>>();
-const NODE_CELL = 16;
-const nodeKey = (i: number, j: number) => (i + 4096) * 8192 + (j + 4096);
-
-/** Street vertices within r of (x, y), with the street each belongs to. */
-function nodesNear(env: PlaceEnv, x: number, y: number, r: number): { st: Street; k: number }[] {
-  let grid = nodeGrids.get(env);
-  if (!grid) {
-    grid = new Map();
-    for (const st of env.streets) {
-      st.pts.forEach(([px, py], k) => {
-        const key = nodeKey(Math.floor(px / NODE_CELL), Math.floor(py / NODE_CELL));
-        let list = grid!.get(key);
-        if (!list) grid!.set(key, (list = []));
-        list.push({ st, k });
-      });
-    }
-    nodeGrids.set(env, grid);
-  }
-  const out: { st: Street; k: number }[] = [];
-  for (let i = Math.floor((x - r) / NODE_CELL); i <= Math.floor((x + r) / NODE_CELL); i++) {
-    for (let j = Math.floor((y - r) / NODE_CELL); j <= Math.floor((y + r) / NODE_CELL); j++) {
-      for (const e of grid.get(nodeKey(i, j)) ?? []) {
-        const [px, py] = e.st.pts[e.k];
-        if (Math.hypot(px - x, py - y) <= r) out.push(e);
-      }
-    }
-  }
-  // Nearest first, so the junction node is the one closest to the signal.
-  return out.sort((a, b) => Math.hypot(a.st.pts[a.k][0] - x, a.st.pts[a.k][1] - y) - Math.hypot(b.st.pts[b.k][0] - x, b.st.pts[b.k][1] - y));
-}
-
-/**
- * Traffic lights at OSM signals: one pole per approach, on the kerb to the
- * left of arriving traffic (Thailand drives on the left), set back beyond the
- * crossing road, facing the traffic with its arm over the carriageway.
- */
-function trafficLights(ctx: BuildContext, env: PlaceEnv): void {
-  const placed: [number, number, number][] = [];
-  for (const [sx, sy] of osmPoints(ctx, 'traffic_signals')) {
-    const at = nodesNear(env, sx, sy, 4);
-    const approaches: { dx: number; dy: number; half: number }[] = [];
-    let ox = sx;
-    let oy = sy;
-    if (at.length) {
-      [ox, oy] = at[0].st.pts[at[0].k];
-      for (const { st, k } of at) {
-        if (Math.hypot(st.pts[k][0] - ox, st.pts[k][1] - oy) > 1) continue;
-        const oneway = (st.flags & ROAD_FLAG.ONEWAY) !== 0;
-        // Traffic arrives from the previous vertex; on two-way roads also from the next.
-        const dirs: number[] = [];
-        if (k > 0) dirs.push(-1);
-        if (k < st.pts.length - 1 && !oneway) dirs.push(1);
-        for (const dk of dirs) {
-          let j = k + dk;
-          while (j > 0 && j < st.pts.length - 1 && Math.hypot(st.pts[j][0] - ox, st.pts[j][1] - oy) < 4) j += dk;
-          const dx = st.pts[j][0] - ox;
-          const dy = st.pts[j][1] - oy;
-          const l = Math.hypot(dx, dy);
-          if (l > 0.5) approaches.push({ dx: dx / l, dy: dy / l, half: st.half });
-        }
-      }
-    } else {
-      const near = nearestStreet(env, sx, sy, 12);
-      if (!near) continue;
-      ox = near.px;
-      oy = near.py;
-      approaches.push({ dx: -near.dx, dy: -near.dy, half: near.st.half });
-      if (!(near.st.flags & ROAD_FLAG.ONEWAY)) approaches.push({ dx: near.dx, dy: near.dy, half: near.st.half });
-    }
-    const cross = Math.max(0, ...approaches.map((a) => a.half));
-    for (const a of approaches) {
-      const yaw = Math.atan2(a.dy, a.dx);
-      // Skip approaches another signal pole already covers.
-      if (placed.some(([px, py, pyaw]) => Math.hypot(px - ox - a.dx * 8, py - oy - a.dy * 8) < 14 && Math.cos(pyaw - yaw) > 0.8)) continue;
-      for (const back of [cross + 1.5, cross + 3.5, cross + 6]) {
-        // Left of arriving traffic, which travels along −dir.
-        const x = ox + a.dx * back + a.dy * (a.half + 0.7);
-        const y = oy + a.dy * back - a.dx * (a.half + 0.7);
-        if (put(ctx, env, 'traffic_light', x, y, yaw, { r: 0.5, clear: 0.3 })) {
-          placed.push([x, y, yaw]);
-          break;
-        }
-      }
-    }
-  }
 }
 
 /** Sala-style shelters at OSM bus stops, on the kerb facing the road. */
@@ -317,7 +233,7 @@ function fountains(ctx: BuildContext, env: PlaceEnv): void {
   }
 }
 
-/** Heritage lanterns and benches along both moat banks. */
+/** Heritage lanterns and benches along both moat banks; the benches face the water. */
 function moatPromenade(ctx: BuildContext, env: PlaceEnv): void {
   env.moatRings.forEach((ring, ri) => {
     walk(
@@ -325,8 +241,9 @@ function moatPromenade(ctx: BuildContext, env: PlaceEnv): void {
       6 + hash01(ri, 131) * 12,
       () => 24,
       (st) => {
-        // Outward (right-hand) normal of a counter-clockwise ring; lanterns and benches face the water.
-        put(ctx, env, 'heritage_lamp', st.x + st.dy * 1.3, st.y - st.dx * 1.3, Math.atan2(st.dx, -st.dy), { r: 0.4, clear: 0.3 });
+        // Outward (right-hand) normal of a counter-clockwise ring. Lanterns face away from the water, so
+        // their light pool (pushed along the facing by LAMP_SPECS.heritage_lamp.poolReach) lies on the promenade.
+        put(ctx, env, 'heritage_lamp', st.x + st.dy * 1.3, st.y - st.dx * 1.3, Math.atan2(-st.dx, st.dy), { r: 0.4, clear: 0.3 });
       },
       true,
     );
@@ -817,7 +734,7 @@ function foodCart(ctx: BuildContext, env: PlaceEnv, x: number, y: number, yaw: n
   });
   if (!ok) return false;
   const [px, py] = local(x, y, yaw, 0.3, 0);
-  if (!env.clear.hit(px, py, 1.3, OB.BUILDING | OB.WALL)) addProp(ctx, 'parasol', px, py, hash01(n, 191) * Math.PI * 2, 0.95 + hash01(n, 192) * 0.2);
+  if (!env.clear.hit(px, py, 1.3, OB.BUILDING | OB.WALL | OB.BASTION)) addProp(ctx, 'parasol', px, py, hash01(n, 191) * Math.PI * 2, 0.95 + hash01(n, 192) * 0.2);
   return true;
 }
 

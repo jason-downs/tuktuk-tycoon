@@ -10,6 +10,7 @@ import { LAYERS, TILE_SIZE, WHOLE_LAYERS, buildCity, tileCity, type TiledCity } 
 import { manageElevation } from '../src/world3d/camera';
 import { CityLayer } from '../src/world3d/layers/city';
 import type { ViewContext } from '../src/world3d/layers/types';
+import { PAVEMENT_Y, ROAD_SURFACE_Y } from '../src/world3d/kinematics';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const city = read<CityData>('city3d.json');
@@ -41,6 +42,15 @@ describe('3D city generation', () => {
     expect(total).toBeLessThan(3_000_000);
     expect(built.stats.buildings).toBeGreaterThan(18_000);
     expect(built.stats.trees).toBeGreaterThan(3_000);
+  });
+
+  it('paints the roads at the height vehicles drive and people stand on', () => {
+    const pos = built.layers.roads.position;
+    let off = 0;
+    for (let i = 1; i < pos.length; i += 3) if (Math.abs(pos[i] - ROAD_SURFACE_Y) > 1e-4) off++;
+    expect(pos.length).toBeGreaterThan(0);
+    expect(off).toBe(0);
+    expect(PAVEMENT_Y).toBe(ROAD_SURFACE_Y);
   });
 
   it('is deterministic', () => {

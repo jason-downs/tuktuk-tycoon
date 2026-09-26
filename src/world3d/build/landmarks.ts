@@ -51,6 +51,11 @@ export function buildLandmarks(ctx: BuildContext, env: BuildEnv): number {
   return built;
 }
 
+/** Height (m) of the brick mass of a gate or bastion hero. */
+export function wallHeight(h: Hero): number {
+  return h.kind === 'bastion' ? 5.4 : h.ruined ? 4.4 : 5.2;
+}
+
 function avg(pts: [number, number][]): [number, number] {
   let x = 0;
   let y = 0;
@@ -106,7 +111,7 @@ function placeHero(ctx: BuildContext, env: BuildEnv, h: Hero, walls: Map<number,
     case 'bastion': {
       const rings = (h.walls ?? []).map((id) => walls.get(id)).filter((r): r is Ring => !!r);
       if (!rings.length) return null;
-      const H = h.kind === 'bastion' ? 5.4 : h.ruined ? 4.4 : 5.2;
+      const H = wallHeight(h);
       rings.forEach((r, k) => brickMass(ctx, r, H, { ruined: !!h.ruined, key: hash01(k, 1) * 1e6 + (h.walls?.[k] ?? 0), moss: h.kind === 'bastion' }));
       if (h.doors && rings.length === 2 && anchor) thaPhaeGate(ctx, rings, anchor, H, oldCity);
       return anchor ?? avg(rings.map(centroid));

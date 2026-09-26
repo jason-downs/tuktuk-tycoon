@@ -22,7 +22,7 @@ function Root() {
     loadWorld(new URL('data/', BASE).href).then(
       (w) => {
         setWorld(w);
-        preloadCity(BASE, window.location.search);
+        preloadCity(BASE, window.location.search, w);
       },
       (e: unknown) => setError(String(e)),
     );

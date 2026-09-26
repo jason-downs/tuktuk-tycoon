@@ -10,6 +10,7 @@
 import { readFile, writeFile, stat } from 'node:fs/promises';
 import osmtogeojson from 'osmtogeojson';
 import { PLAY_BBOX } from './bbox.mjs';
+import { carriagewayWidth } from './roadWidth.mjs';
 
 const RAW = new URL(process.env.DATA_RAW ? `file://${process.env.DATA_RAW.replace(/\/?$/, '/')}` : '../data-raw/', import.meta.url);
 const OUT = new URL('../public/data/city3d.json', import.meta.url);
@@ -176,9 +177,6 @@ const classOf = (hw) => {
   const i = ROAD_CLASSES.indexOf(base === 'motorway' ? 'trunk' : base);
   return i < 0 ? ROAD_CLASSES.indexOf('service') : i;
 };
-/** Carriageway width when neither width nor lanes is tagged, metres. */
-const DEFAULT_WIDTH = [14, 12, 10, 8, 6.5, 5.5, 4.5, 4];
-const LANE_WIDTH = [3.25, 3.25, 3.0, 3.0, 2.75, 2.75, 2.75, 2.75];
 
 export const ROAD_FLAG = {
   ONEWAY: 1,
@@ -229,8 +227,7 @@ function bakeRoads(raw) {
     if (sw === 'right' || t['sidewalk:right'] === 'yes') flags |= ROAD_FLAG.SIDEWALK_R;
     if (t.lit === 'yes') flags |= ROAD_FLAG.LIT;
     const lanes = Math.max(0, Math.min(8, parseInt(t.lanes, 10) || 0));
-    let width = parseFloat(t.width);
-    if (!(width > 1.5 && width < 40)) width = lanes ? lanes * LANE_WIDTH[cls] + 0.6 : DEFAULT_WIDTH[cls];
+    const width = carriagewayWidth(t, cls, lanes);
     const layer = Math.max(-2, Math.min(3, parseInt(t.layer, 10) || 0));
     const refs = ids.map((id, i) => {
       let n = nodeIdx.get(id);

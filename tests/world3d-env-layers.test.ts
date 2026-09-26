@@ -11,12 +11,15 @@ import { Mist, Rain, Splashes } from '../src/world3d/layers/effects';
 import { FestivalDecor } from '../src/world3d/layers/festivals';
 import type { GlowFrame } from '../src/world3d/layers/glow';
 import { lampLayout, LAMP_SPECS, NightLights } from '../src/world3d/layers/nightLights';
+import { HERITAGE_LAMP_HEAD, STREET_LAMP_HEAD } from '../src/world3d/build/props';
+import { planWater, WATER_LEVEL, WaterIndex } from '../src/world3d/build/water';
 import { Sky } from '../src/world3d/layers/sky';
 import { timeOf } from '../src/sim/clock';
 import { Color } from 'three';
 
 const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', import.meta.url), 'utf8')) as CityData;
 const built = buildCity(city);
+const keep = city.keep.map((v) => v / 10) as [number, number, number, number];
 
 /** Every triangle of a non-indexed geometry: vertices and stored normal. */
 function triangles(g: BufferGeometry): { a: Vector3; b: Vector3; c: Vector3; n: Vector3 }[] {
@@ -101,14 +104,43 @@ describe('street lamp lights', () => {
     };
     const l = lampLayout(props);
     expect(l.heads.length / 8).toBe(2);
-    // Arm lamp facing north (yaw π/2): head 1.8 m north of the pole, i.e. world z = −(20 + 1.8).
+    // Arm lamp facing north (yaw π/2): the glow sits at the model's lamp head, reach metres north of the pole
+    // (world z = −(20 + reach)), just under the head's lit underside.
     expect(l.heads[0]).toBeCloseTo(10, 5);
-    expect(l.heads[1]).toBeCloseTo(LAMP_SPECS.street_lamp.height, 5);
-    expect(l.heads[2]).toBeCloseTo(-(20 + LAMP_SPECS.street_lamp.reach), 5);
+    expect(l.heads[2]).toBeCloseTo(-(20 + STREET_LAMP_HEAD.reach), 5);
+    expect(l.heads[1]).toBeLessThan(STREET_LAMP_HEAD.height - 0.08);
+    expect(l.heads[1]).toBeGreaterThan(STREET_LAMP_HEAD.height - 0.25);
     expect(l.pools[1]).toBeGreaterThan(0.13);
     expect(l.pools[3]).toBe(LAMP_SPECS.street_lamp.pool);
-    expect(l.heads[8 + 1]).toBeCloseTo(LAMP_SPECS.heritage_lamp.height, 5);
+    expect(l.heads[8]).toBeCloseTo(HERITAGE_LAMP_HEAD.reach, 5);
+    expect(l.heads[8 + 1]).toBeCloseTo(HERITAGE_LAMP_HEAD.height, 5);
     for (const v of [...l.heads, ...l.pools]) expect(Number.isFinite(v)).toBe(true);
+  });
+
+  it('throws the lamps’ light pools on the ground, not over the sunken moat and river', () => {
+    const layout = lampLayout(built.props);
+    const water = new WaterIndex(planWater(city, keep).bodies);
+    const shares: number[] = [];
+    for (let i = 0; i < layout.pools.length; i += 7) {
+      const [x, , z, r] = layout.pools.subarray(i, i + 4);
+      // Light-weighted share of the disc over water, with the pool's (1 − r²)² falloff.
+      let wet = 0;
+      let all = 0;
+      for (let u = -1; u <= 1; u += 0.125) {
+        for (let v = -1; v <= 1; v += 0.125) {
+          const r2 = u * u + v * v;
+          if (r2 > 1) continue;
+          const w = (1 - r2) ** 2;
+          all += w;
+          if (water.at(x + u * r, -z + v * r)) wet += w;
+        }
+      }
+      shares.push(wet / all);
+    }
+    shares.sort((a, b) => b - a);
+    console.log(`light pools: ${shares.length}, most over water ${shares[0].toFixed(3)}, 20th ${shares[19].toFixed(3)}`);
+    expect(shares.length).toBeGreaterThan(3000);
+    expect(shares[0]).toBeLessThan(0.1);
   });
 
   it('copes with a city that has no lamps yet', () => {
@@ -155,8 +187,17 @@ describe('festival decor from the real anchors', () => {
     const tris = (lanterns.geometry.getAttribute('position').count / 3) * lanterns.count;
     console.log(`Yi Peng: ${lanterns.count} lanterns, ${tris} triangles`);
     expect(tris).toBeLessThan(110_000);
-    // Krathongs drift and stay on the Ping between the bridges.
+    // Krathongs drift and stay on the Ping between the bridges, floating on its sunken water.
     decor.update({ glow: frame(20), state: festivalsAt(timeOf(2026, 10, 24, 20)), night: 1, krathongs: 100 });
+    const boatVerts = krathongGeometry().getAttribute('position').count;
+    const boats = scene.children.find((o): o is InstancedMesh => o instanceof InstancedMesh && o.geometry.getAttribute('position').count === boatVerts)!;
+    expect(boats.count).toBe(100);
+    const water = new WaterIndex(planWater(city, keep).bodies);
+    for (let i = 0; i < boats.count; i++) {
+      const [x, y, z] = [boats.instanceMatrix.array[i * 16 + 12], boats.instanceMatrix.array[i * 16 + 13], boats.instanceMatrix.array[i * 16 + 14]];
+      expect(water.at(x, -z)?.level).toBe(WATER_LEVEL.river);
+      expect(Math.abs(y - WATER_LEVEL.river)).toBeLessThan(0.05);
+    }
     decor.dispose();
     expect(scene.children.length).toBe(0);
   });
