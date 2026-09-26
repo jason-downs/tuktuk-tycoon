@@ -516,15 +516,17 @@ describe('temples and landmarks in the real city', () => {
 });
 
 describe('whole-city build', () => {
-  const t0 = performance.now();
+  // CPU time rather than wall time: the suite runs files in parallel, often on a busy machine.
+  const cpu0 = process.cpuUsage();
   const a = buildCity(city);
-  const ms = performance.now() - t0;
+  const cpu = process.cpuUsage(cpu0);
+  const ms = (cpu.user + cpu.system) / 1000;
   const b = buildCity(city);
 
   it('stays inside the building triangle budget and time', () => {
     const t = a.stats.triangles;
     const mine = t.buildings + t.windows + t.glow;
-    console.log(`buildings ${t.buildings}, windows ${t.windows}, glow ${t.glow}, structures ${t.structures}, total ${mine}, build ${ms.toFixed(0)} ms`);
+    console.log(`buildings ${t.buildings}, windows ${t.windows}, glow ${t.glow}, structures ${t.structures}, total ${mine}, build ${ms.toFixed(0)} ms CPU`);
     expect(mine).toBeLessThan(1_600_000);
     // Structures also hold the moat parapets, bridges, platforms and the power-line cables.
     expect(t.structures).toBeLessThan(400_000);

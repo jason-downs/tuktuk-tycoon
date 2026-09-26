@@ -364,6 +364,13 @@ function park(game: Game, v: Vehicle): void {
   v.speed = 0;
 }
 
+/** A hired driver waiting without a tuk-tuk takes the wheel of a newly acquired one; returns the sentence saying so, or ''. */
+function seatWaitingDriver(game: Game, v: Vehicle): string {
+  const d = hiredDrivers(game).find((x) => x.vehicleId === null && !fleetState(game).drivers[x.id]?.leaving);
+  if (!d || !assignDriver(game, d.id, v.id)) return '';
+  return ` ${d.nickname} takes the wheel.`;
+}
+
 /** Settle a vehicle after its driver changed: park it if nobody drives it, otherwise let the new driver think afresh. */
 function handOver(game: Game, v: Vehicle): void {
   releaseClaim(game, v);
@@ -424,7 +431,8 @@ export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Ve
     });
     v.lessor = 'owner';
     park(game, v);
-    game.notify(`An owner at the Tha Phae Gate rank rents you ${v.name}: ${thb(FLEET.owners.rentPerDay)}/day.`, 'good');
+    const seated = seatWaitingDriver(game, v);
+    game.notify(`An owner at the Tha Phae Gate rank rents you ${v.name}: ${thb(FLEET.owners.rentPerDay)}/day.${seated}`, 'good');
     game.emit('change');
     return v;
   }
@@ -437,7 +445,8 @@ export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Ve
     condition: Math.round(game.rng.range(55, 70)),
   });
   park(game, v);
-  game.notify(`Lung Daeng hands over the keys to ${v.name}: ${thb(FLEET.rentPerDay)}/day. It's parked at Tha Phae Gate.`, 'good');
+  const seated = seatWaitingDriver(game, v);
+  game.notify(`Lung Daeng hands over the keys to ${v.name}: ${thb(FLEET.rentPerDay)}/day. It's parked at Tha Phae Gate.${seated}`, 'good');
   game.emit('change');
   return v;
 }
@@ -502,12 +511,10 @@ export function buyVehicle(game: Game, modelId: string, mode: BuyMode = 'cash'):
     purchasePrice: model.price,
   });
   park(game, v);
-  if (mode === 'lease') {
-    fleetState(game).leases[v.id] = { price: model.price, instalment: terms.instalment, remaining: terms.financed, daysLeft: FLEET.lease.days };
-    game.notify(`${v.name} (${model.name}) is yours on hire-purchase: ${thb(terms.instalment)}/day for ${FLEET.lease.days} days.`, 'good');
-  } else {
-    game.notify(`You bought ${v.name}, a ${model.name.toLowerCase()}, for ${thb(model.price)}. It's parked at Tha Phae Gate.`, 'good');
-  }
+  if (mode === 'lease') fleetState(game).leases[v.id] = { price: model.price, instalment: terms.instalment, remaining: terms.financed, daysLeft: FLEET.lease.days };
+  const seated = seatWaitingDriver(game, v);
+  if (mode === 'lease') game.notify(`${v.name} (${model.name}) is yours on hire-purchase: ${thb(terms.instalment)}/day for ${FLEET.lease.days} days.${seated}`, 'good');
+  else game.notify(`You bought ${v.name}, a ${model.name.toLowerCase()}, for ${thb(model.price)}. It's parked at Tha Phae Gate.${seated}`, 'good');
   game.emit('change');
   return v;
 }
@@ -784,7 +791,9 @@ export function hireCandidate(game: Game, roster: number, model: PayModel, vehic
   const target = vehicleId !== null ? game.vehicle(vehicleId) : undefined;
   if (target && target.driverId === null && !inRide(target)) assignDriver(game, d.id, target.id);
   const where = d.vehicleId !== null ? ` and takes the wheel of ${game.vehicle(d.vehicleId)!.name}` : '';
-  game.notify(`${d.nickname} (${d.fullName}) joins ${game.state.companyName}${where}.`, 'good');
+  const joins = `${d.nickname} (${d.fullName}) joins ${game.state.companyName}${where}`;
+  // A company name such as "Lucky Tuk-Tuk Co." already ends the sentence.
+  game.notify(/[.!?]$/.test(joins) ? joins : `${joins}.`, 'good');
   game.emit('change');
   return d;
 }

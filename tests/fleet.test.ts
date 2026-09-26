@@ -247,6 +247,14 @@ describe('drivers', () => {
     expect(s.candidates.some((c) => c.roster === driverRecord(a, hired).roster)).toBe(false);
   });
 
+  it('announces a hire in one sentence, even when the company name ends in a full stop', () => {
+    const game = newGame();
+    game.state.companyName = 'Lucky Tuk-Tuk Co.';
+    hireCandidate(game, fleetState(game).candidates[0].roster, 'salary');
+    const text = game.state.notices.at(-1)!.text;
+    expect(text).toMatch(/joins Lucky Tuk-Tuk Co\.$/);
+  });
+
   it('charges the ฿1,000 hiring fee and can seat the new driver at once', () => {
     const game = newGame();
     const v = rentVehicle(game)!;
@@ -447,6 +455,21 @@ describe('hiring gate and owner rentals', () => {
     expect(whyCantHire(game, c.roster)).toMatch(/complete 5 rides/);
     game.state.stats.trips = FLEET.ridesBeforeHiring;
     expect(whyCantHire(game, c.roster)).toBeNull();
+  });
+
+  it('a hire waiting without a tuk-tuk takes the wheel of the next one rented or bought', () => {
+    const game = newGame(33, 500_000);
+    const bank = hireFirst(game, 'salary', null);
+    expect(bank.vehicleId).toBeNull();
+    const rented = rentVehicle(game, 'owner')!;
+    expect(rented.driverId).toBe(bank.id);
+    expect(bank.vehicleId).toBe(rented.id);
+    expect(rented.task.kind).not.toBe('offduty');
+    expect(game.state.notices.at(-1)!.text).toMatch(new RegExp(`${bank.nickname} takes the wheel\\.$`));
+    // Nobody left waiting: the next purchase stays parked.
+    const bought = buyVehicle(game, 'lpg_used')!;
+    expect(bought.driverId).toBeNull();
+    expect(bought.task.kind).toBe('offduty');
   });
 
   it('idle owners rent plated tuk-tuks only to an operator with a hired driver', () => {
