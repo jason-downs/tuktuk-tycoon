@@ -2,7 +2,7 @@ import type { MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, WebGLRend
 import type { Game } from '../../sim/game';
 import type { RideRequest } from '../../sim/types';
 import type { UIState } from '../../ui/store';
-import type { BuiltCity } from '../build/world';
+import type { TiledCity } from '../build/world';
 
 /** Services the 3D view offers its layers. Positions are sim metres (x east, y north). */
 export interface ViewContext {
@@ -34,7 +34,7 @@ export interface ViewContext {
   /** Request under the mouse, for hover effects. */
   readonly hoverRequest: number | null;
   /** The generated static city (props, trees, stats), once the worker has finished. */
-  city(): BuiltCity | null;
+  city(): TiledCity | null;
   /** Add a layer (e.g. effects that need the city); it is updated every frame from then on. */
   addLayer(layer: WorldLayer): void;
 }

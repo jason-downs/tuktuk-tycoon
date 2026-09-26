@@ -27,7 +27,7 @@ import { kerbPoint, manualControl, setAutodrive, whoDrives } from '../sim/manual
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
-import type { BuiltCity } from './build/world';
+import type { TiledCity } from './build/world';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
 import { aimCutaway, applyCutaway, createCutaway } from './cutaway';
 import { DriveHud } from './driveHud';
@@ -49,7 +49,7 @@ export interface World3DOptions {
 }
 
 interface BuildResult {
-  built: BuiltCity;
+  built: TiledCity;
   play: [number, number, number, number];
   keep: [number, number, number, number];
 }
@@ -61,7 +61,7 @@ export function loadCityMeshes(base: string): Promise<BuildResult> {
   if (!cityPromise) {
     cityPromise = new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./build/worker.ts', import.meta.url), { type: 'module' });
-      worker.onmessage = (e: MessageEvent<{ ok: boolean; built?: BuiltCity; play?: BuildResult['play']; keep?: BuildResult['keep']; error?: string }>) => {
+      worker.onmessage = (e: MessageEvent<{ ok: boolean; built?: TiledCity; play?: BuildResult['play']; keep?: BuildResult['keep']; error?: string }>) => {
         worker.terminate();
         if (e.data.ok && e.data.built) resolve({ built: e.data.built, play: e.data.play!, keep: e.data.keep! });
         else reject(new Error(e.data.error ?? 'city build failed'));
@@ -317,7 +317,7 @@ export class World3DView implements GameView, ViewContext {
     return this.vehicles.meshOf(id);
   }
 
-  city(): BuiltCity | null {
+  city(): TiledCity | null {
     return this.cityLayer?.built ?? null;
   }
 

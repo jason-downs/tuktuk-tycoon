@@ -284,6 +284,70 @@ export class MeshWriter {
   }
 }
 
+/**
+ * Split a mesh into square tiles of `size` metres on the ground (by triangle
+ * centroid), so each tile can be culled on its own. Each piece keeps only the
+ * vertices it uses; a vertex shared across a tile edge is copied into both.
+ * Pieces come out in tile order (west to east within rows north to south).
+ */
+export function splitMesh(m: PackedMesh, size: number): PackedMesh[] {
+  const tris = m.index.length / 3;
+  if (!tris) return [];
+  const p = m.position;
+  const tileOf = new Int32Array(tris);
+  const counts = new Map<number, number>();
+  for (let t = 0; t < tris; t++) {
+    const a = m.index[t * 3] * 3;
+    const b = m.index[t * 3 + 1] * 3;
+    const c = m.index[t * 3 + 2] * 3;
+    const tx = Math.floor((p[a] + p[b] + p[c]) / 3 / size);
+    const tz = Math.floor((p[a + 2] + p[b + 2] + p[c + 2]) / 3 / size);
+    const key = (tz + 4096) * 8192 + (tx + 4096);
+    tileOf[t] = key;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const keys = [...counts.keys()].sort((x, y) => x - y);
+  const slot = new Map<number, number>(keys.map((k, i) => [k, i]));
+  // Triangles grouped by tile, in their original order within each tile.
+  const start = new Int32Array(keys.length + 1);
+  keys.forEach((k, i) => (start[i + 1] = start[i] + counts.get(k)!));
+  const fill = start.slice(0, keys.length);
+  const order = new Int32Array(tris);
+  for (let t = 0; t < tris; t++) order[fill[slot.get(tileOf[t])!]++] = t;
+
+  const remap = new Int32Array(p.length / 3).fill(-1);
+  const out: PackedMesh[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    const used: number[] = [];
+    const index = new Uint32Array((start[i + 1] - start[i]) * 3);
+    let n = 0;
+    for (let j = start[i]; j < start[i + 1]; j++) {
+      const t = order[j];
+      for (let k = 0; k < 3; k++) {
+        const v = m.index[t * 3 + k];
+        if (remap[v] < 0) {
+          remap[v] = used.length;
+          used.push(v);
+        }
+        index[n++] = remap[v];
+      }
+    }
+    const position = new Float32Array(used.length * 3);
+    const normal = new Float32Array(used.length * 3);
+    const color = new Uint8Array(used.length * 3);
+    used.forEach((v, j) => {
+      for (let k = 0; k < 3; k++) {
+        position[j * 3 + k] = p[v * 3 + k];
+        normal[j * 3 + k] = m.normal[v * 3 + k];
+        color[j * 3 + k] = m.color[v * 3 + k];
+      }
+      remap[v] = -1;
+    });
+    out.push({ position, normal, color, index });
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ colour
 export function hex(h: string): RGB {
   const v = parseInt(h.replace('#', ''), 16);

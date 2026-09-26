@@ -13,7 +13,7 @@ import { installSystems } from '../src/sim/systems';
 import type { RideRequest } from '../src/sim/types';
 import { ui } from '../src/ui/store';
 import type { CityData } from '../src/world3d/city';
-import { buildCity } from '../src/world3d/build/world';
+import { buildCity, tileCity } from '../src/world3d/build/world';
 import { edgeLanes } from '../src/world3d/kinematics';
 import { CrowdLayer } from '../src/world3d/layers/crowds';
 import { PeopleLayer } from '../src/world3d/layers/people';
@@ -22,7 +22,7 @@ import { VehicleLayer } from '../src/world3d/layers/vehicles';
 
 const read = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8')) as T;
 const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.json'));
-const built = buildCity(read<CityData>('city3d.json'));
+const built = tileCity(buildCity(read<CityData>('city3d.json')));
 
 function setup(time: number) {
   const game = Game.create(world, { seed: 7 });

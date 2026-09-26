@@ -8,7 +8,7 @@ import { mountains } from './backdrop';
 import { LAYERS, type BuildContext, type LayerId } from './context';
 import { buildEffectAnchors } from './effects';
 import { buildGround } from './ground';
-import { MeshWriter, type PackedMesh } from './mesh';
+import { MeshWriter, splitMesh, type PackedMesh } from './mesh';
 import { Occupancy } from './occupancy';
 import { buildProps } from './props';
 import { buildRoads } from './roads';
@@ -24,6 +24,24 @@ export interface BuiltCity {
   /** Street props by kind: x, y, yaw, scale per instance. */
   props: Record<string, Float32Array>;
   stats: { triangles: Record<LayerId, number>; trees: number; buildings: number; ms: number };
+}
+
+/** Side (m) of the square tiles the static layers are split into for culling. */
+export const TILE_SIZE = 800;
+
+/** The city as the view holds it: each static layer split into tiles the renderer can cull one by one. */
+export interface TiledCity extends Omit<BuiltCity, 'layers'> {
+  layers: Record<LayerId, PackedMesh[]>;
+}
+
+/** Split the static layers into tiles; the ground and the mountain backdrop stay whole (they are small and span everything). */
+export function tileCity(built: BuiltCity, size = TILE_SIZE): TiledCity {
+  const layers = {} as Record<LayerId, PackedMesh[]>;
+  for (const id of LAYERS) {
+    const m = built.layers[id];
+    layers[id] = id === 'ground' || id === 'backdrop' ? (m.index.length ? [m] : []) : splitMesh(m, size);
+  }
+  return { ...built, layers };
 }
 
 export function buildCity(city: CityData): BuiltCity {

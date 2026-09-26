@@ -1,9 +1,11 @@
-// The static city: generated layer meshes from the build worker, plus the
-// instanced trees.
+// The static city: generated layer meshes from the build worker, one mesh per
+// tile so off-screen and fogged-out tiles are culled, plus the instanced trees
+// and street props, drawn only from the grid cells in view.
 
-import { BufferAttribute, BufferGeometry, Color, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Quaternion, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Fog, Frustum, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Quaternion, Sphere, Vector3 } from 'three';
 import type { PackedMesh } from '../build/mesh';
-import { LAYERS, TREE_KINDS, type BuiltCity, type LayerId } from '../build/world';
+import { LAYERS, TREE_KINDS, type LayerId, type TiledCity } from '../build/world';
+import { CulledInstances } from '../instanceCull';
 import { treeGeometry } from '../treeModels';
 import { PROP_MODELS } from '../propModels';
 import type { FrameInfo, ViewContext, WorldLayer } from './types';
@@ -40,42 +42,49 @@ export function geometryOf(m: PackedMesh): BufferGeometry {
   return g;
 }
 
+const _proj = new Matrix4();
+const _sphere = new Sphere();
+
 export class CityLayer implements WorldLayer {
   readonly id = 'city';
-  readonly built: BuiltCity;
+  readonly built: TiledCity;
   readonly materials: Partial<Record<LayerId, MeshLambertMaterial>> = {};
   private readonly ctx: ViewContext;
   private readonly meshes: Mesh[] = [];
+  /** Tile meshes hidden once their bounds lie wholly beyond the fog. */
+  private readonly tiles: Mesh[] = [];
+  private readonly instances: CulledInstances[] = [];
+  private readonly frustum = new Frustum();
 
-  constructor(ctx: ViewContext, built: BuiltCity) {
+  constructor(ctx: ViewContext, built: TiledCity) {
     this.ctx = ctx;
     this.built = built;
     const { scene } = ctx;
     for (const id of LAYERS) {
-      const packed = built.layers[id];
-      if (!packed.index.length) continue;
+      const pieces = built.layers[id];
+      if (!pieces.length) continue;
       const mat = cityMaterial({ polygonOffset: id === 'roads' ? -2 : id === 'water' ? -1 : id === 'windows' ? -1 : 0, emissiveFromColour: id === 'glow' });
       if (id === 'backdrop') mat.fog = false;
       if (id === 'windows') mat.emissive.set('#ffd28a');
       if (id === 'glow') mat.emissive.set('#ffffff');
-      this.materials[id] = mat;
-      const m = new Mesh(geometryOf(packed), mat);
-      m.frustumCulled = id !== 'ground';
-      m.receiveShadow = id !== 'backdrop';
-      m.castShadow = id === 'buildings' || id === 'structures';
-      m.renderOrder = id === 'ground' ? -3 : id === 'water' ? -2 : id === 'roads' ? -1 : 0;
       // The roads layer is the ground paint: it draws in painter's order without depth
       // writes, so its overlapping flat pieces never z-fight. Sunken water draws after it
       // and shows through the ground's holes, over any paint that strays across them; its
       // steep banks take no polygon offset, which would pull their top edges up through
       // bridge decks.
       if (id === 'roads') mat.depthWrite = false;
-      if (id === 'water') {
-        m.renderOrder = -0.5;
-        mat.polygonOffset = false;
+      if (id === 'water') mat.polygonOffset = false;
+      this.materials[id] = mat;
+      for (const packed of pieces) {
+        const m = new Mesh(geometryOf(packed), mat);
+        m.frustumCulled = id !== 'ground';
+        m.receiveShadow = id !== 'backdrop';
+        m.castShadow = id === 'buildings' || id === 'structures';
+        m.renderOrder = id === 'ground' ? -3 : id === 'water' ? -0.5 : id === 'roads' ? -1 : 0;
+        scene.add(m);
+        this.meshes.push(m);
+        if (id !== 'ground' && id !== 'backdrop') this.tiles.push(m);
       }
-      scene.add(m);
-      this.meshes.push(m);
     }
     this.addTrees(built.trees);
     this.addProps(built.props);
@@ -107,10 +116,9 @@ export class CityLayer implements WorldLayer {
         m.compose(pos, q, scl);
         im.setMatrixAt(i, m);
       }
-      im.instanceMatrix.needsUpdate = true;
-      im.computeBoundingSphere();
       im.castShadow = false;
       im.receiveShadow = true;
+      this.instances.push(new CulledInstances(im));
       this.ctx.scene.add(im);
       this.meshes.push(im);
     }
@@ -146,14 +154,21 @@ export class CityLayer implements WorldLayer {
       im.setColorAt(im.count, tint);
       im.count++;
     }
-    for (const im of inst.values()) {
-      im.instanceMatrix.needsUpdate = true;
-      if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      im.computeBoundingSphere();
-    }
+    for (const im of inst.values()) this.instances.push(new CulledInstances(im));
   }
 
-  update(_frame: FrameInfo): void {}
+  update(_frame: FrameInfo): void {
+    const { camera, scene } = this.ctx;
+    camera.updateMatrixWorld();
+    this.frustum.setFromProjectionMatrix(_proj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const eye = camera.position;
+    const far = scene.fog instanceof Fog ? scene.fog.far : Infinity;
+    for (const m of this.tiles) {
+      _sphere.copy(m.geometry.boundingSphere!);
+      m.visible = _sphere.distanceToPoint(eye) < far;
+    }
+    for (const c of this.instances) c.update(this.frustum, eye, far);
+  }
 
   dispose(): void {
     for (const m of this.meshes) {
