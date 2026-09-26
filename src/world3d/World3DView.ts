@@ -31,6 +31,7 @@ import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import { anchorBuffers, KERB_FLOATS, type SimAnchors } from './build/anchors';
 import type { TiledCity } from './build/world';
+import { bookmarkView } from './bookmarks';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
 import { aimCutaway, applyCutaway, compileCutaway, createCutaway } from './cutaway';
 import { DriveHud } from './driveHud';
@@ -259,6 +260,14 @@ export class World3DView implements GameView, ViewContext {
     this.rig.yaw = yaw;
     this.fly = null;
     ui.set({ follow: false });
+  }
+
+  /** Put the Manage-mode camera on a named view (bookmarks.ts), for screenshot comparison; false for an unknown name. */
+  showBookmark(name: string): boolean {
+    const v = bookmarkView(this.game.world, name);
+    if (!v) return false;
+    this.setCamera(v.x, v.y, v.dist, v.yaw);
+    return true;
   }
 
   /** Show a point. In Manage mode the free camera flies there; in Drive mode the chase camera looks there for a while, then swings back. */

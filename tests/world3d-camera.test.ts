@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BOOKMARKS, bookmarkView } from '../src/world3d/bookmarks';
 import { DriveCamera, LOOK_HOLD_S, type CameraRig, type ChaseInput } from '../src/world3d/camera';
 import { PointerGestures } from '../src/world3d/gestures';
 
@@ -122,5 +123,36 @@ describe('touch gestures on the 3D view', () => {
     expect(first.factor * step.factor).toBeCloseTo(1);
     expect(step.travel).toBeCloseTo(Math.hypot(5, 10) + Math.hypot(5, 10));
     expect(step.mid).toEqual({ x: 160, y: 120 });
+  });
+});
+
+describe('camera bookmarks', () => {
+  it('put the camera on every named view, inside the map', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { buildWorld } = await import('../src/data/world');
+    const read = (name: string) => JSON.parse(readFileSync(new URL(`../public/data/${name}`, import.meta.url), 'utf8'));
+    const world = buildWorld(read('graph.json'), read('pois.json'));
+    const g = world.graph;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (let n = 0; n < g.nodeX.length; n++) {
+      x0 = Math.min(x0, g.nodeX[n]);
+      x1 = Math.max(x1, g.nodeX[n]);
+      y0 = Math.min(y0, g.nodeY[n]);
+      y1 = Math.max(y1, g.nodeY[n]);
+    }
+    expect(Object.keys(BOOKMARKS)).toEqual(['tha_phae_gate', 'wat_chedi_luang', 'night_bazaar', 'nimman', 'riverside', 'airport', 'overview']);
+    for (const name of Object.keys(BOOKMARKS)) {
+      const v = bookmarkView(world, name);
+      expect(v, name).not.toBeNull();
+      expect(v!.x, name).toBeGreaterThanOrEqual(x0);
+      expect(v!.x, name).toBeLessThanOrEqual(x1);
+      expect(v!.y, name).toBeGreaterThanOrEqual(y0);
+      expect(v!.y, name).toBeLessThanOrEqual(y1);
+      expect(Number.isFinite(v!.yaw) && v!.dist > 0, name).toBe(true);
+    }
+    expect(bookmarkView(world, 'nowhere')).toBeNull();
   });
 });
