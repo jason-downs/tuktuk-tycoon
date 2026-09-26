@@ -1,9 +1,11 @@
 import type { ComponentType } from 'react';
 import type { MapView } from '../map/MapView';
 import type { Game } from '../sim/game';
+import { BusinessPanel } from './panels/BusinessPanel';
 import { CalendarPanel } from './panels/CalendarPanel';
 import { FinancePanel } from './panels/FinancePanel';
 import { FleetPanel } from './panels/FleetPanel';
+import { GoalsPanel } from './panels/GoalsPanel';
 
 export interface PanelProps {
   game: Game;
@@ -20,6 +22,8 @@ export interface PanelDef {
 /** Management panels, in top-bar order. */
 export const PANELS: PanelDef[] = [
   { id: 'fleet', title: 'Fleet', icon: '🛺', component: FleetPanel },
+  { id: 'business', title: 'Business', icon: '🏢', component: BusinessPanel },
+  { id: 'goals', title: 'Goals', icon: '🎯', component: GoalsPanel },
   { id: 'finance', title: 'Finances', icon: '📒', component: FinancePanel },
   { id: 'calendar', title: 'Calendar', icon: '📅', component: CalendarPanel },
 ];

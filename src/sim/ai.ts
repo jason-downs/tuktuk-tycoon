@@ -43,7 +43,9 @@ export function requestValue(game: Game, v: Vehicle, req: RideRequest): number {
   const eta = pickup / 6.5;
   if (game.state.time + eta > req.expiresAt + 4 * 60) return 0;
   const work = eta + req.distance / 7 + 120;
-  return (req.fixedFare ?? req.fairFare) / work;
+  // What the company keeps: app platforms take their cut of the fixed fare.
+  const fare = req.fixedFare === null ? req.fairFare : req.channel === 'app' ? req.fixedFare * (1 - BALANCE.app.platformCut) : req.fixedFare;
+  return fare / work;
 }
 
 function pickRequest(game: Game, v: Vehicle, driver: Driver): RideRequest | null {

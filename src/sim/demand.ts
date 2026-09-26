@@ -106,7 +106,8 @@ function distanceKernel(d: number): number {
   return r * Math.exp(1 - r);
 }
 
-function pickArchetype(game: Game, cat: PlaceCategory, cal: CalendarInfo): Archetype {
+/** Who hails a ride from a place of this category at this hour (ORIGIN_MIX, bent by time of day). */
+export function pickArchetype(game: Game, cat: PlaceCategory, cal: CalendarInfo): Archetype {
   const mix = ORIGIN_MIX[cat];
   const keys = Object.keys(mix) as Archetype[];
   if (!keys.length) return 'tourist_west';
@@ -121,7 +122,8 @@ function pickArchetype(game: Game, cat: PlaceCategory, cal: CalendarInfo): Arche
   return keys[game.rng.weighted(weights)];
 }
 
-function pickDestination(game: Game, from: Place, arch: Archetype, cal: CalendarInfo): Place | null {
+/** Where this rider wants to go from `from`: affinity × distance kernel × opening hours; null if nowhere fits. */
+export function pickDestination(game: Game, from: Place, arch: Archetype, cal: CalendarInfo): Place | null {
   const places = game.world.places;
   const affinity = DEST_AFFINITY[arch];
   const weights = new Float64Array(places.length);

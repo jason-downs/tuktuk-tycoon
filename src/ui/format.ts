@@ -1,4 +1,5 @@
 import { ARCHETYPES } from '../content/archetypes';
+import { tourDwellText } from '../sim/business';
 import type { Game } from '../sim/game';
 import type { Vehicle } from '../sim/types';
 
@@ -21,7 +22,7 @@ export function taskText(game: Game, v: Vehicle): string {
   const t = v.task;
   switch (t.kind) {
     case 'idle':
-      return v.route ? 'Driving' : 'Waiting for passengers';
+      return tourDwellText(game, v) ?? (v.route ? 'Driving' : 'Waiting for passengers');
     case 'pickup': {
       const r = game.state.requests.find((q) => q.id === t.requestId);
       return r ? `Picking up ${ARCHETYPES[r.archetype].label.toLowerCase()} at ${game.place(r.from).name}` : 'Picking up';

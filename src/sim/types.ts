@@ -84,6 +84,8 @@ export interface RideRequest {
   line: string;
   /** Vehicle on its way to pick this passenger up. */
   claimedBy: number | null;
+  /** Company service that booked this ride (sim/business.ts): 'app', 'flyers', 'concierge', 'airport', 'hotel:<place id>', 'tour:<tour id>'. */
+  source?: string;
 }
 
 export type VehicleTask =
