@@ -4,7 +4,7 @@ import { activeOccurrences, eventAnchor, eventEffectChips, upcomingOccurrences, 
 import type { Game } from '../../sim/game';
 import { RIVAL_KINDS, rivalsOf } from '../../sim/rivals';
 import { currentWeather, hazeActive, isNight, SKY_INFO, weatherEffectChips, weatherForecast, weatherIcon, weatherLabel } from '../../sim/weather';
-import type { MapView } from '../../map/MapView';
+import type { GameView } from '../view';
 import type { PanelProps } from '../panels';
 import { useGame } from '../store';
 import { dayLabel, occurrenceTime, seasonInfo, startsIn, untilText } from '../worldFormat';
@@ -105,7 +105,7 @@ interface EventRowProps {
   o: EventOccurrence;
   now: number;
   live: boolean;
-  view: MapView | null;
+  view: GameView | null;
   game: Game;
   /** Time text; defaults to the occurrence's hours (or "until …" when live). */
   when?: string;
@@ -146,7 +146,7 @@ function dedupe(list: EventOccurrence[]): EventOccurrence[] {
   return list.filter((o) => (seen.has(o.event.id) ? false : (seen.add(o.event.id), true)));
 }
 
-function ActiveEvents({ game, view, now }: { game: Game; view: MapView | null; now: number }) {
+function ActiveEvents({ game, view, now }: { game: Game; view: GameView | null; now: number }) {
   const active = dedupe(activeOccurrences(now));
   return (
     <section>
@@ -167,7 +167,7 @@ interface UpcomingRow {
   count: number;
 }
 
-function Upcoming({ game, view, now }: { game: Game; view: MapView | null; now: number }) {
+function Upcoming({ game, view, now }: { game: Game; view: GameView | null; now: number }) {
   const activeIds = new Set(activeOccurrences(now).map((o) => o.event.id));
   const rows = new Map<string, UpcomingRow>();
   for (const o of upcomingOccurrences(now, LOOKAHEAD_DAYS)) {

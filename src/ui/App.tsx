@@ -3,6 +3,8 @@ import { ARCHETYPES } from '../content/archetypes';
 import { spokenName } from '../content/dialogue';
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { MapView } from '../map/MapView';
+import { World3DView } from '../world3d/World3DView';
+import type { GameView } from './view';
 import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
 import type { Game } from '../sim/game';
 import { setManual } from '../sim/manual';
@@ -26,13 +28,15 @@ export interface AppProps {
 
 export function App({ game, base, onSave, onQuit }: AppProps) {
   const mapEl = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<MapView | null>(null);
+  const [view, setView] = useState<GameView | null>(null);
 
   useEffect(() => bindGameTicks(game), [game]);
 
   useEffect(() => {
     if (!mapEl.current) return;
-    const mv = new MapView(mapEl.current, game, { base });
+    // The 3D city is the main view; ?view=map shows the flat planning map instead.
+    const flat = new URLSearchParams(window.location.search).get('view') === 'map';
+    const mv: GameView = flat ? new MapView(mapEl.current, game, { base }) : new World3DView(mapEl.current, game, { base });
     setView(mv);
     const offHaggle = game.on('haggle', (p: { vehicleId: number; requestId: number }) => ui.set({ haggle: p }));
     return () => {
@@ -166,7 +170,7 @@ function Bar({ value, color, label }: { value: number; color: string; label: str
   );
 }
 
-function PlayerCard({ game, view }: { game: Game; view: MapView | null }) {
+function PlayerCard({ game, view }: { game: Game; view: GameView | null }) {
   const d = useGame(game, (g) => {
     const v = g.playerVehicle();
     return {
@@ -263,7 +267,7 @@ function SelectedVehicleCard({ game }: { game: Game }) {
   );
 }
 
-function RequestCard({ game, view }: { game: Game; view: MapView | null }) {
+function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
   const id = useUI((s) => s.selectedRequest);
   const d = useGame(game, (g) => {
     const r = id !== null ? g.state.requests.find((q) => q.id === id) : undefined;
@@ -345,7 +349,7 @@ function PlaceCard({ game }: { game: Game }) {
   );
 }
 
-function PanelHost({ game, view }: { game: Game; view: MapView | null }) {
+function PanelHost({ game, view }: { game: Game; view: GameView | null }) {
   const id = useUI((s) => s.panel);
   const panel = PANELS.find((p) => p.id === id);
   if (!panel) return null;
@@ -367,7 +371,7 @@ function PanelHost({ game, view }: { game: Game; view: MapView | null }) {
   );
 }
 
-function Toasts({ game, view }: { game: Game; view: MapView | null }) {
+function Toasts({ game, view }: { game: Game; view: GameView | null }) {
   const [items, setItems] = useState<Notice[]>([]);
   useEffect(() => {
     return game.on('notice', (n: Notice) => {

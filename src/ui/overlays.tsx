@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { MapView } from '../map/MapView';
+import type { GameView } from './view';
 import type { Game } from '../sim/game';
 import { AudioDirector } from './audio/AudioDirector';
 import { HelpModal } from './help/HelpModal';
@@ -9,7 +9,7 @@ import { WorldBadge } from './WorldBadge';
 
 export interface OverlayProps {
   game: Game;
-  view: MapView | null;
+  view: GameView | null;
 }
 
 /**

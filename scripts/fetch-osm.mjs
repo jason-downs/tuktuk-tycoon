@@ -2,7 +2,7 @@
 // API into data-raw/. build-map.mjs turns them into the compact files the game
 // loads. Data © OpenStreetMap contributors, ODbL.
 import { mkdir, writeFile, stat } from 'node:fs/promises';
-import { BBOX } from './bbox.mjs';
+import { BBOX, PLAY_BBOX } from './bbox.mjs';
 
 // Default is the main instance; OVERPASS_URL selects a mirror serving the same
 // OSM database (e.g. https://overpass.kumi.systems/api/interpreter).
@@ -11,6 +11,8 @@ const USER_AGENT = 'tuktuk-tycoon-map-builder/0.1 (+https://github.com/)';
 const OUT_DIR = new URL('../data-raw/', import.meta.url);
 
 const b = `${BBOX.south},${BBOX.west},${BBOX.north},${BBOX.east}`;
+// The 3D detail extracts cover the playable area plus a 300 m margin.
+const c = `${PLAY_BBOX.south - 0.003},${PLAY_BBOX.west - 0.003},${PLAY_BBOX.north + 0.003},${PLAY_BBOX.east + 0.003}`;
 
 const QUERIES = {
   roads: `
@@ -51,6 +53,61 @@ const QUERIES = {
   buildings: `
     way["building"](${b});
     out geom;`,
+  buildings3d: `
+    (
+      way["building"](${c}); relation["building"](${c});
+      way["building:part"](${c}); relation["building:part"](${c});
+    );
+    out body geom;`,
+  trees: `
+    (
+      node["natural"="tree"](${c});
+      way["natural"="tree_row"](${c});
+    );
+    out body geom;`,
+  barriers: `
+    (
+      way["barrier"~"^(wall|fence|retaining_wall|hedge|city_wall|guard_rail)$"](${c});
+      node["barrier"~"^(gate|bollard|lift_gate)$"](${c});
+    );
+    out body geom;`,
+  furniture: `
+    (
+      node["highway"~"^(street_lamp|traffic_signals|crossing|bus_stop|stop|give_way)$"](${c});
+      node["power"~"^(pole|tower|transformer)$"](${c});
+      way["power"~"^(line|minor_line|cable)$"](${c});
+      node["amenity"~"^(bench|fountain|atm|vending_machine|telephone|motorcycle_parking|shelter|toilets|drinking_water|waste_basket)$"](${c});
+      way["amenity"~"^(fountain|shelter|motorcycle_parking|parking)$"](${c});
+      node["man_made"~"^(flagpole|water_tower|mast|street_cabinet|storage_tank)$"](${c});
+      nwr["tourism"="artwork"](${c});
+      nwr["historic"~"^(memorial|monument|wayside_shrine)$"](${c});
+    );
+    out body geom;`,
+  paths: `
+    (
+      way["highway"~"^(footway|pedestrian|path|steps|cycleway)$"](${c});
+      way["area:highway"](${c});
+      way["man_made"~"^(bridge|pier|embankment)$"](${c});
+    );
+    out body geom;`,
+  landcover3d: `
+    (
+      way["landuse"~"^(residential|commercial|retail|industrial|construction|railway|religious)$"](${c});
+      way["amenity"~"^(parking|fuel|marketplace|school|hospital|university|college|place_of_worship|bus_station)$"](${c});
+      relation["amenity"~"^(marketplace|school|hospital|university|place_of_worship)$"](${c});
+      way["leisure"~"^(swimming_pool|playground|garden|park|pitch)$"](${c});
+      way["place"="square"](${c});
+    );
+    out body geom;`,
+  shopfronts: `
+    (
+      node["shop"](${c});
+      node["amenity"~"^(restaurant|cafe|bar|pub|fast_food|bank|pharmacy|clinic|massage)$"](${c});
+      node["tourism"~"^(hotel|hostel|guest_house)$"](${c});
+      node["craft"](${c});
+      node["shop"="massage"](${c});
+    );
+    out body;`,
   pois: `
     (
       nwr["tourism"~"^(hotel|hostel|guest_house|motel|apartment|attraction|museum|viewpoint|zoo|theme_park|gallery)$"]["name"](${b});

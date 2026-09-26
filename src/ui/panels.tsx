@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { MapView } from '../map/MapView';
+import type { GameView } from './view';
 import type { Game } from '../sim/game';
 import { CalendarPanel } from './panels/CalendarPanel';
 import { FinancePanel } from './panels/FinancePanel';
@@ -7,7 +7,7 @@ import { FleetPanel } from './panels/FleetPanel';
 
 export interface PanelProps {
   game: Game;
-  view: MapView | null;
+  view: GameView | null;
 }
 
 export interface PanelDef {

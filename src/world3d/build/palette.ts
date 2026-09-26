@@ -1,0 +1,96 @@
+// Colours of the procedural world (docs/3d/world.md §3.1): warm, slightly
+// bleached tropical daylight; temple gold and red; teal moat water.
+import { hex, type RGB } from './mesh';
+
+export const P = {
+  groundUrban: hex('#cbbd9d'),
+  groundFar: hex('#a9a67a'),
+  asphalt: hex('#5f5d5a'),
+  asphaltOld: hex('#6f6b65'),
+  concreteRoad: hex('#a39d91'),
+  unpaved: hex('#b89c72'),
+  pavement: hex('#c9baa0'),
+  laneWhite: hex('#efece4'),
+  laneYellow: hex('#e0b43c'),
+  kerbRed: hex('#b8322a'),
+  grass: hex('#74a24a'),
+  grassDark: hex('#5f8f3c'),
+  pitch: hex('#6aa84f'),
+  forest: hex('#4f7f3a'),
+  rural: hex('#a9b36a'),
+  cemetery: hex('#9aa88a'),
+  templeSand: hex('#e2d0a6'),
+  worship: hex('#d8ccb0'),
+  campus: hex('#d9cfb3'),
+  hospital: hex('#e6dcd6'),
+  market: hex('#cdb79a'),
+  parking: hex('#a9a39a'),
+  plaza: hex('#c47a55'),
+  apron: hex('#b9b6ae'),
+  runway: hex('#4b4b4d'),
+  railway: hex('#b3a792'),
+  ballast: hex('#8a8176'),
+  rail: hex('#4a4540'),
+  construction: hex('#bba98a'),
+  playground: hex('#d6b98a'),
+  moat: hex('#4d8a7c'),
+  river: hex('#7d8a62'),
+  pond: hex('#4f8a86'),
+  pool: hex('#3fc1d4'),
+  brickOld: hex('#9a4a2c'),
+  brickNew: hex('#c0623a'),
+  stuccoWhite: hex('#f1ece2'),
+  wallCream: hex('#efe4c9'),
+  fence: hex('#8f8a80'),
+  hedge: hex('#3e6b35'),
+  gold: hex('#d8a431'),
+  goldDark: hex('#a67a1e'),
+  templeRoofRed: hex('#9b2f25'),
+  templeRoofOrange: hex('#c9582b'),
+  templeWhite: hex('#f4f0e6'),
+  lacquerRed: hex('#8f1f24'),
+  teak: hex('#5a3a22'),
+  mountain: hex('#3f5f45'),
+  mountainHigh: hex('#56715a'),
+  shutter: hex('#9da3a6'),
+  shutterBlue: hex('#5d86a8'),
+  glass: hex('#2f4a55'),
+  tankSteel: hex('#c9cdd0'),
+  tankBlue: hex('#3f78b5'),
+};
+
+/** Shophouse wall colours with weights (world.md §3.1). */
+export const WALLS: [RGB, number][] = [
+  [hex('#efe4c9'), 20],
+  [hex('#f3f0e8'), 18],
+  [hex('#bdb7ab'), 14],
+  [hex('#efd48a'), 8],
+  [hex('#6b4428'), 5],
+  [hex('#e8a987'), 6],
+  [hex('#bfdcc4'), 6],
+  [hex('#b8d3e3'), 6],
+  [hex('#f2c29a'), 5],
+  [hex('#d3dea2'), 4],
+  [hex('#c9724f'), 4],
+  [hex('#cbbfd9'), 2],
+];
+
+export const MODERN_WALLS: [RGB, number][] = [
+  [hex('#f3f0e8'), 10],
+  [hex('#d8d4cc'), 8],
+  [hex('#bdb7ab'), 6],
+  [hex('#e9e1d0'), 6],
+  [hex('#8d8c88'), 3],
+];
+
+export const PITCHED_ROOFS: [RGB, number][] = [
+  [hex('#c2562f'), 6],
+  [hex('#9e3b2a'), 3],
+  [hex('#6e4430'), 3],
+  [hex('#6f7478'), 3],
+  [hex('#5a7185'), 3],
+  [hex('#4f7a55'), 2],
+  [hex('#a4acb0'), 2],
+];
+
+export const SIGNS: RGB[] = ['#2f6db5', '#c8312b', '#f0c330', '#2e8b57', '#f28c28', '#ffffff', '#7b2d8b'].map(hex);

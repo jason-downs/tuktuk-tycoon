@@ -10,6 +10,7 @@ import type { Pose } from '../sim/graph';
 import type { Place, RideRequest, Vehicle } from '../sim/types';
 import { ui } from '../ui/store';
 import { OVERLAY_PAINTERS, type PaintContext } from './painters';
+import type { GameView } from '../ui/view';
 import { buildStyle } from './style';
 import { TUKTUK_SPRITE_H, TUKTUK_SPRITE_W, emojiImage, onewayArrow, passengerBadge, tuktukSprite } from './sprites';
 
@@ -51,7 +52,8 @@ export interface MapViewOptions {
   base: string;
 }
 
-export class MapView {
+export class MapView implements GameView {
+  readonly kind = 'map' as const;
   readonly map: MLMap;
   private readonly overlay: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
