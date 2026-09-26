@@ -9,6 +9,7 @@ import { LAYERS, type BuildContext, type LayerId } from './context';
 import { buildGround } from './ground';
 import { MeshWriter, type PackedMesh } from './mesh';
 import { Occupancy } from './occupancy';
+import { buildProps } from './props';
 import { buildRoads } from './roads';
 import { scatterTrees } from './scatter';
 
@@ -54,6 +55,7 @@ export function buildCity(city: CityData): BuiltCity {
   const built = buildBuildings(ctx);
   mountains(ctx.w.backdrop, city);
   scatterTrees(ctx);
+  buildProps(ctx);
 
   const layers = {} as Record<LayerId, PackedMesh>;
   const triangles = {} as Record<LayerId, number>;
