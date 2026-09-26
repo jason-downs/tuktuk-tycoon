@@ -1,5 +1,6 @@
 import { ARCHETYPES } from '../content/archetypes';
 import { tourDwellText } from '../sim/business';
+import { formatClock } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Vehicle } from '../sim/types';
 
@@ -42,5 +43,11 @@ export function taskText(game: Game, v: Vehicle): string {
       return `Broken down — back in ${minutes(t.until - game.state.time)}`;
     case 'offduty':
       return 'Off duty';
+    case 'away': {
+      const back = formatClock(t.until);
+      if (!t.trip) return `Driving back into town · back ~${back}`;
+      const dest = game.place(t.trip.request.to);
+      return dest.offmap?.roundTrip ? `Out at ${dest.name} with the passenger · back ~${back}` : `Out of town to ${dest.name} · back ~${back}`;
+    }
   }
 }

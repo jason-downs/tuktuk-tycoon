@@ -10,11 +10,13 @@ import { EconomySystem } from './economy';
 import type { Pose } from './graph';
 import { CLIMB_BLOCKED_TEXT, climbBlocked } from './mountain';
 import { sendTo } from './movement';
+import { OffmapSystem } from './offmap';
 import { Rng } from './rng';
 import type { Driver, GameState, Notice, Place, RideRequest, Trip, Vehicle } from './types';
 import { VehicleSystem } from './vehicles';
 
-export const SAVE_VERSION = 1;
+/** Version 2: the central Chiang Mai map with portals (graph indices differ from version 1). */
+export const SAVE_VERSION = 2;
 
 /** A simulation subsystem stepped every tick (events, weather, business, …). */
 export interface GameSystem {
@@ -62,6 +64,7 @@ export class Game {
   readonly systems: GameSystem[] = [];
   private readonly demand = new DemandSystem();
   private readonly vehicleSystem = new VehicleSystem();
+  private readonly offmap = new OffmapSystem();
   private readonly ai = new FleetAI();
   private readonly economy = new EconomySystem();
   private readonly listeners = new Map<string, Set<Listener>>();
@@ -214,6 +217,7 @@ export class Game {
     this.state.time += dt;
     this.demand.update(this, dt);
     this.vehicleSystem.update(this, dt);
+    this.offmap.update(this);
     this.ai.update(this);
     for (const s of this.systems) s.update(this, dt);
     this.economy.update(this);
@@ -274,7 +278,7 @@ export class Game {
   /** Public chargers for EVs: the big malls (Central, Maya, Promenada…). */
   chargers(): Place[] {
     const extra = this.extraChargers.flatMap((f) => f());
-    return [...this.world.places.filter((p) => p.cat === 'mall' && p.landmark), ...extra];
+    return [...this.world.places.filter((p) => p.cat === 'mall' && p.landmark && !p.offmap && p.id !== 'kad_suan_kaew'), ...extra];
   }
 
   baseOriginTotal(): number {

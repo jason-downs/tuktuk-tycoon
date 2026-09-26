@@ -11,6 +11,7 @@ import { spend } from './economy';
 import type { Game } from './game';
 import { driveManual, isManualDriven } from './manual';
 import { driveVehicle } from './movement';
+import { goAway, leavesTown } from './offmap';
 import type { Vehicle } from './types';
 
 /** Hours a working day is assumed to last, for spreading the daily breakdown chance. */
@@ -37,7 +38,7 @@ export class VehicleSystem {
         }
         continue;
       }
-      if (v.task.kind === 'offduty' || v.task.kind === 'haggle') continue;
+      if (v.task.kind === 'offduty' || v.task.kind === 'haggle' || v.task.kind === 'away') continue;
       const manual = isManualDriven(game, v);
       const wasMoving = (manual ? v.speed > 0.5 : v.route !== null) && game.state.time >= v.busyUntil;
       if (manual ? driveManual(game, v, dt) : driveVehicle(game, v, dt)) this.arrive(game, v);
@@ -73,7 +74,8 @@ export class VehicleSystem {
         return;
       }
       case 'trip':
-        completeTrip(game, v);
+        if (leavesTown(game, task.trip)) goAway(game, v, task.trip);
+        else completeTrip(game, v);
         return;
       case 'refuel': {
         const model = VEHICLE_MODELS[v.model];

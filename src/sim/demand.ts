@@ -4,6 +4,7 @@
 // relative to the yearly mean (calendar.md §1).
 
 import { ARCHETYPES, DEST_AFFINITY, ORIGIN_MIX } from '../content/archetypes';
+import { OFFMAP_DEST_WEIGHT } from '../content/offmap';
 import { requestLine } from '../content/dialogue';
 import { BALANCE, streetFare } from './balance';
 import { calendar, type CalendarInfo } from './clock';
@@ -91,7 +92,7 @@ function lerpProfile(p: number[], hour: number): number {
 
 /** Relative strength of a place as a ride origin right now. */
 export function originWeight(game: Game, place: Place, cal: CalendarInfo): number {
-  if (place.cat === 'fuel') return 0;
+  if (place.cat === 'fuel' || place.offmap) return 0;
   const sched = LANDMARK_SCHEDULE[place.id];
   let w = place.weight * (sched ? sched(cal) : lerpProfile(HOUR_PROFILE[place.cat], cal.hour));
   for (const m of game.demandModifiers) w *= m(place, cal);
@@ -137,7 +138,7 @@ export function pickDestination(game: Game, from: Place, arch: Archetype, cal: C
     if (!k) continue;
     const sched = LANDMARK_SCHEDULE[p.id];
     const open = sched ? Math.min(1, sched(cal)) : 0.15 + lerpProfile(HOUR_PROFILE[p.cat], (cal.hour + 0.5) % 24);
-    const w = aff * p.weight * k * open;
+    const w = aff * p.weight * k * open * (p.offmap ? OFFMAP_DEST_WEIGHT : 1);
     weights[i] = w;
     total += w;
   }

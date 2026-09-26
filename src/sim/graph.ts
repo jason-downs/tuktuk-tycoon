@@ -22,8 +22,21 @@ export interface GraphJSON {
   classes: string[];
   names: string[];
   nodes: number[];
-  /** [a, b, class, oneway, nameIndex, length, interiorXY[]] */
-  edges: [number, number, number, number, number, number, number[]][];
+  /** [a, b, class, oneway, nameIndex, length, interiorXY[], lanes, virtual] */
+  edges: [number, number, number, number, number, number, number[], number?, number?][];
+  /** Main roads leaving the play area: out = boundary node where traffic leaves, in = where it returns. */
+  portals?: PortalJSON[];
+  /** Out-of-town landmarks: the portal to use and the road metres beyond it. */
+  offmap?: { id: string; portal: number; extraM: number }[];
+}
+
+export interface PortalJSON {
+  id: string;
+  name: string;
+  out: number;
+  in: number;
+  x: number;
+  y: number;
 }
 
 export interface Edge {
@@ -32,6 +45,10 @@ export interface Edge {
   cls: number;
   oneway: boolean;
   name: number;
+  /** Lanes tagged in OSM (0 = untagged). */
+  lanes: number;
+  /** Hidden turnaround beyond a portal (not a real street). */
+  virtual: boolean;
   /** Polyline x0,y0,…,xn,yn including both end nodes. */
   pts: Float64Array;
   /** Cumulative distance at each polyline vertex; cum[last] is the edge length. */
@@ -66,6 +83,7 @@ export class RoadGraph {
   readonly outStart: Int32Array;
   readonly outArcs: Int32Array;
   readonly nodeCount: number;
+  readonly portals: PortalJSON[];
   private readonly edgeGrid = new Map<number, number[]>();
   private readonly nodeGrid = new Map<number, number[]>();
 
@@ -79,7 +97,8 @@ export class RoadGraph {
       this.nodeX[i] = json.nodes[2 * i];
       this.nodeY[i] = json.nodes[2 * i + 1];
     }
-    this.edges = json.edges.map(([a, b, cls, oneway, name, , inner]) => {
+    this.portals = json.portals ?? [];
+    this.edges = json.edges.map(([a, b, cls, oneway, name, , inner, lanes, virtual]) => {
       const pts = new Float64Array(inner.length + 4);
       pts[0] = this.nodeX[a];
       pts[1] = this.nodeY[a];
@@ -90,7 +109,7 @@ export class RoadGraph {
       for (let k = 1; k < cum.length; k++) {
         cum[k] = cum[k - 1] + Math.hypot(pts[2 * k] - pts[2 * k - 2], pts[2 * k + 1] - pts[2 * k - 1]);
       }
-      return { a, b, cls, oneway: oneway === 1, name, pts, cum, len: Math.max(cum[cum.length - 1], 0.5) };
+      return { a, b, cls, oneway: oneway === 1, name, lanes: lanes ?? 0, virtual: virtual === 1, pts, cum, len: Math.max(cum[cum.length - 1], 0.5) };
     });
 
     const degree = new Int32Array(this.nodeCount + 1);

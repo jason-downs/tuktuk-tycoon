@@ -48,7 +48,7 @@ export const BALANCE = {
     /** Street hails per game hour citywide at a 1.0 hourly/season factor. */
     streetPerHour: 150,
     /** Metres around a fleet tuk-tuk inside which street hails are visible. */
-    sightRadius: 1_600,
+    sightRadius: 1_200,
     /** Game seconds a street passenger waits before giving up. */
     patienceMin: 10 * 60,
     patienceMax: 28 * 60,

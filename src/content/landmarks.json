@@ -878,5 +878,15 @@
   "cat": "hotel_area",
   "notes": "Old City, Ratchadamnoen Rd; on Sunday Walking Street.",
   "riders": "upscale tourists"
+ },
+ {
+  "id": "bo_sang",
+  "name": "Bo Sang Umbrella Village",
+  "th": "บ่อสร้าง",
+  "lat": 18.7675,
+  "lon": 99.0836,
+  "cat": "attraction",
+  "notes": "Painted-umbrella village ~10 km east of Tha Phae Gate in San Kamphaeng; the Bo Sang Umbrella & San Kamphaeng Handicraft Festival fills it in mid/late January (calendar.md §4).",
+  "riders": "tourists, Thai visitors, festival crowds"
  }
 ]

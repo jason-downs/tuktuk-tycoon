@@ -93,7 +93,7 @@ function pickRank(game: Game, v: Vehicle, driver: Driver, cal: CalendarInfo): Pl
   const weights = candidates.map((p) => {
     let w = originWeight(game, p, cal);
     const d = Math.hypot(p.x - pos.x, p.y - pos.y);
-    w *= Math.exp(-d / 3000);
+    w *= Math.exp(-d / 2000);
     if (zone) w *= Math.hypot(p.x - zone.x, p.y - zone.y) <= zone.r ? 4 : 0.2;
     return w;
   });
@@ -138,7 +138,7 @@ export class FleetAI {
       if (!driver) continue;
       if (driver.isPlayer && !game.state.autopilot) continue;
       if (game.state.time < v.busyUntil) continue;
-      if (v.task.kind === 'broken' || v.task.kind === 'trip' || v.task.kind === 'haggle') continue;
+      if (v.task.kind === 'broken' || v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'away') continue;
       if (v.task.kind === 'pickup' || v.task.kind === 'refuel' || v.task.kind === 'depot') continue;
       // idle, cruise, offduty: think periodically.
       const slot = (Math.floor(game.state.time / THINK_INTERVAL) + v.id) % 2;

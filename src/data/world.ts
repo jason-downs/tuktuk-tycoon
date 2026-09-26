@@ -1,4 +1,5 @@
 import landmarksJson from '../content/landmarks.json';
+import { OFFMAP_TRIPS } from '../content/offmap';
 import { RoadGraph, type GraphJSON } from '../sim/graph';
 import { Router } from '../sim/routing';
 import type { Place, PlaceCategory } from '../sim/types';
@@ -108,9 +109,13 @@ export function buildWorld(graphJson: GraphJSON, pois: PoiJSON[]): World {
   const places: Place[] = [];
   const landmarks: Place[] = [];
 
+  const offmapById = new Map((graphJson.offmap ?? []).map((o) => [o.id, o]));
   for (const l of landmarksJson as LandmarkJSON[]) {
     const [x, y] = graph.projection.toXY(l.lon, l.lat);
-    const node = graph.nearestNode(x, y, 500);
+    const off = offmapById.get(l.id);
+    const portal = off ? graph.portals[off.portal] : undefined;
+    // Out-of-town places are reached through their portal's outbound node.
+    const node = portal ? portal.out : graph.nearestNode(x, y, 500);
     if (node < 0) continue;
     const cat = LANDMARK_CATEGORY[l.cat] ?? 'attraction';
     const place: Place = {
@@ -126,6 +131,10 @@ export function buildWorld(graphJson: GraphJSON, pois: PoiJSON[]): World {
       weight: LANDMARK_WEIGHT * (cat === 'transport' ? 2 : 1),
       notes: l.notes,
     };
+    if (off) {
+      const trip = OFFMAP_TRIPS[l.id] ?? {};
+      place.offmap = { portal: off.portal, extraM: off.extraM, roundTrip: !!trip.roundTrip, waitS: (trip.waitMin ?? 0) * 60, fare: trip.fare };
+    }
     places.push(place);
     landmarks.push(place);
   }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { TIPS } from '../content/tips';
 import type { NewGameOptions } from '../sim/game';
 import { formatDate } from '../sim/clock';
-import { readSaveInfo } from '../save';
+import { readSaveInfo, saveIsStale } from '../save';
 import { baht } from './format';
 
 export function TitleScreen({ onNew, onContinue }: { onNew: (o: NewGameOptions) => void; onContinue: () => void }) {
@@ -41,12 +41,15 @@ export function TitleScreen({ onNew, onContinue }: { onNew: (o: NewGameOptions) 
           <button className="btn primary big" onClick={() => onNew({ playerName: name.trim() || 'You', companyName: company.trim() || 'Lucky Tuk-Tuk Co.' })}>
             New game
           </button>
-          {save && (
+          {save && !saveIsStale(save) && (
             <button className="btn big" onClick={onContinue}>
               Continue — {save.company}, {formatDate(save.time)}, {baht(save.cash)}
             </button>
           )}
         </div>
+        {save && saveIsStale(save) && (
+          <p className="hint">Your saved game ({save.company}) was made on an older map of Chiang Mai and can’t be continued — start a new game.</p>
+        )}
         <p className="tip">💡 {tip}</p>
         <p className="credits">
           Map data © OpenStreetMap contributors (ODbL). Fares, costs, festivals and places researched from public

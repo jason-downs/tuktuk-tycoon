@@ -61,9 +61,11 @@ export function measureRequest(game: Game, req: RideRequest): void {
   const { places, router } = game.world;
   const route = router.route(places[req.from].node, places[req.to].node);
   if (route) {
-    req.distance = route.length;
-    req.fairFare = streetFare(route.length);
-    if (req.channel === 'app') req.fixedFare = appFare(route.length);
+    const off = places[req.to].offmap;
+    const distance = route.length + (off?.extraM ?? 0);
+    req.distance = distance;
+    req.fairFare = off?.roundTrip && off.fare ? off.fare : streetFare(distance);
+    if (req.channel === 'app') req.fixedFare = appFare(distance);
   }
 }
 

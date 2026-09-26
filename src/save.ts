@@ -9,6 +9,13 @@ export interface SaveInfo {
   time: number;
   cash: number;
   savedAt: number;
+  /** Save format; saves from another version can't be continued. */
+  version?: number;
+}
+
+/** A save exists but was made for a different map/format. */
+export function saveIsStale(info: SaveInfo): boolean {
+  return (info.version ?? 1) !== SAVE_VERSION;
 }
 
 export function readSaveInfo(): SaveInfo | null {
@@ -23,7 +30,7 @@ export function readSaveInfo(): SaveInfo | null {
 export function saveGame(game: Game): boolean {
   try {
     localStorage.setItem(KEY, game.serialize());
-    const info: SaveInfo = { company: game.state.companyName, time: game.state.time, cash: game.state.cash, savedAt: Date.now() };
+    const info: SaveInfo = { company: game.state.companyName, time: game.state.time, cash: game.state.cash, savedAt: Date.now(), version: SAVE_VERSION };
     localStorage.setItem(`${KEY}:info`, JSON.stringify(info));
     return true;
   } catch {

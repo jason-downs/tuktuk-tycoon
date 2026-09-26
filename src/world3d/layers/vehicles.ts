@@ -45,6 +45,8 @@ export class VehicleLayer implements WorldLayer {
         this.fleetPaint.set(v.id, v.paint);
         scene.add(mesh);
       }
+      // Out of town beyond a portal: not on the map.
+      mesh.visible = v.task.kind !== 'away';
       this.ctx.placeVehicle(mesh, v.arc, v.s, scale);
       if (v.route === null && v.speed < 0.1) {
         const p = game.world.graph.poseAt(v.arc, v.s, this.pose);

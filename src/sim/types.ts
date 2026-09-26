@@ -44,6 +44,20 @@ export interface Place {
   weight: number;
   notes?: string;
   lpg?: boolean;
+  /** Out of town: reached through a portal at the edge of the play area. */
+  offmap?: PlaceOffmap;
+}
+
+export interface PlaceOffmap {
+  /** Index into World.portals. */
+  portal: number;
+  /** Road metres beyond the portal. */
+  extraM: number;
+  roundTrip: boolean;
+  /** Game seconds the passenger spends there on a round trip. */
+  waitS: number;
+  /** Fixed round-trip fare, THB. */
+  fare?: number;
 }
 
 export type Archetype =
@@ -98,7 +112,9 @@ export type VehicleTask =
   | { kind: 'depot' }
   /** Off the road until `until`: a breakdown, or planned workshop work when `work` names the job. */
   | { kind: 'broken'; until: number; work?: string }
-  | { kind: 'offduty' };
+  | { kind: 'offduty' }
+  /** Out of town beyond a portal until `until`; `trip` is set on the way out and cleared for the drive back. */
+  | { kind: 'away'; until: number; trip: Trip | null; portal: number };
 
 export interface Trip {
   request: RideRequest;
@@ -108,6 +124,8 @@ export interface Trip {
   startedAt: number;
   /** Route distance at pickup, metres. */
   distance: number;
+  /** On the way back into town from an out-of-town round trip. */
+  returning?: boolean;
 }
 
 export interface Vehicle {

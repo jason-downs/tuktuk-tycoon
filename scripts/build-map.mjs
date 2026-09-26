@@ -440,6 +440,8 @@ function buildGraph(roads, landmarks) {
     const dy = Math.max(py0 - y, 0, y - py1);
     if (Math.hypot(dx, dy) <= SNAP_IN_M) continue;
     const target = nearestFullNode(x, y);
+    // Places beyond the fetched roads: add the straight-line gap with a detour factor.
+    const gap = Math.hypot(full.nodeXY[target][0] - x, full.nodeXY[target][1] - y) * 1.3;
     let best = -1;
     let bestD = Infinity;
     distFrom.forEach((dist, i) => {
@@ -452,7 +454,7 @@ function buildGraph(roads, landmarks) {
     // Plus the stretch from the boundary node to the portal's first outside node.
     const p = portalsOut[best];
     const stub = Math.hypot(full.nodeXY[p.fullOut][0] - p.x, full.nodeXY[p.fullOut][1] - p.y);
-    offmap.push({ id: l.id, portal: best, extraM: round(bestD + stub, 0) });
+    offmap.push({ id: l.id, portal: best, extraM: round(bestD + stub + gap, 0) });
   }
   for (const p of portalsOut) delete p.fullOut;
 
