@@ -6,7 +6,7 @@
 import { VEHICLE_MODELS } from '../content/vehicles';
 import type { PlayMode } from '../sim/driveClock';
 import type { Game } from '../sim/game';
-import { manualControl, setAutodrive, setManual } from '../sim/manual';
+import { manualControl, setAutodrive, setManual, whoDrives } from '../sim/manual';
 import { ui } from './store';
 
 const SESSION_KEY = 'tuktuk-mode';
@@ -94,6 +94,23 @@ export function toggleMode(game: Game): boolean {
  */
 export function gpsTakesWheel(game: Game): void {
   if (ui.get().mode === 'drive') setAutodrive(game, true);
+}
+
+/**
+ * In Drive mode the GPS never sits idle: once its errand ends (a drop-off, a
+ * fill-up, a place reached, a passenger taken by someone else) with nothing
+ * left to do, autodrive goes on looking for passengers, as it does when G
+ * hands it the wheel with nowhere to go. Runs on every frame; returns the
+ * uninstaller.
+ */
+export function keepAutodriveBusy(game: Game): () => void {
+  return game.on('frame', () => {
+    if (ui.get().mode !== 'drive' || whoDrives(game) !== 'gps') return;
+    const v = game.playerVehicle();
+    if (v && v.route === null && v.task.kind === 'idle' && setAutodrive(game, true) === 'autopilot') {
+      game.notify('Autodrive: your tuk-tuk looks for passengers by itself. G or W takes the wheel back.', 'info');
+    }
+  });
 }
 
 /** Right-click on a map: send your tuk-tuk to a point. Returns false if it cannot go now. */

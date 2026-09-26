@@ -16,14 +16,17 @@
 
 | Milestone | Target (real time, typical player) |
 |---|---|
-| First ride completed | 3–4 min, driving by hand (a hand-driven ride takes about 3 real minutes, `docs/plan-3d.md`) |
+| First ride completed | 1–3 min, driving by hand: the first passenger is already waiting a short drive ahead |
 | First cheap upgrade (garland, cushions, phone mount) | 3–6 min |
 | First hired driver (in a second rented tuk-tuk) | 10–20 min |
 | First owned tuk-tuk | 25–45 min |
 | 5 tuk-tuks | ~1 h (using 2–4× speed) |
 | 20+ tuk-tuks, depots, contracts | 2–3 h |
 
-The typical player drives by hand until drivers will join (five rides, ~15 min), then manages at 2–4×. Lung Daeng's
+The typical player drives by hand until drivers will join (five rides, ~15 min), then manages at 2–4×. For those
+first five rides a passenger soon appears a short drive from the free tuk-tuk — ahead of it, never a U-turn away —
+whenever none is waiting nearby, and rivals leave them alone (`src/sim/starter.ts`), so nobody starts the game
+hunting for a fare. Lung Daeng's
 three tuk-tuks carry the first hires; idle owners rent only to a Fleet boss, so the fourth and fifth tuk-tuks come on
 hire-purchase (10 % down). When they come depends on how the player spends: the first owned tuk-tuk arrives at
 ~25–37 min and the fifth at ~40 min for a player who puts every baht into tuk-tuks, ~70–80 min for one who signs up

@@ -345,7 +345,7 @@ export class RivalsSystem implements GameSystem {
       const pose = this.poseOf(game, i, this.pose);
       if (!pose) continue;
       for (const req of requests) {
-        if (req.channel !== 'street' || req.claimedBy !== null) continue;
+        if (req.channel !== 'street' || req.claimedBy !== null || req.starter) continue;
         const p = places[req.from];
         const dx = p.x - pose.x;
         const dy = p.y - pose.y;

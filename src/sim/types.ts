@@ -100,6 +100,8 @@ export interface RideRequest {
   claimedBy: number | null;
   /** Company service that booked this ride (sim/business.ts): 'app', 'flyers', 'concierge', 'airport', 'hotel:<place id>', 'tour:<tour id>'. */
   source?: string;
+  /** One of the player's first passengers (sim/starter.ts): waits an hour, and rivals leave them. */
+  starter?: true;
 }
 
 export type VehicleTask =

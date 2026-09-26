@@ -7,6 +7,7 @@ import { GoalsSystem } from './goals';
 import { ManualSystem } from './manual';
 import { RivalsSystem } from './rivals';
 import { SignalSystem } from './signals';
+import { StarterSystem } from './starter';
 import { TutorialSystem } from './tutorial';
 import { WeatherSystem } from './weather';
 
@@ -20,6 +21,7 @@ export function installSystems(game: Game): void {
   game.addSystem(new EventsSystem());
   game.addSystem(new RivalsSystem());
   game.addSystem(new TutorialSystem());
+  game.addSystem(new StarterSystem());
   game.addSystem(new ManualSystem());
   game.addSystem(new SignalSystem());
   game.addSystem(new FleetSystem());

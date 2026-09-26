@@ -19,7 +19,7 @@ import { baht, km, minutes, taskText } from './format';
 import { HaggleDialog } from './HaggleDialog';
 import { useHudLayoutVars } from './layoutVars';
 import { startGameLoop } from './loop';
-import { applyMode, gpsTakesWheel, initialMode, sendPlayerToRefuel } from './mode';
+import { applyMode, gpsTakesWheel, initialMode, keepAutodriveBusy, sendPlayerToRefuel } from './mode';
 import { OVERLAYS } from './overlays';
 import { PANELS } from './panels';
 import { bindGameTicks, ui, useGame, useUI } from './store';
@@ -53,6 +53,7 @@ export function App({ game, base, onSave, onQuit }: AppProps) {
   useEffect(() => bindGameTicks(game), [game]);
   useEffect(() => startGameLoop(game), [game]);
   useEffect(() => new DriveClock(game, { mode: () => ui.get().mode, pace: () => ui.get().drivePace }).install(), [game]);
+  useEffect(() => keepAutodriveBusy(game), [game]);
   useEffect(() => {
     ui.set({ planner: false, haggle: null });
     applyMode(game, initialMode(game));
