@@ -3,7 +3,9 @@
 // sight, so the tuk-tuk stays in view behind tall buildings. Only what rises
 // above the tuk-tuk's wheels is cut, so roads, pavements and bridge decks stay
 // whole; shadows are untouched (shadow maps render with their own depth
-// materials).
+// materials). The cut is compiled in only while it can run (USE_CUTAWAY), so
+// outside Drive mode the city draws with shaders that never discard and keep
+// the GPU's early depth rejection.
 
 import { Vector3, type Camera, type Material } from 'three';
 import { patchMaterial } from './materialPatch';
@@ -26,10 +28,15 @@ export interface Cutaway {
   uCutRadius: { value: number };
   uCutMargin: { value: number };
   uCutOn: { value: number };
+  /** Materials carrying the cut, and whether their shaders have it compiled in. */
+  materials: Material[];
+  compiled: boolean;
 }
 
 export function createCutaway(): Cutaway {
   return {
+    materials: [],
+    compiled: false,
     uCutAt: { value: new Vector3() },
     uCutUp: { value: new Vector3(0, 1, 0) },
     uCutCamY: { value: 0 },
@@ -56,6 +63,7 @@ float cutDither(vec2 p) {
 `;
 
 const CUT = /* glsl */ `
+#ifdef USE_CUTAWAY
 if (uCutOn > 0.5) {
   vec3 cutP = -vViewPosition;
   float cutLen = length(uCutAt);
@@ -68,16 +76,34 @@ if (uCutOn > 0.5) {
     * smoothstep(uCutFloor, uCutFloor + 0.3, cutY);
   if (cut > cutDither(gl_FragCoord.xy)) discard;
 }
+#endif
 `;
 
 /** Make a Lambert material honour the cutaway. */
 export function applyCutaway(mat: Material, cut: Cutaway): void {
+  cut.materials.push(mat);
+  if (cut.compiled) setDefine(mat, true);
+  const { uCutAt, uCutUp, uCutCamY, uCutFloor, uCutRadius, uCutMargin, uCutOn } = cut;
   patchMaterial(mat, 'cutaway', (shader) => {
-    Object.assign(shader.uniforms, cut);
+    Object.assign(shader.uniforms, { uCutAt, uCutUp, uCutCamY, uCutFloor, uCutRadius, uCutMargin, uCutOn });
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <clipping_planes_pars_fragment>', `#include <clipping_planes_pars_fragment>\n${PARS}`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${CUT}`);
   });
+}
+
+function setDefine(mat: Material, on: boolean): void {
+  const defines = ((mat as Material & { defines?: Record<string, string> }).defines ??= {});
+  if (on) defines.USE_CUTAWAY = '';
+  else delete defines.USE_CUTAWAY;
+  mat.needsUpdate = true;
+}
+
+/** Compile the cut into the materials' shaders (Drive mode) or out of them; both programs stay cached. */
+export function compileCutaway(cut: Cutaway, on: boolean): void {
+  if (cut.compiled === on) return;
+  cut.compiled = on;
+  for (const mat of cut.materials) setDefine(mat, on);
 }
 
 const _v = new Vector3();

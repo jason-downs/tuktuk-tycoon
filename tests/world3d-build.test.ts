@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { CityData } from '../src/world3d/city';
-import { splitMesh, type PackedMesh } from '../src/world3d/build/mesh';
+import { clipMeshToTiles, splitMesh, type PackedMesh } from '../src/world3d/build/mesh';
 import { LAYERS, TILE_SIZE, buildCity, tileCity } from '../src/world3d/build/world';
 
 const city = JSON.parse(readFileSync(new URL('../public/data/city3d.json', import.meta.url), 'utf8')) as CityData;
@@ -48,6 +48,7 @@ describe('3D city generation', () => {
         expect(pieces.length).toBe(whole.index.length ? 1 : 0);
         continue;
       }
+      if (id === 'roads') continue;
       expect(pieces.reduce((n, p) => n + p.index.length, 0)).toBe(whole.index.length);
       expect(triangleSet(pieces)).toEqual(triangleSet([whole]));
       for (const p of pieces) {
@@ -64,6 +65,45 @@ describe('3D city generation', () => {
         }
         expect(tiles.size).toBe(1);
       }
+    }
+  });
+
+  it('cuts the painter-ordered roads layer at tile edges: no tile reaches into another, and no area is lost', () => {
+    const pieces = tileCity(built).layers.roads;
+    const eps = 1e-3;
+    let area = 0;
+    for (const p of pieces) {
+      // The tile a piece covers, from its first triangle's centroid.
+      const c = (axis: number) => (p.position[p.index[0] * 3 + axis] + p.position[p.index[1] * 3 + axis] + p.position[p.index[2] * 3 + axis]) / 3;
+      const tx = Math.floor(c(0) / TILE_SIZE);
+      const tz = Math.floor(c(2) / TILE_SIZE);
+      for (let i = 0; i < p.position.length; i += 3) {
+        expect(p.position[i]).toBeGreaterThanOrEqual(tx * TILE_SIZE - eps);
+        expect(p.position[i]).toBeLessThanOrEqual((tx + 1) * TILE_SIZE + eps);
+        expect(p.position[i + 2]).toBeGreaterThanOrEqual(tz * TILE_SIZE - eps);
+        expect(p.position[i + 2]).toBeLessThanOrEqual((tz + 1) * TILE_SIZE + eps);
+      }
+      area += groundArea(p);
+    }
+    expect(area).toBeCloseTo(groundArea(built.layers.roads), -1);
+  });
+
+  it('keeps each clipped tile in the source draw order', () => {
+    // Two overlapping quads straddling a tile edge: the later one must still come later on both sides.
+    const quad = (y: number, c: number) => ({ p: [-10, y, 5, 10, y, 5, 10, y, 15, -10, y, 15], c });
+    const q = [quad(0, 1), quad(0, 2)];
+    const m: PackedMesh = {
+      position: new Float32Array(q.flatMap((x) => x.p)),
+      normal: new Float32Array(24).map((_, i) => (i % 3 === 1 ? 1 : 0)),
+      color: new Uint8Array(q.flatMap((x) => Array(12).fill(x.c))),
+      index: new Uint32Array([0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6]),
+    };
+    const pieces = clipMeshToTiles(m, 100);
+    expect(pieces.length).toBe(2);
+    for (const p of pieces) {
+      const firstColour = p.color[p.index[0] * 3];
+      const lastColour = p.color[p.index[p.index.length - 1] * 3];
+      expect([firstColour, lastColour]).toEqual([1, 2]);
     }
   });
 
@@ -84,8 +124,25 @@ describe('3D city generation', () => {
   });
 });
 
+interface MeshLike {
+  position: Float32Array;
+  color: Uint8Array;
+  index: ArrayLike<number>;
+}
+
+/** Area of the mesh's triangles projected onto the ground (m²). */
+function groundArea(m: MeshLike): number {
+  let a = 0;
+  const P = m.position;
+  for (let t = 0; t < m.index.length; t += 3) {
+    const [i, j, k] = [m.index[t] * 3, m.index[t + 1] * 3, m.index[t + 2] * 3];
+    a += Math.abs((P[j] - P[i]) * (P[k + 2] - P[i + 2]) - (P[k] - P[i]) * (P[j + 2] - P[i + 2])) / 2;
+  }
+  return a;
+}
+
 /** Every triangle of the meshes as a sorted list of vertex-position keys (order-free). */
-function triangleSet(meshes: PackedMesh[]): string[] {
+function triangleSet(meshes: MeshLike[]): string[] {
   const out: string[] = [];
   for (const m of meshes) {
     for (let t = 0; t < m.index.length; t += 3) {

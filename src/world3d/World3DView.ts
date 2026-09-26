@@ -29,7 +29,7 @@ import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import type { TiledCity } from './build/world';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
-import { aimCutaway, applyCutaway, createCutaway } from './cutaway';
+import { aimCutaway, applyCutaway, compileCutaway, createCutaway } from './cutaway';
 import { DriveHud } from './driveHud';
 import { Hud } from './hud';
 import { FrameStats } from './stats';
@@ -556,6 +556,7 @@ export class World3DView implements GameView, ViewContext {
 
   /** In Drive mode, cut a line of sight through to the player's tuk-tuk. */
   private updateCutaway(): void {
+    compileCutaway(this.cutaway, this.driveCam.mode !== 'manage');
     const player = this.driveCam.mode === 'manage' ? undefined : this.game.playerVehicle();
     const proxy = player ? this.vehicles.meshOf(player.id) : undefined;
     if (!proxy) {

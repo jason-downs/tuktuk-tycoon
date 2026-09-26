@@ -8,7 +8,7 @@ import { mountains } from './backdrop';
 import { LAYERS, type BuildContext, type LayerId } from './context';
 import { buildEffectAnchors } from './effects';
 import { buildGround } from './ground';
-import { MeshWriter, splitMesh, type PackedMesh } from './mesh';
+import { clipMeshToTiles, gpuMesh, MeshWriter, splitMesh, type GpuMesh, type PackedMesh } from './mesh';
 import { Occupancy } from './occupancy';
 import { buildProps } from './props';
 import { buildRoads } from './roads';
@@ -29,17 +29,24 @@ export interface BuiltCity {
 /** Side (m) of the square tiles the static layers are split into for culling. */
 export const TILE_SIZE = 800;
 
-/** The city as the view holds it: each static layer split into tiles the renderer can cull one by one. */
+/** The city as the view holds it: each static layer split into tiles the renderer can cull one by one, packed for the GPU. */
 export interface TiledCity extends Omit<BuiltCity, 'layers'> {
-  layers: Record<LayerId, PackedMesh[]>;
+  layers: Record<LayerId, GpuMesh[]>;
 }
 
-/** Split the static layers into tiles; the ground and the mountain backdrop stay whole (they are small and span everything). */
+/**
+ * Split the static layers into tiles; the ground and the mountain backdrop
+ * stay whole (they are small and span everything). The roads layer is drawn
+ * in painter's order, so its triangles are cut at the tile edges rather than
+ * handed whole to one tile, which would let a neighbouring tile's paint
+ * cover or show through it depending on which tile draws last.
+ */
 export function tileCity(built: BuiltCity, size = TILE_SIZE): TiledCity {
-  const layers = {} as Record<LayerId, PackedMesh[]>;
+  const layers = {} as Record<LayerId, GpuMesh[]>;
   for (const id of LAYERS) {
     const m = built.layers[id];
-    layers[id] = id === 'ground' || id === 'backdrop' ? (m.index.length ? [m] : []) : splitMesh(m, size);
+    const pieces = id === 'ground' || id === 'backdrop' ? (m.index.length ? [m] : []) : id === 'roads' ? clipMeshToTiles(m, size) : splitMesh(m, size);
+    layers[id] = pieces.map(gpuMesh);
   }
   return { ...built, layers };
 }

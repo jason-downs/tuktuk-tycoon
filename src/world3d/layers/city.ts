@@ -3,7 +3,7 @@
 // and street props, drawn only from the grid cells in view.
 
 import { BufferAttribute, BufferGeometry, Color, Fog, Frustum, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Quaternion, Sphere, Vector3 } from 'three';
-import type { PackedMesh } from '../build/mesh';
+import type { GpuMesh } from '../build/mesh';
 import { LAYERS, TREE_KINDS, type LayerId, type TiledCity } from '../build/world';
 import { CulledInstances } from '../instanceCull';
 import { treeGeometry } from '../treeModels';
@@ -32,15 +32,18 @@ export function cityMaterial(opts: { polygonOffset?: number; emissiveFromColour?
   return m;
 }
 
-export function geometryOf(m: PackedMesh): BufferGeometry {
+export function geometryOf(m: GpuMesh): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(m.position, 3));
-  g.setAttribute('normal', new BufferAttribute(m.normal, 3));
+  g.setAttribute('normal', new BufferAttribute(m.normal, 3, true));
   g.setAttribute('color', new BufferAttribute(m.color, 3, true));
   g.setIndex(new BufferAttribute(m.index, 1));
   g.computeBoundingSphere();
   return g;
 }
+
+/** Metres beyond which window and sign tiles are not drawn (a few pixels each by then). */
+const DETAIL_RANGE = 1800;
 
 const _proj = new Matrix4();
 const _sphere = new Sphere();
@@ -53,6 +56,8 @@ export class CityLayer implements WorldLayer {
   private readonly meshes: Mesh[] = [];
   /** Tile meshes hidden once their bounds lie wholly beyond the fog. */
   private readonly tiles: Mesh[] = [];
+  /** Window and sign tiles, which also go beyond DETAIL_RANGE. */
+  private readonly detail = new Set<Mesh>();
   private readonly instances: CulledInstances[] = [];
   private readonly frustum = new Frustum();
 
@@ -84,6 +89,7 @@ export class CityLayer implements WorldLayer {
         scene.add(m);
         this.meshes.push(m);
         if (id !== 'ground' && id !== 'backdrop') this.tiles.push(m);
+        if (id === 'windows' || id === 'glow') this.detail.add(m);
       }
     }
     this.addTrees(built.trees);
@@ -165,7 +171,7 @@ export class CityLayer implements WorldLayer {
     const far = scene.fog instanceof Fog ? scene.fog.far : Infinity;
     for (const m of this.tiles) {
       _sphere.copy(m.geometry.boundingSphere!);
-      m.visible = _sphere.distanceToPoint(eye) < far;
+      m.visible = _sphere.distanceToPoint(eye) < (this.detail.has(m) ? Math.min(far, DETAIL_RANGE) : far);
     }
     for (const c of this.instances) c.update(this.frustum, eye, far);
   }

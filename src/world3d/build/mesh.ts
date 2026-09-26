@@ -348,6 +348,128 @@ export function splitMesh(m: PackedMesh, size: number): PackedMesh[] {
   return out;
 }
 
+/**
+ * Split a mesh into tiles like splitMesh, but cut every triangle that crosses
+ * a tile edge into the pieces on each side, so no tile reaches into another.
+ * Within each tile the triangles keep the source order, which keeps a layer
+ * drawn in painter's order (without depth writes) looking the same whichever
+ * order the tiles draw in.
+ */
+export function clipMeshToTiles(m: PackedMesh, size: number): PackedMesh[] {
+  interface Tile {
+    pos: number[];
+    nrm: number[];
+    col: number[];
+    idx: number[];
+    remap: Map<number, number>;
+  }
+  const tiles = new Map<number, Tile>();
+  const tileAt = (tx: number, tz: number): Tile => {
+    const key = (tz + 4096) * 8192 + (tx + 4096);
+    let t = tiles.get(key);
+    if (!t) tiles.set(key, (t = { pos: [], nrm: [], col: [], idx: [], remap: new Map() }));
+    return t;
+  };
+  const P = m.position;
+  // A clip polygon vertex: position, normal, colour.
+  type V = number[];
+  const vert = (i: number): V => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2], m.normal[i * 3], m.normal[i * 3 + 1], m.normal[i * 3 + 2], m.color[i * 3], m.color[i * 3 + 1], m.color[i * 3 + 2]];
+  const lerp = (a: V, b: V, t: number): V => a.map((x, k) => x + (b[k] - x) * t);
+  /** Keep the part of the polygon where sign * (v[axis] - edge) >= 0. */
+  const clip = (poly: V[], axis: number, edge: number, sign: number): V[] => {
+    const out: V[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const da = sign * (a[axis] - edge);
+      const db = sign * (b[axis] - edge);
+      if (da >= 0) out.push(a);
+      if ((da >= 0) !== (db >= 0)) out.push(lerp(a, b, da / (da - db)));
+    }
+    return out;
+  };
+  for (let t = 0; t < m.index.length; t += 3) {
+    const ids = [m.index[t], m.index[t + 1], m.index[t + 2]];
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const i of ids) {
+      x0 = Math.min(x0, P[i * 3]);
+      x1 = Math.max(x1, P[i * 3]);
+      z0 = Math.min(z0, P[i * 3 + 2]);
+      z1 = Math.max(z1, P[i * 3 + 2]);
+    }
+    const tx0 = Math.floor(x0 / size);
+    const tx1 = Math.floor(x1 / size);
+    const tz0 = Math.floor(z0 / size);
+    const tz1 = Math.floor(z1 / size);
+    if (tx0 === tx1 && tz0 === tz1) {
+      const tile = tileAt(tx0, tz0);
+      for (const i of ids) {
+        let j = tile.remap.get(i);
+        if (j === undefined) {
+          j = tile.pos.length / 3;
+          tile.remap.set(i, j);
+          const v = vert(i);
+          tile.pos.push(v[0], v[1], v[2]);
+          tile.nrm.push(v[3], v[4], v[5]);
+          tile.col.push(v[6], v[7], v[8]);
+        }
+        tile.idx.push(j);
+      }
+      continue;
+    }
+    const tri = ids.map(vert);
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        let poly = clip(tri, 0, tx * size, 1);
+        poly = clip(poly, 0, (tx + 1) * size, -1);
+        poly = clip(poly, 2, tz * size, 1);
+        poly = clip(poly, 2, (tz + 1) * size, -1);
+        if (poly.length < 3) continue;
+        // Drop slivers with no area (a triangle that only touches this tile's edge).
+        let area = 0;
+        for (let i = 1; i + 1 < poly.length; i++) {
+          const [ax, , az] = poly[0];
+          area += (poly[i][0] - ax) * (poly[i + 1][2] - az) - (poly[i + 1][0] - ax) * (poly[i][2] - az);
+        }
+        if (Math.abs(area) < 1e-6) continue;
+        const tile = tileAt(tx, tz);
+        const base = tile.pos.length / 3;
+        for (const v of poly) {
+          tile.pos.push(v[0], v[1], v[2]);
+          const len = Math.hypot(v[3], v[4], v[5]) || 1;
+          tile.nrm.push(v[3] / len, v[4] / len, v[5] / len);
+          tile.col.push(Math.round(v[6]), Math.round(v[7]), Math.round(v[8]));
+        }
+        for (let i = 1; i + 1 < poly.length; i++) tile.idx.push(base, base + i, base + i + 1);
+      }
+    }
+  }
+  return [...tiles.keys()]
+    .sort((a, b) => a - b)
+    .map((k) => {
+      const t = tiles.get(k)!;
+      return { position: new Float32Array(t.pos), normal: new Float32Array(t.nrm), color: new Uint8Array(t.col), index: new Uint32Array(t.idx) };
+    });
+}
+
+/** A mesh as uploaded to the GPU: normals packed into signed bytes, and 16-bit indices where they fit. */
+export interface GpuMesh {
+  position: Float32Array;
+  normal: Int8Array;
+  color: Uint8Array;
+  index: Uint16Array | Uint32Array;
+}
+
+export function gpuMesh(m: PackedMesh): GpuMesh {
+  const normal = new Int8Array(m.normal.length);
+  for (let i = 0; i < normal.length; i++) normal[i] = Math.round(Math.max(-1, Math.min(1, m.normal[i])) * 127);
+  const index = m.position.length / 3 <= 65536 ? Uint16Array.from(m.index) : m.index;
+  return { position: m.position, normal, color: m.color, index };
+}
+
 // ------------------------------------------------------------------ colour
 export function hex(h: string): RGB {
   const v = parseInt(h.replace('#', ''), 16);
