@@ -2,6 +2,7 @@ import { bookTotals } from '../../sim/economy';
 import type { DayBook, LedgerCategory } from '../../sim/types';
 import type { PanelProps } from '../panels';
 import { baht } from '../format';
+import { FinanceChart } from './FinanceChart';
 import { useGame } from '../store';
 
 const LABELS: Record<LedgerCategory, string> = {
@@ -27,6 +28,7 @@ export function FinancePanel({ game }: PanelProps) {
   const parsed = books.map((b) => JSON.parse(b) as DayBook);
   return (
     <div className="finance">
+      <FinanceChart game={game} />
       {parsed.length === 0 && <p className="muted">No trading days yet.</p>}
       {[...parsed].reverse().map((b) => {
         const t = bookTotals(b);

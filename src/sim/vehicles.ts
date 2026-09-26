@@ -4,6 +4,7 @@
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { RANK_WAIT, aiHaggle } from './ai';
 import { BALANCE } from './balance';
+import { repairDiscount } from './business';
 import { HOUR } from './clock';
 import { completeTrip, findRequest, measureRequest, refuel, startTrip } from './dispatch';
 import { spend } from './economy';
@@ -63,7 +64,7 @@ export class VehicleSystem {
         measureRequest(game, req);
         if (req.fixedFare !== null) {
           startTrip(game, v, req.fixedFare);
-          game.notify(`App booking picked up: fixed fare ฿${req.fixedFare}.`, 'info');
+          game.notify(`${req.channel === 'app' ? 'App booking' : 'Booking'} picked up: fixed fare ฿${req.fixedFare}.`, 'info');
           return;
         }
         v.task = { kind: 'haggle', requestId: req.id };
@@ -98,7 +99,8 @@ export class VehicleSystem {
     if (!VEHICLE_MODELS[v.model]) return;
     const p = (breakdownPerDay(game, v) * dt) / (SERVICE_HOURS * HOUR);
     if (!game.rng.chance(p)) return;
-    const repair = Math.round(game.rng.range(500, 3_000) / 50) * 50;
+    // Company depots have a workshop bay, which makes roadside repairs cheaper.
+    const repair = Math.round((game.rng.range(500, 3_000) * repairDiscount(game)) / 50) * 50;
     const hours = game.rng.range(2, 6);
     spend(game, repair, 'maintenance');
     // A breakdown mid-trip strands the passenger: they pay nothing and leave.

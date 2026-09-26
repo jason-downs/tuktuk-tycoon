@@ -1,7 +1,9 @@
+import { BusinessSystem } from './business';
 import { EventsSystem } from './events';
 import { FleetSystem } from './fleet';
 import type { Game } from './game';
 import { GarageSystem } from './garage';
+import { GoalsSystem } from './goals';
 import { ManualSystem } from './manual';
 import { RivalsSystem } from './rivals';
 import { TutorialSystem } from './tutorial';
@@ -20,4 +22,6 @@ export function installSystems(game: Game): void {
   game.addSystem(new ManualSystem());
   game.addSystem(new FleetSystem());
   game.addSystem(new GarageSystem());
+  game.addSystem(new BusinessSystem());
+  game.addSystem(new GoalsSystem());
 }

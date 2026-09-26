@@ -1,0 +1,148 @@
+/* 14-day finance chart. Series colours pass the dataviz palette checks (lightness band, chroma, colour-blind and
+   normal-vision separation, 3:1 contrast) against the teak panel surface. */
+.fchart {
+  --fc-income: #1f9e8a;
+  --fc-expense: #d65f38;
+  --fc-net: #8d6fd6;
+  --fc-surface: #2b1d12;
+  margin: 0 0 14px;
+  padding: 10px 10px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+}
+.fchart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fchart-today {
+  margin-left: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: var(--cream-2);
+}
+.fchart-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--cream-2);
+}
+.fchart-legend > span,
+.fchart-tip > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.fchart .sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.fchart .sw.income {
+  background: var(--fc-income);
+}
+.fchart .sw.expense {
+  background: var(--fc-expense);
+}
+.fchart .sw.net {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fc-net);
+  box-shadow: 0 0 0 1px var(--fc-surface);
+}
+.fchart-plot {
+  position: relative;
+  margin-top: 4px;
+}
+.fchart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.fc-grid {
+  stroke: rgba(233, 220, 194, 0.1);
+  stroke-width: 1;
+}
+.fc-zero {
+  stroke: rgba(233, 220, 194, 0.35);
+  stroke-width: 1;
+}
+.fc-tick,
+.fc-x {
+  fill: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.fc-x.now {
+  fill: var(--cream);
+  font-weight: 600;
+}
+.fc-income {
+  fill: var(--fc-income);
+}
+.fc-expense {
+  fill: var(--fc-expense);
+}
+.fc-day .fc-income,
+.fc-day .fc-expense {
+  transition: opacity 0.15s;
+}
+.fchart-plot:has(.fc-day.on) .fc-day:not(.on) :is(.fc-income, .fc-expense) {
+  opacity: 0.45;
+}
+.fc-net {
+  fill: none;
+  stroke: var(--fc-net);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.fc-dot {
+  fill: var(--fc-net);
+  stroke: var(--fc-surface);
+  stroke-width: 2;
+}
+.fc-hit {
+  fill: transparent;
+  cursor: default;
+  outline: none;
+}
+.fc-hit:focus-visible {
+  fill: rgba(232, 185, 35, 0.08);
+  stroke: var(--gold);
+  stroke-width: 1;
+}
+.fchart-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  padding: 7px 10px;
+  background: rgba(30, 20, 12, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 2;
+}
+.fchart-tip em {
+  margin-left: auto;
+  padding-left: 12px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.fchart-tip > span {
+  width: 100%;
+}
+.fchart figcaption {
+  margin-top: 4px;
+}

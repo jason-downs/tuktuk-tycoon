@@ -1,11 +1,13 @@
 import type { ComponentType } from 'react';
 import type { GameView } from './view';
 import type { Game } from '../sim/game';
+import { BusinessPanel } from './panels/BusinessPanel';
 import { CalendarPanel } from './panels/CalendarPanel';
 import { FinancePanel } from './panels/FinancePanel';
 import { FleetPanel } from './panels/FleetPanel';
 import { GaragePanel } from './panels/GaragePanel';
 import { HirePanel } from './panels/HirePanel';
+import { GoalsPanel } from './panels/GoalsPanel';
 
 export interface PanelProps {
   game: Game;
@@ -24,6 +26,8 @@ export const PANELS: PanelDef[] = [
   { id: 'fleet', title: 'Fleet', icon: '🛺', component: FleetPanel },
   { id: 'hire', title: 'Hire', icon: '🤝', component: HirePanel },
   { id: 'garage', title: 'Garage', icon: '🔧', component: GaragePanel },
+  { id: 'business', title: 'Business', icon: '🏢', component: BusinessPanel },
+  { id: 'goals', title: 'Goals', icon: '🎯', component: GoalsPanel },
   { id: 'finance', title: 'Finances', icon: '📒', component: FinancePanel },
   { id: 'calendar', title: 'Calendar', icon: '📅', component: CalendarPanel },
 ];

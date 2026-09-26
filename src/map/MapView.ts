@@ -4,6 +4,7 @@ import { Map as MLMap, setWorkerUrl } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ARCHETYPES } from '../content/archetypes';
+import { bookingTag } from '../sim/business';
 import { calendar, daylight } from '../sim/clock';
 import type { Game } from '../sim/game';
 import type { Pose } from '../sim/graph';
@@ -480,7 +481,7 @@ export class MapView implements GameView {
       ctx.fillText(String(r.party), sz / 2 - 2, -sz / 2 + 2.5);
     }
     if (this.map.getZoom() >= 14.5 || highlight) {
-      const label = r.fixedFare !== null ? `📱฿${r.fixedFare}` : `~฿${r.fairFare}`;
+      const label = r.fixedFare !== null ? `${bookingTag(game, r)?.icon ?? '📱'}฿${r.fixedFare}` : `~฿${r.fairFare}`;
       ctx.font = '700 12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';

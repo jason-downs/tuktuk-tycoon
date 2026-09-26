@@ -7,6 +7,7 @@ import { World3DView } from '../world3d/World3DView';
 import type { GameView } from './view';
 import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
 import type { Game } from '../sim/game';
+import { bookingTag } from '../sim/business';
 import { setManual } from '../sim/manual';
 import { climbBlocked, requestClimbs } from '../sim/mountain';
 import type { Notice } from '../sim/types';
@@ -286,7 +287,7 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
       r,
       left: Math.floor((r.expiresAt - g.state.time) / 60),
       away: pose ? Math.hypot(from.x - pose.x, from.y - pose.y) : 0,
-      mine: r.claimedBy !== null && r.claimedBy === pv?.id,
+      mine: !!pv && (pv.task.kind === 'pickup' || pv.task.kind === 'haggle') && pv.task.requestId === r.id,
       busy: pv?.task.kind === 'trip' || pv?.task.kind === 'haggle',
       climb: requestClimbs(g.world, r),
       noClimb: pv ? climbBlocked(g, pv, r) : false,
@@ -297,13 +298,14 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
   const info = ARCHETYPES[r.archetype];
   const from = game.place(r.from);
   const to = game.place(r.to);
+  const tag = bookingTag(game, r);
   return (
     <section className="card request">
       <div className="card-head">
         <span className="eyebrow" style={{ color: info.color }}>
           {info.icon} {info.label}
           {r.party > 1 ? ` ×${r.party}` : ''}
-          {r.channel === 'app' ? ' · 📱 app booking' : ''}
+          {tag ? ` · ${tag.icon} ${tag.label}` : ''}
         </span>
         <button className="btn tiny" onClick={() => ui.set({ selectedRequest: null })}>
           ✕
