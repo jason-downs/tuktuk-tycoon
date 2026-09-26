@@ -374,11 +374,11 @@ function park(game: Game, v: Vehicle): void {
   v.speed = 0;
 }
 
-/** A hired driver waiting without a tuk-tuk takes the wheel of a newly acquired one; returns the sentence saying so, or ''. */
+/** A hired driver waiting without a tuk-tuk takes the wheel of a newly acquired one; returns who does ("Lek takes the wheel"), or ''. */
 function seatWaitingDriver(game: Game, v: Vehicle): string {
   const d = hiredDrivers(game).find((x) => x.vehicleId === null && !fleetState(game).drivers[x.id]?.leaving);
   if (!d || !assignDriver(game, d.id, v.id)) return '';
-  return ` ${d.nickname} takes the wheel.`;
+  return `${d.nickname} takes the wheel`;
 }
 
 /** Settle a vehicle after its driver changed: park it if nobody drives it, otherwise let the new driver think afresh. */
@@ -454,7 +454,7 @@ export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Ve
     v.lessor = 'owner';
     park(game, v);
     const seated = seatWaitingDriver(game, v);
-    game.notify(`An owner at the Tha Phae Gate rank rents you ${v.name}: ${thb(FLEET.owners.rentPerDay)}/day.${seated}`, 'good');
+    game.notify(`An owner at the Tha Phae Gate rank rents you ${v.name}: ${thb(FLEET.owners.rentPerDay)}/day.${seated ? ` ${seated}.` : ''}`, 'good');
     game.emit('change');
     return v;
   }
@@ -468,7 +468,7 @@ export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Ve
   });
   park(game, v);
   const seated = seatWaitingDriver(game, v);
-  game.notify(`Lung Daeng hands over the keys to ${v.name}: ${thb(FLEET.rentPerDay)}/day. It's parked at Tha Phae Gate.${seated}`, 'good');
+  game.notify(`Lung Daeng hands over the keys to ${v.name}: ${thb(FLEET.rentPerDay)}/day. ${seated ? `${seated} at Tha Phae Gate.` : "It's parked at Tha Phae Gate."}`, 'good');
   game.emit('change');
   return v;
 }
@@ -534,8 +534,8 @@ export function buyVehicle(game: Game, modelId: string, mode: BuyMode = 'cash'):
   park(game, v);
   if (mode === 'lease') fleetState(game).leases[v.id] = { price: model.price, instalment: terms.instalment, remaining: terms.financed, daysLeft: FLEET.lease.days };
   const seated = seatWaitingDriver(game, v);
-  if (mode === 'lease') game.notify(`${v.name} (${model.name}) is yours on hire-purchase: ${thb(terms.instalment)}/day for ${FLEET.lease.days} days.${seated}`, 'good');
-  else game.notify(`You bought ${v.name}, a ${model.name.toLowerCase()}, for ${thb(model.price)}. It's parked at Tha Phae Gate.${seated}`, 'good');
+  if (mode === 'lease') game.notify(`${v.name} (${model.name}) is yours on hire-purchase: ${thb(terms.instalment)}/day for ${FLEET.lease.days} days.${seated ? ` ${seated}.` : ''}`, 'good');
+  else game.notify(`You bought ${v.name}, a ${model.name.toLowerCase()}, for ${thb(model.price)}. ${seated ? `${seated} at Tha Phae Gate.` : "It's parked at Tha Phae Gate."}`, 'good');
   game.emit('change');
   return v;
 }

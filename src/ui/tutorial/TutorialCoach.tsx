@@ -41,6 +41,8 @@ export function TutorialCoach({ game }: OverlayProps) {
     };
   });
   const modalOpen = useUI((s) => s.modal !== null);
+  // An office panel fills most of the screen and its buttons are what the player is pressing: the card steps aside.
+  const panelOpen = useUI((s) => s.panel !== null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<Placement | null>(null);
   /** The player tucked the card away (true) or opened it (false) this step; null until they do. */
@@ -119,7 +121,7 @@ export function TutorialCoach({ game }: OverlayProps) {
   }, [d.step, d.done, collapsed]);
 
   // Help and other modal dialogs cover the game; the coach waits until they close.
-  if (d.done || modalOpen) return null;
+  if (d.done || modalOpen || panelOpen) return null;
   const coach = COACH[d.step];
   const fill = (text: string) =>
     text
