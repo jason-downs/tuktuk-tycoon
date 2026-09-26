@@ -305,6 +305,8 @@ describe('drive and manage modes', () => {
 describe('dispatching the fleet', () => {
   it('sends the nearest free hired tuk-tuk to a waiting passenger', () => {
     const game = newGame();
+    // Past the rides drivers want to see before they join.
+    game.state.stats.trips = 5;
     const near = rentVehicle(game)!;
     const far = rentVehicle(game)!;
     const roster = fleetState(game).candidates.map((c) => c.roster);
