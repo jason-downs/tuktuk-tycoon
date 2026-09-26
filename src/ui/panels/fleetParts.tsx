@@ -7,7 +7,7 @@ import type { DriverSkill } from '../../content/drivers';
 import { VEHICLE_MODELS } from '../../content/vehicles';
 import { onShift } from '../../sim/ai';
 import { calendar, formatClock } from '../../sim/clock';
-import { FLEET, SHIFT_HOURS, inRide, isResting, nextShiftStart, whyCantAssign } from '../../sim/fleet';
+import { FLEET, SHIFT_HOURS, isResting, nextShiftStart, rideLock, whyCantAssign } from '../../sim/fleet';
 import type { Game } from '../../sim/game';
 import type { Driver, Vehicle } from '../../sim/types';
 import { baht, taskText } from '../format';
@@ -186,13 +186,13 @@ export function Why({ reason }: { reason: string | null | undefined }) {
  */
 export function VehiclePicker({ game, driver, onPick }: { game: Game; driver: Driver; onPick: (vehicleId: number | null) => void }) {
   const current = driver.vehicleId !== null ? game.vehicle(driver.vehicleId) : undefined;
-  const locked = !!current && inRide(current);
+  const lock = current ? rideLock(current, current.name) : null;
   return (
     <select
       className="fl-select"
       value={driver.vehicleId ?? ''}
-      disabled={locked}
-      title={locked ? `${current!.name} has a passenger aboard — wait for the drop-off.` : undefined}
+      disabled={lock !== null}
+      title={lock ?? undefined}
       onChange={(e) => onPick(e.target.value === '' ? null : Number(e.target.value))}
     >
       <option value="">{driver.isPlayer ? 'On foot — no tuk-tuk' : 'No tuk-tuk'}</option>
@@ -204,7 +204,7 @@ export function VehiclePicker({ game, driver, onPick }: { game: Game; driver: Dr
           <option key={v.id} value={v.id} disabled={busy}>
             {v.name}
             {note}
-            {busy ? ' (passenger aboard)' : ''}
+            {busy ? (v.task.kind === 'away' ? ' (out of town)' : ' (passenger aboard)') : ''}
           </option>
         );
       })}
@@ -214,13 +214,13 @@ export function VehiclePicker({ game, driver, onPick }: { game: Game; driver: Dr
 
 /** Pick a driver for a tuk-tuk: the same swap rules as VehiclePicker, seen from the tuk-tuk. */
 export function DriverPicker({ game, vehicle, onPick }: { game: Game; vehicle: Vehicle; onPick: (driverId: number | null) => void }) {
-  const locked = inRide(vehicle);
+  const lock = rideLock(vehicle);
   return (
     <select
       className="fl-select"
       value={vehicle.driverId ?? ''}
-      disabled={locked}
-      title={locked ? 'A passenger is aboard — wait for the drop-off.' : undefined}
+      disabled={lock !== null}
+      title={lock ?? undefined}
       onChange={(e) => onPick(e.target.value === '' ? null : Number(e.target.value))}
     >
       <option value="">No driver — parked</option>
@@ -232,7 +232,7 @@ export function DriverPicker({ game, vehicle, onPick }: { game: Game; vehicle: V
           <option key={d.id} value={d.id} disabled={busy}>
             {driverLabel(d)}
             {note}
-            {busy ? ' (passenger aboard)' : ''}
+            {busy ? (from?.task.kind === 'away' ? ' (out of town)' : ' (passenger aboard)') : ''}
           </option>
         );
       })}

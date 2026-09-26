@@ -9,6 +9,7 @@ import { SPEED_STEPS, formatClock, formatDate } from '../sim/clock';
 import { DriveClock } from '../sim/driveClock';
 import type { Game } from '../sim/game';
 import { bookingTag } from '../sim/business';
+import { fitsParty, inRide } from '../sim/dispatch';
 import { dispatchNearest, freeVehiclesFor } from '../sim/manage';
 import { setAutodrive, setManual } from '../sim/manual';
 import { climbBlocked, requestClimbs } from '../sim/mountain';
@@ -261,7 +262,7 @@ function PlayerCard({ game, view }: { game: Game; view: GameView | null }) {
       autopilot: g.state.autopilot,
       model: v ? VEHICLE_MODELS[v.model]?.name ?? v.model : '',
       ev: v ? VEHICLE_MODELS[v.model]?.powertrain === 'ev' : false,
-      busy: v ? v.task.kind === 'trip' || v.task.kind === 'haggle' || v.task.kind === 'broken' : false,
+      busy: v ? inRide(v) || v.task.kind === 'broken' : false,
     };
   });
   const follow = useUI((s) => s.follow && s.selectedVehicle === null);
@@ -369,7 +370,16 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
       left: Math.floor((r.expiresAt - g.state.time) / 60),
       away: pose ? Math.hypot(from.x - pose.x, from.y - pose.y) : 0,
       mine: !!pv && (pv.task.kind === 'pickup' || pv.task.kind === 'haggle') && pv.task.requestId === r.id,
-      busy: pv?.task.kind === 'trip' || pv?.task.kind === 'haggle',
+      busy: !pv
+        ? ''
+        : pv.task.kind === 'trip' || pv.task.kind === 'haggle'
+          ? 'Finish your trip first'
+          : pv.task.kind === 'away'
+            ? 'You’re out of town'
+            : pv.task.kind === 'broken'
+              ? 'Your tuk-tuk is off the road'
+              : '',
+      tooBig: !!pv && !fitsParty(pv, r),
       climb: requestClimbs(g.world, r),
       noClimb: pv ? climbBlocked(g, pv, r) : false,
       claimed: r.claimedBy !== null && r.claimedBy !== pv?.id,
@@ -416,7 +426,7 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
       {d.noClimb && <ClimbNotice />}
       <button
         className="btn primary wide"
-        disabled={d.mine || d.busy || d.noClimb || d.claimed}
+        disabled={d.mine || d.busy !== '' || d.noClimb || d.claimed || d.tooBig}
         onClick={() => {
           if (!game.playerClaim(r.id)) return;
           // In Drive mode the GPS takes the wheel to get there; W takes it back.
@@ -424,7 +434,11 @@ function RequestCard({ game, view }: { game: Game; view: GameView | null }) {
           ui.set({ follow: true, selectedVehicle: null });
         }}
       >
-        {d.mine ? 'On your way…' : d.claimed ? 'A fleet tuk-tuk is on the way' : d.busy ? 'Finish your trip first' : d.noClimb ? 'Can’t make the climb' : 'Pick up'}
+        {d.mine
+          ? 'On your way…'
+          : d.claimed
+            ? 'A fleet tuk-tuk is on the way'
+            : d.busy || (d.noClimb ? 'Can’t make the climb' : d.tooBig ? 'Too many passengers' : 'Pick up')}
       </button>
       {(managing || d.hired) && !d.mine && !d.claimed && (
         <button

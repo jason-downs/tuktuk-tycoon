@@ -3,10 +3,11 @@
 // Checks what each layer would draw and that nothing throws or goes NaN.
 
 import { readFileSync } from 'node:fs';
-import { InstancedMesh, MeshLambertMaterial, PerspectiveCamera, Scene } from 'three';
+import { InstancedMesh, MeshLambertMaterial, PerspectiveCamera, Scene, type Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
 import { calendar, timeOf } from '../src/sim/clock';
+import { makeRequest } from '../src/sim/demand';
 import { Game } from '../src/sim/game';
 import type { GraphJSON } from '../src/sim/graph';
 import { installSystems } from '../src/sim/systems';
@@ -17,6 +18,7 @@ import { buildCity, tileCity } from '../src/world3d/build/world';
 import { edgeLanes } from '../src/world3d/kinematics';
 import { CrowdLayer } from '../src/world3d/layers/crowds';
 import { PeopleLayer } from '../src/world3d/layers/people';
+import { MarkerLayer } from '../src/world3d/layers/markers';
 import type { ViewContext, WorldLayer } from '../src/world3d/layers/types';
 import { VehicleLayer } from '../src/world3d/layers/vehicles';
 
@@ -142,6 +144,40 @@ describe('3D layers, headless', () => {
     expect(waiting()).toBe(standing + 3);
     for (let i = 0; i < 260; i++) t.frame();
     expect(waiting()).toBe(standing);
+  });
+
+  it('drops the stand-in, rings and drop-off party of a tuk-tuk that is out of town', () => {
+    const t = setup(timeOf(2026, 10, 3, 10));
+    const markers = new MarkerLayer(t.ctx);
+    t.layers.push(markers);
+    const rings = markers as unknown as { playerRing: Mesh; selectRing: Mesh };
+    const v = t.game.playerVehicle()!;
+    ui.set({ selectedVehicle: v.id });
+    for (let i = 0; i < 5; i++) t.frame();
+    expect(t.ctx.vehicleMesh(v.id)).toBeDefined();
+    expect(rings.playerRing.visible).toBe(true);
+    expect(rings.selectRing.visible).toBe(true);
+
+    const req = makeRequest(t.game, world.landmarks.find((l) => l.id === 'tha_phae_gate')!, world.landmarks.find((l) => l.id === 'bo_sang')!, 'thai_tourist', 'street', calendar(t.game.state.time));
+    const trip = { request: req, fare: 300, ratio: 1, startedAt: t.game.state.time, distance: 4_000 };
+    v.task = { kind: 'away', until: t.game.state.time + 3_600, trip, portal: 0 };
+    t.frame();
+    expect(t.ctx.vehicleMesh(v.id)).toBeUndefined();
+    expect(rings.playerRing.visible).toBe(false);
+    expect(rings.selectRing.visible).toBe(false);
+    // Paid for a drop-off beyond the portal: nobody steps out on the map.
+    const alighting = () => (t.layers[1] as unknown as { alighting: unknown[] }).alighting.length;
+    const before = alighting();
+    t.game.emit('trip', { vehicleId: v.id, driverId: null, fare: 300, tip: 0, rating: 5, request: req, companyTake: 300 });
+    t.frame();
+    expect(alighting()).toBe(before);
+
+    // Back in town, it is drawn and ringed again.
+    v.task = { kind: 'idle' };
+    t.frame();
+    expect(t.ctx.vehicleMesh(v.id)).toBeDefined();
+    expect(rings.playerRing.visible).toBe(true);
+    ui.set({ selectedVehicle: null });
   });
 
   it('stays cheap per frame in a busy evening street scene', () => {

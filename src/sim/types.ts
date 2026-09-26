@@ -122,10 +122,12 @@ export interface Trip {
   /** Fare / fairFare — how hard the passenger was charged. */
   ratio: number;
   startedAt: number;
-  /** Route distance at pickup, metres. */
+  /** In-town route distance, metres: to the destination, or to the portal and back in for an out-of-town round trip. */
   distance: number;
   /** On the way back into town from an out-of-town round trip. */
   returning?: boolean;
+  /** Game seconds spent beyond the portal on an out-of-town trip (there, any wait, and back for a round trip). */
+  awayS?: number;
 }
 
 export interface Vehicle {

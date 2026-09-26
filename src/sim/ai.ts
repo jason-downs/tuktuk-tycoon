@@ -5,7 +5,7 @@ import { ZONES } from '../content/zones';
 import { VEHICLE_MODELS } from '../content/vehicles';
 import { BALANCE } from './balance';
 import { calendar, type CalendarInfo } from './clock';
-import { abandonRequest, claimRequest, measureRequest, quote, startTrip, findRequest } from './dispatch';
+import { abandonRequest, claimRequest, fitsParty, measureRequest, quote, startTrip, findRequest } from './dispatch';
 import { originWeight } from './demand';
 import type { Game } from './game';
 import { climbBlocked } from './mountain';
@@ -55,8 +55,7 @@ function pickRequest(game: Game, v: Vehicle, driver: Driver): RideRequest | null
   let bestScore = 0;
   for (const req of game.state.requests) {
     if (req.claimedBy !== null || !game.canSee(v, req)) continue;
-    const model = VEHICLE_MODELS[v.model];
-    if (model && req.party > model.seats) continue;
+    if (!fitsParty(v, req)) continue;
     if (climbBlocked(game, v, req)) continue;
     let score = requestValue(game, v, req);
     if (zone) {

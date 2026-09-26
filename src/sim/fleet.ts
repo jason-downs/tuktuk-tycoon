@@ -9,7 +9,7 @@ import { VEHICLE_MODELS, type VehicleModel } from '../content/vehicles';
 import { ZONES } from '../content/zones';
 import { BALANCE } from './balance';
 import { DAY, HOUR } from './clock';
-import { releaseClaim, type TripResult } from './dispatch';
+import { inRide, releaseClaim, type TripResult } from './dispatch';
 import { businessDay, canAfford, earn, spend } from './economy';
 import type { Game, GameSystem } from './game';
 import { Rng } from './rng';
@@ -221,9 +221,14 @@ export function isEV(v: Vehicle): boolean {
   return VEHICLE_MODELS[v.model]?.powertrain === 'ev';
 }
 
-/** A passenger is aboard or at the kerb: the vehicle cannot change hands. */
-export function inRide(v: Vehicle): boolean {
-  return v.task.kind === 'trip' || v.task.kind === 'haggle';
+/**
+ * Why a vehicle can't change hands right now (a passenger aboard or at the kerb, or out of town; see inRide), or
+ * null when it can. `who` names the vehicle or its driver in the sentence.
+ */
+export function rideLock(v: Vehicle, who?: string): string | null {
+  if (!inRide(v)) return null;
+  if (v.task.kind === 'away') return who ? `${who} is out of town — wait for the drive back.` : 'Out of town — wait for the drive back.';
+  return who ? `${who} has a passenger aboard — wait for the drop-off.` : 'A passenger is aboard — wait for the drop-off.';
 }
 
 export function rentedCount(game: Game): number {
@@ -453,8 +458,7 @@ export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Ve
 
 export function whyCantReturn(v: Vehicle): string | null {
   if (v.ownership !== 'rented') return 'Only rented tuk-tuks go back to Lung Daeng.';
-  if (inRide(v)) return 'A passenger is aboard — wait for the drop-off.';
-  return null;
+  return rideLock(v);
 }
 
 /** Hand a rented tuk-tuk back to Lung Daeng, paying today's rent. */
@@ -553,7 +557,8 @@ function ownOutright(game: Game, v: Vehicle, lease: Lease): void {
 export function whyCantSell(game: Game, v: Vehicle): string | null {
   if (v.ownership === 'rented') return 'It belongs to Lung Daeng — return it instead.';
   if (v.ownership === 'leased') return 'Still on hire-purchase — pay it off first.';
-  if (inRide(v)) return 'A passenger is aboard — wait for the drop-off.';
+  const lock = rideLock(v);
+  if (lock) return lock;
   if (resaleValue(game, v) <= 0) return 'Nobody will pay anything for it.';
   return null;
 }
@@ -592,9 +597,7 @@ export function whyCantAssign(game: Game, driverId: number, vehicleId: number | 
   if (vehicleId !== null && !target) return 'No such tuk-tuk.';
   if (target && target.driverId === d.id) return null;
   const current = d.vehicleId !== null ? game.vehicle(d.vehicleId) : undefined;
-  if (current && inRide(current)) return `${current.name} has a passenger aboard — wait for the drop-off.`;
-  if (target && inRide(target)) return `${target.name} has a passenger aboard — wait for the drop-off.`;
-  return null;
+  return (current && rideLock(current, current.name)) || (target && rideLock(target, target.name)) || null;
 }
 
 /**
@@ -803,8 +806,7 @@ export function whyCantFire(game: Game, driverId: number): string | null {
   if (!d) return 'No such driver.';
   if (d.isPlayer) return 'You can’t fire yourself.';
   const v = d.vehicleId !== null ? game.vehicle(d.vehicleId) : undefined;
-  if (v && inRide(v)) return `${d.nickname} has a passenger aboard — wait for the drop-off.`;
-  return null;
+  return (v && rideLock(v, d.nickname)) || null;
 }
 
 /** Let a driver go, paying one day's pay as severance; their tuk-tuk is parked. */

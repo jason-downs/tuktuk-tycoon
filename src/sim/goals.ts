@@ -4,8 +4,7 @@
 // answer (five-star rides, tours, Yi Peng trips) come from the 'trip' event.
 
 import { FIVE_STAR, GOALS, type GoalDef, type GoalTrack } from '../content/goals';
-import { addReviews } from './business';
-import type { TripResult } from './dispatch';
+import { addReviews, type TripResult } from './dispatch';
 import { earn } from './economy';
 import { activeOccurrences } from './events';
 import type { Game, GameSystem } from './game';

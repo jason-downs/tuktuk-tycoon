@@ -5,7 +5,7 @@
 
 import { ARCHETYPES } from '../content/archetypes';
 import { passengerBadge } from '../map/sprites';
-import { kerbsidePassenger, manualControl, pumpNearby, PICKUP_MAX_SPEED } from '../sim/manual';
+import { kerbsidePassenger, pumpNearby, PICKUP_MAX_SPEED, walkingPassenger } from '../sim/manual';
 import type { RideRequest } from '../sim/types';
 import type { FrameInfo, ViewContext } from './layers/types';
 
@@ -90,9 +90,8 @@ export class DriveHud {
 
     // "E" prompts.
     const slow = v.speed < PICKUP_MAX_SPEED;
-    const c = manualControl(game);
     const free = v.task.kind !== 'trip' && v.task.kind !== 'haggle' && v.task.kind !== 'broken';
-    if (free && !c.kerbside) {
+    if (free && !walkingPassenger(game)) {
       const near = kerbsidePassenger(game, v);
       if (near) {
         const k = this.ctx.kerbOf(near);

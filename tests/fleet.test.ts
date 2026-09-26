@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildWorld, type PoiJSON } from '../src/data/world';
-import { DAY, HOUR } from '../src/sim/clock';
+import { calendar, DAY, HOUR } from '../src/sim/clock';
+import { makeRequest } from '../src/sim/demand';
 import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { businessDay, earn } from '../src/sim/economy';
 import {
@@ -26,6 +27,8 @@ import {
   whyCantBuy,
   whyCantHire,
   whyCantRent,
+  whyCantFire,
+  whyCantReturn,
   whyCantSell,
 } from '../src/sim/fleet';
 import { Game } from '../src/sim/game';
@@ -303,6 +306,25 @@ describe('drivers', () => {
     expect(fireDriver(game, renter.id)).toBe(true);
     expect(game.state.cash).toBe(cash - salaried.dailyPay - FLEET.minWage);
     expect(fireDriver(game, game.player().id)).toBe(false);
+  });
+
+  it('keeps a driver with their tuk-tuk while it is out of town, even one who is leaving', () => {
+    const game = newGame();
+    const v = rentVehicle(game)!;
+    const d = hireFirst(game, 'salary', v.id);
+    const req = makeRequest(game, thaPhae, world.landmarks.find((l) => l.id === 'night_safari')!, 'tourist_west', 'street', calendar(game.state.time));
+    v.task = { kind: 'away', until: game.state.time + HOUR, trip: { request: req, fare: 400, ratio: 1, startedAt: game.state.time, distance: 3_000 }, portal: 0 };
+    expect(whyCantFire(game, d.id)).toBe(`${d.nickname} is out of town — wait for the drive back.`);
+    expect(whyCantReturn(v)).toBe('Out of town — wait for the drive back.');
+    expect(assignDriver(game, d.id, null)).toBe(false);
+    expect(returnVehicle(game, v.id)).toBe(false);
+    driverRecord(game, d).leaving = true;
+    game.step(1);
+    expect(game.driver(d.id)).toBeDefined();
+    expect(v.task.kind).toBe('away');
+    v.task = { kind: 'idle' };
+    game.step(1);
+    expect(game.driver(d.id)).toBeUndefined();
   });
 
   it('a driver whose morale stays below 15 for two day-ends quits', () => {

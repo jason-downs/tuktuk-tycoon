@@ -63,7 +63,7 @@
   - In `vehicles.ts` `arrive()`, the `'trip'` case checks `dest.offmap`. If set, it calls `goAway()` instead of `completeTrip()`.
   - A small `offmap` GameSystem (registered in `systems.ts`) finishes the trip when `time >= until`: it calls `completeTrip` so the rating covers the whole ride. It then starts an empty return leg, and finally sets the vehicle idle on `inNode`.
   - Off-map time is `extraM` at 32 km/h (18 km/h for climbs) plus `waitS` [pacing].
-  - For off-map trips, `rateTrip`'s speed term is neutral.
+  - For off-map trips, `rateTrip`'s speed term rates only the driving in town: `goAway` records the time beyond the portal on the trip (`Trip.awayS`), `rateTrip` leaves it out, and a round trip's `distance` gains the drive back in from the portal. Driver fatigue counts the off-map kilometres too.
 - **Filters to add** (all one-liners):
   - `originWeight` returns 0 for off-map places (they are destination-only for street demand).
   - `pickRank` in `ai.ts` excludes off-map candidates.

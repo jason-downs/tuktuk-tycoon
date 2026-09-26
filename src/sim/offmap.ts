@@ -34,6 +34,7 @@ export function goAway(game: Game, v: Vehicle, trip: Trip): void {
   const oneWay = awaySeconds(game, dest, off.extraM);
   const until = game.state.time + oneWay + (off.roundTrip ? off.waitS + oneWay : 0);
   burn(v, (off.extraM / 1000) * (off.roundTrip ? 2 : 1));
+  trip.awayS = until - game.state.time;
   v.task = { kind: 'away', until, trip, portal: off.portal };
   v.route = null;
   v.speed = 0;
@@ -71,8 +72,10 @@ export class OffmapSystem implements GameSystem {
         // Bring the passenger back to where they were picked up.
         reenter(game, v, task.portal);
         const from = game.place(trip.request.from);
-        v.task = { kind: 'trip', trip: { ...trip, returning: true } };
-        if (!sendTo(game, v, from.node)) completeTrip(game, v);
+        const back: Trip = { ...trip, returning: true };
+        v.task = { kind: 'trip', trip: back };
+        if (sendTo(game, v, from.node)) back.distance += v.route?.length ?? 0;
+        else completeTrip(game, v);
         continue;
       }
       // Dropped off out of town: get paid, then drive back.

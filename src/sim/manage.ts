@@ -1,8 +1,7 @@
 // Management actions for the player's hired fleet: sending the nearest free
 // hired tuk-tuk to a waiting passenger.
 
-import { VEHICLE_MODELS } from '../content/vehicles';
-import { claimRequest, findRequest } from './dispatch';
+import { claimRequest, findRequest, fitsParty } from './dispatch';
 import type { Game } from './game';
 import { climbBlocked } from './mountain';
 import type { RideRequest, Vehicle } from './types';
@@ -13,9 +12,7 @@ export function isFreeFor(game: Game, v: Vehicle, req: RideRequest): boolean {
   const driver = game.driver(v.driverId);
   if (!driver || driver.isPlayer) return false;
   if (v.task.kind !== 'idle' && v.task.kind !== 'cruise') return false;
-  const seats = VEHICLE_MODELS[v.model]?.seats;
-  if (seats !== undefined && req.party > seats) return false;
-  return !climbBlocked(game, v, req);
+  return fitsParty(v, req) && !climbBlocked(game, v, req);
 }
 
 /** Free hired tuk-tuks for a passenger, nearest (straight line) first. */
