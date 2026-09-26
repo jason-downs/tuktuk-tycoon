@@ -517,11 +517,20 @@ describe('temples and landmarks in the real city', () => {
 
 describe('whole-city build', () => {
   // CPU time rather than wall time: the suite runs files in parallel, often on a busy machine.
-  const cpu0 = process.cpuUsage();
-  const a = buildCity(city);
-  const cpu = process.cpuUsage(cpu0);
-  const ms = (cpu.user + cpu.system) / 1000;
-  const b = buildCity(city);
+  // The faster of the two builds counts: a slow build is slow both times, while a
+  // busy machine may run either one on its slower cores.
+  const cpuMs = (build: () => void): number => {
+    const cpu0 = process.cpuUsage();
+    build();
+    const cpu = process.cpuUsage(cpu0);
+    return (cpu.user + cpu.system) / 1000;
+  };
+  let a!: ReturnType<typeof buildCity>;
+  let b!: ReturnType<typeof buildCity>;
+  const ms = Math.min(
+    cpuMs(() => (a = buildCity(city))),
+    cpuMs(() => (b = buildCity(city))),
+  );
 
   it('stays inside the building triangle budget and time', () => {
     const t = a.stats.triangles;

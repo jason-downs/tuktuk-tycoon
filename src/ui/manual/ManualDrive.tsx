@@ -7,14 +7,13 @@ import {
   pickTurn,
   previewTurn,
   setAutodrive,
-  setManual,
   setPedals,
   uTurn,
   whoDrives,
   type TurnIntent,
 } from '../../sim/manual';
 import { targetSpeed } from '../../sim/movement';
-import { isTyping } from '../drive/DriveKeys';
+import { isTyping, toggleWheel } from '../drive/DriveKeys';
 import { km } from '../format';
 import type { OverlayProps } from '../overlays';
 import { ui, useGame, useUI } from '../store';
@@ -25,30 +24,23 @@ const UTURN_HOLD_MS = 500;
 /** Below this speed (m/s) the tuk-tuk counts as standing still for a U-turn. */
 const STANDSTILL_MS = 0.3;
 
-/** Switch manual driving for the player's tuk-tuk, keeping the camera on it. */
-export function toggleManual(game: Game): void {
-  const on = !manualControl(game).on;
-  if (!setManual(game, on)) return;
-  if (on) {
-    ui.set({ follow: true, selectedVehicle: null });
-    game.notify('Manual driving: hold W/↑ to go, S/↓ to brake, A/D or ←/→ to choose the next turn. G hands the wheel to the GPS.', 'info');
-  } else {
-    game.notify('Manual driving off.', 'info');
-  }
-}
-
-/** 🕹️ button on the player card. */
+/**
+ * 🕹️ on the player card. In Manage mode it takes the wheel (switches to
+ * Drive); in Drive mode it hands the wheel to the GPS and takes it back, as G does.
+ */
 export function ManualToggle({ game }: { game: Game }) {
-  const d = useGame(game, (g) => ({ on: manualControl(g).on, has: !!g.playerVehicle() }));
+  const d = useGame(game, (g) => ({ hand: whoDrives(g) === 'hand', has: !!g.playerVehicle() }));
+  const driving = useUI((s) => s.mode === 'drive');
+  const on = driving && d.hand;
   return (
     <button
-      className={`btn ${d.on ? 'on' : ''}`}
+      className={`btn ${on ? 'on' : ''}`}
       disabled={!d.has}
-      onClick={() => toggleManual(game)}
-      title={d.on ? 'Hand the wheel to the GPS (G)' : 'Drive by hand: throttle, brake and turns (W)'}
-      aria-pressed={d.on}
+      onClick={() => toggleWheel(game)}
+      title={!driving ? 'Take the wheel: switch to Drive mode (Tab)' : on ? 'Hand the wheel to the GPS (G)' : 'Take the wheel back (G or W)'}
+      aria-pressed={on}
     >
-      🕹️ {d.on ? 'Driving' : 'Drive'}
+      🕹️ {on ? 'Driving' : 'Drive'}
     </button>
   );
 }
@@ -159,6 +151,44 @@ function takeWheel(game: Game): boolean {
   return setAutodrive(game, false) === 'hand';
 }
 
+/** Let go of the throttle and brake. */
+function releasePedals(game: Game): void {
+  brakeUp(game);
+  setPedals(game, false, false);
+}
+
+/** A driving key (WASD, arrows) pressed. Keys typed into a field, or under the haggle or a dialog (Help), are not driving keys. */
+export function manualKeyDown(game: Game, e: KeyboardEvent): void {
+  const s = ui.get();
+  if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey || s.haggle !== null || s.modal !== null) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const driving = k === 'w' || k === 's' || k === 'a' || k === 'd' || k.startsWith('Arrow');
+  if (!driving) return;
+  const c = manualControl(game);
+  if (!c.on && !(driving && !e.repeat && takeWheel(game))) return;
+  if (k === 'w' || k === 'ArrowUp') setPedals(game, true, c.brake);
+  else if (k === 's' || k === 'ArrowDown') {
+    if (!e.repeat) brakeDown(game);
+    setPedals(game, c.throttle, true);
+  } else if (k === 'a' || k === 'ArrowLeft') {
+    if (!e.repeat) pickTurn(game, 'left');
+  } else if (k === 'd' || k === 'ArrowRight') {
+    if (!e.repeat) pickTurn(game, 'right');
+  } else return;
+  e.preventDefault();
+}
+
+/** A driving key released. */
+export function manualKeyUp(game: Game, e: KeyboardEvent): void {
+  const c = manualControl(game);
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (k === 'w' || k === 'ArrowUp') setPedals(game, false, c.brake);
+  else if (k === 's' || k === 'ArrowDown') {
+    brakeUp(game);
+    setPedals(game, c.throttle, false);
+  }
+}
+
 /** Keyboard driving (WASD, arrows) and, on touch screens, an on-screen pad. */
 export function ManualDriveOverlay({ game }: OverlayProps) {
   const d = useGame(game, (g) => {
@@ -167,37 +197,9 @@ export function ManualDriveOverlay({ game }: OverlayProps) {
   });
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey || ui.get().haggle !== null) return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      const driving = k === 'w' || k === 's' || k === 'a' || k === 'd' || k.startsWith('Arrow');
-      if (!driving) return;
-      const c = manualControl(game);
-      if (!c.on && !(driving && !e.repeat && takeWheel(game))) return;
-      if (k === 'w' || k === 'ArrowUp') setPedals(game, true, c.brake);
-      else if (k === 's' || k === 'ArrowDown') {
-        if (!e.repeat) brakeDown(game);
-        setPedals(game, c.throttle, true);
-      } else if (k === 'a' || k === 'ArrowLeft') {
-        if (!e.repeat) pickTurn(game, 'left');
-      } else if (k === 'd' || k === 'ArrowRight') {
-        if (!e.repeat) pickTurn(game, 'right');
-      } else return;
-      e.preventDefault();
-    };
-    const up = (e: KeyboardEvent) => {
-      const c = manualControl(game);
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (k === 'w' || k === 'ArrowUp') setPedals(game, false, c.brake);
-      else if (k === 's' || k === 'ArrowDown') {
-        brakeUp(game);
-        setPedals(game, c.throttle, false);
-      }
-    };
-    const release = () => {
-      brakeUp(game);
-      setPedals(game, false, false);
-    };
+    const down = (e: KeyboardEvent) => manualKeyDown(game, e);
+    const up = (e: KeyboardEvent) => manualKeyUp(game, e);
+    const release = () => releasePedals(game);
     const offFrame = game.on('frame', () => checkUTurn(game));
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -209,6 +211,12 @@ export function ManualDriveOverlay({ game }: OverlayProps) {
       window.removeEventListener('blur', release);
     };
   }, [game]);
+
+  // A dialog opening over the game takes the keyboard, so pedals held at that moment are let go.
+  const dialog = useUI((s) => s.modal !== null);
+  useEffect(() => {
+    if (dialog) releasePedals(game);
+  }, [dialog, game]);
 
   const driveMode = useUI((s) => s.mode === 'drive' && !s.planner);
   if (!d.on && !(driveMode && d.has)) return null;

@@ -40,6 +40,13 @@
   border-right: none;
   border-bottom: none;
 }
+.coach-arrow-down::before {
+  display: block;
+  bottom: -7px;
+  left: calc(var(--arrow-at) - 6px);
+  border-top: none;
+  border-left: none;
+}
 .coach-head {
   display: flex;
   align-items: center;

@@ -1,4 +1,8 @@
 /* "How to play" modal (HelpModal.tsx). */
+/* Above the haggle sheet (z-index 20), since Help has the keyboard while it is open. */
+.modal-backdrop.help-backdrop {
+  z-index: 30;
+}
 .dialog.help {
   width: min(680px, calc(100% - 24px));
   max-height: calc(100% - 40px);

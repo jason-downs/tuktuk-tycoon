@@ -25,6 +25,27 @@ export function graphBounds(nodeX: ArrayLike<number>, nodeY: ArrayLike<number>, 
   return { minX: minX - margin, minY: minY - margin, maxX: maxX + margin, maxY: maxY + margin };
 }
 
+/** Where a canvas sits on the page: its border box and the size and border of its content box, CSS px. */
+export interface CanvasBox {
+  left: number;
+  top: number;
+  clientLeft: number;
+  clientTop: number;
+  clientWidth: number;
+  clientHeight: number;
+}
+
+/**
+ * The pixel under a pointer in the space the canvas was drawn in
+ * (drawnW × drawnH CSS px), for a canvas that CSS shows at another size
+ * and with a border.
+ */
+export function canvasPoint(clientX: number, clientY: number, box: CanvasBox, drawnW: number, drawnH: number): { x: number; y: number } {
+  const sx = box.clientWidth > 0 ? drawnW / box.clientWidth : 1;
+  const sy = box.clientHeight > 0 ? drawnH / box.clientHeight : 1;
+  return { x: (clientX - box.left - box.clientLeft) * sx, y: (clientY - box.top - box.clientTop) * sy };
+}
+
 // --------------------------------------------------------------- overview
 /** A north-up view of `bounds` drawn into a width × height pixel box (letterboxed, same scale on both axes). */
 export interface OverviewFrame {

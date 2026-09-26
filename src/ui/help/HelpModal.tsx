@@ -11,6 +11,7 @@ import './help.css';
 
 const KEYS: [string[], string][] = [
   [['Tab'], 'Drive ↔ Manage'],
+  [['Shift', 'Tab'], 'Move keyboard focus through the buttons; then Tab moves on and Enter presses. Esc or a click hands the keys back'],
   [['W', '↑'], 'Drive: throttle (hold); takes the wheel back from the GPS'],
   [['S', '↓'], 'Drive: brake (hold); pressed and held at a standstill, U-turn on a two-way road'],
   [['A', '←', 'D', '→'], 'Drive: turn left / right at the next junction'],
@@ -29,10 +30,11 @@ const KEYS: [string[], string][] = [
 const MOUSE: [string, string][] = [
   ['Click a waving passenger', 'See their trip, then Pick up (the GPS drives you there) or dispatch a free tuk-tuk'],
   ['Right-click the map or minimap', 'Drive there (right-click a ⛽ pump to refuel)'],
-  ['Click a tuk-tuk', 'Select and follow it'],
+  ['Click a tuk-tuk', 'Select it; in Manage the camera follows it'],
   ['Click a landmark', 'Read about the place'],
-  ['Drag · scroll', 'Drive: look around and zoom. Manage: pan and zoom'],
+  ['Drag · scroll or pinch', 'Drive: look around and zoom. Manage: pan and zoom'],
   ['Click the overview map', 'Manage: fly the camera there'],
+  ['Click a place name or a notice', 'Show it: Drive looks there for a few seconds (W, S or 🎯 comes back sooner); Manage flies the camera there'],
 ];
 
 /** "How to play": controls, the ride loop, haggling, growing a fleet, tips and credits. */
@@ -58,7 +60,7 @@ export function HelpModal({ game }: OverlayProps) {
   const panels = PANELS.map((p) => `${p.icon} ${p.title}`).join(' · ');
 
   return (
-    <div className="modal-backdrop" onClick={close}>
+    <div className="modal-backdrop help-backdrop" onClick={close}>
       <div className="dialog help" role="dialog" aria-label="How to play" onClick={(e) => e.stopPropagation()}>
         <div className="help-head">
           <h2>How to play</h2>

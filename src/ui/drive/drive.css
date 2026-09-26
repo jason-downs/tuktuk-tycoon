@@ -55,7 +55,8 @@
 /* ------------------------------------------------------------ GPS line */
 .gps-hud {
   position: absolute;
-  top: 116px;
+  /* Under the world badge, which sits under the top bar. */
+  top: calc(var(--topbar-bottom, 64px) + 52px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 7;
@@ -309,10 +310,16 @@
     display: none;
   }
 }
+/* Up to 1,080 px the cards still stand at the top left, so the line stays
+   clear of them; below 900 px they move to the bottom and it may widen. */
 @media (max-width: 1080px) {
   .gps-hud {
+    min-width: 0;
+  }
+}
+@media (max-width: 900px) {
+  .gps-hud {
     max-width: calc(100% - 24px);
-    top: 150px;
   }
 }
 @media (max-width: 600px) {
@@ -320,11 +327,23 @@
   .app .topbar .drive-clock {
     order: 5;
   }
+  /* Phones: the card sheet fills the bottom and the touch pad the middle right,
+     so the GPS line sits under the top bar and the minimap under it on the
+     left (layoutVars.ts). */
   .gps-hud {
     min-width: 0;
     width: calc(100% - 24px);
-    top: auto;
-    bottom: 200px;
+    top: calc(var(--topbar-bottom, 106px) + 6px);
+  }
+  .minimap {
+    top: calc(var(--topbar-bottom, 106px) + var(--gps-h, 0px) + 12px);
+    left: 8px;
+    right: auto;
+    bottom: auto;
+  }
+  .minimap-drive canvas {
+    width: 104px !important;
+    height: 104px !important;
   }
   .minimap-manage canvas {
     width: 160px !important;

@@ -6,26 +6,11 @@ import type { OverlayProps } from '../overlays';
 import { PANELS, type PanelDef } from '../panels';
 import { GlossedText } from '../SpeechLine';
 import { ui, useGame, useUI } from '../store';
+import { placeCoach, samePlacement, type Placement } from './coachPlacement';
 import './coach.css';
 
-/** Where the card sits and which way its pointer faces. */
-interface Placement {
-  left: number;
-  top: number;
-  /** 'left': the anchor is to the card's left; 'up': the anchor is above. */
-  arrow: 'left' | 'up' | 'none';
-  /** Pointer offset along the card edge, px. */
-  arrowAt: number;
-  mobile: boolean;
-}
-
-const GAP = 14;
-const MOBILE_WIDTH = 700;
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-function samePlacement(a: Placement | null, b: Placement): boolean {
-  return !!a && a.arrow === b.arrow && a.mobile === b.mobile && Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.arrowAt - b.arrowAt) < 1;
-}
+/** HUD the card keeps clear of: the Drive-mode GPS line and the world badge. */
+const AVOID = ['.gps-hud', '.world-badge'];
 
 /**
  * Lung Daeng's coach card for a new game: a small, non-blocking card beside
@@ -77,22 +62,20 @@ export function TutorialCoach({ game }: OverlayProps) {
       const h = card.offsetHeight;
       const floor = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 60) + 8;
       const anchor = coach.anchor ? document.querySelector(coach.anchor) : null;
-      let next: Placement;
-      if (vw < MOBILE_WIDTH) {
-        next = { left: 8, top: floor, arrow: 'none', arrowAt: 0, mobile: true };
-      } else if (!anchor) {
-        const stack = document.querySelector('.left-stack')?.getBoundingClientRect();
-        next = { left: (stack?.right ?? 10) + GAP, top: floor, arrow: 'none', arrowAt: 0, mobile: false };
-      } else {
-        const r = anchor.getBoundingClientRect();
-        if (!coach.below && r.right + GAP + w <= vw - 8) {
-          const top = clamp(r.top, floor, vh - h - 8);
-          next = { left: r.right + GAP, top, arrow: 'left', arrowAt: clamp(r.top + 22 - top, 14, h - 20), mobile: false };
-        } else {
-          const left = clamp(r.left + r.width / 2 - w / 2, 8, vw - w - 8);
-          next = { left, top: clamp(r.bottom + GAP, 8, vh - h - 8), arrow: 'up', arrowAt: clamp(r.left + r.width / 2 - left, 18, w - 18), mobile: false };
-        }
-      }
+      const next = placeCoach({
+        vw,
+        vh,
+        w,
+        h,
+        floor,
+        anchor: anchor ? anchor.getBoundingClientRect() : null,
+        below: !!coach.below,
+        stackRight: document.querySelector('.left-stack')?.getBoundingClientRect().right ?? 10,
+        avoid: AVOID.flatMap((sel) => {
+          const r = document.querySelector(sel)?.getBoundingClientRect();
+          return r && r.width > 0 && r.height > 0 ? [r] : [];
+        }),
+      });
       setPlace((p) => (samePlacement(p, next) ? p : next));
       const target = document.querySelector(coach.highlight ?? coach.anchor ?? '.no-coach-target');
       if (target !== lit) {

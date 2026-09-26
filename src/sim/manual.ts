@@ -57,6 +57,8 @@ export interface ManualControl {
   vehicleId: number | null;
   throttle: boolean;
   brake: boolean;
+  /** Times the throttle or brake has been pressed down, so a press between two frames is not missed. */
+  presses: number;
   /** Turn to take at the next junction that offers it; null follows the GPS or goes straight. */
   turn: TurnIntent | null;
   /** Request id of the trip being driven, and metres driven on it (all / above road speed). */
@@ -72,7 +74,7 @@ const controls = new WeakMap<Game, ManualControl>();
 export function manualControl(game: Game): ManualControl {
   let c = controls.get(game);
   if (!c) {
-    c = { on: false, vehicleId: null, throttle: false, brake: false, turn: null, trip: -1, tripMetres: 0, fastMetres: 0, kerbside: null };
+    c = { on: false, vehicleId: null, throttle: false, brake: false, presses: 0, turn: null, trip: -1, tripMetres: 0, fastMetres: 0, kerbside: null };
     controls.set(game, c);
   }
   return c;
@@ -101,6 +103,7 @@ export function setManual(game: Game, on: boolean): boolean {
 
 export function setPedals(game: Game, throttle: boolean, brake: boolean): void {
   const c = manualControl(game);
+  if ((throttle && !c.throttle) || (brake && !c.brake)) c.presses++;
   c.throttle = throttle;
   c.brake = brake;
 }

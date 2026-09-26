@@ -111,3 +111,11 @@
     display: none;
   }
 }
+/* Phones: mid-screen on the right, but above the card sheet when it grows
+   taller (--sheet-h, layoutVars.ts). The pad is 130 px tall. */
+@media (max-width: 600px) {
+  .manual-pad {
+    bottom: max(calc(50% - 65px), calc(var(--sheet-h, 0px) + 18px));
+    transform: none;
+  }
+}

@@ -4,6 +4,7 @@ import { spokenName } from '../content/dialogue';
 import type { QuoteOutcome } from '../sim/dispatch';
 import type { Game } from '../sim/game';
 import { setPedals } from '../sim/manual';
+import { onFocusedControl } from './focusNav';
 import { baht, km } from './format';
 import { SpeechLine } from './SpeechLine';
 import { ui, useUI } from './store';
@@ -85,12 +86,16 @@ export function HaggleDialog({ game }: { game: Game }) {
     close();
   };
 
-  // The haggle takes the keyboard: its keys act here and no game key fires underneath.
+  // The haggle takes the keyboard: its keys act here and no game key fires
+  // underneath. A dialog opened on top of it (Help) has the keyboard first.
   useEffect(() => {
     if (!haggle || !req) return;
     const onKey = (e: KeyboardEvent) => {
+      if (ui.get().modal !== null) return;
       e.stopPropagation();
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      // Enter and Space work the control the player reached with the keyboard.
+      if ((e.key === 'Enter' || e.key === ' ') && onFocusedControl(e)) return;
       const k = e.key;
       let handled = true;
       if (outcome?.kind === 'counter') {

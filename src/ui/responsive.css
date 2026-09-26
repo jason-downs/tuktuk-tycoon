@@ -4,8 +4,10 @@
  * with icon-only tabs, hence the breakpoints:
  * - ≤1500 px: panel tabs show icons only (the title is the tooltip).
  * - ≤1250 px: the brand shows the logo only.
- * - ≤1080 px: the tabs take a second row, and the cards and panel move down.
- * - ≤600 px: two compact rows, cards as a bottom sheet, 40 px touch targets.
+ * - ≤1080 px: the tabs take a second row. Cards, panel, badge and GPS line sit
+ *   under the bar wherever it ends (--topbar-bottom, measured in layoutVars.ts).
+ * - ≤600 px: compact rows, cards as a bottom sheet, 40 px touch targets; the
+ *   GPS line, badge, minimap and notices go under the top bar.
  * Rules are scoped under .app so they outrank styles.css, which loads later.
  */
 
@@ -61,13 +63,17 @@
   }
 }
 
-@media (max-width: 1080px) and (min-width: 901px) {
-  .app .left-stack {
-    top: 124px;
-    max-height: calc(100% - 134px);
+/* Up to 900 px the cards stand at the bottom (styles.css), so notices go under
+   the world badge and the GPS line below it (drive.css), clear of the cards'
+   buttons and the touch pad. */
+@media (max-width: 900px) {
+  .app .toasts {
+    top: calc(var(--topbar-bottom, 106px) + var(--gps-h, 0px) + 58px);
+    bottom: auto;
   }
-  .app .panel {
-    top: 124px;
+  /* Only the two newest, so the stack stays clear of the touch pad. */
+  .app .toast:nth-last-child(n + 3) {
+    display: none;
   }
 }
 
@@ -125,7 +131,7 @@
   }
 
   .app .panel {
-    top: 112px;
+    top: calc(var(--topbar-bottom, 106px) + 6px);
     left: 6px;
     right: 6px;
     bottom: 6px;
@@ -148,8 +154,10 @@
     display: none;
   }
 
+  /* Phones: the GPS line sits right under the top bar (drive.css). */
   .app .toasts {
     width: calc(100% - 20px);
+    top: calc(var(--topbar-bottom, 106px) + var(--gps-h, 0px) + 12px);
   }
 
   /* Dialogs become bottom sheets, leaving the top bar visible. */

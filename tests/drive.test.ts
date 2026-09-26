@@ -258,6 +258,20 @@ describe('picking up by hand', () => {
     expect(uTurn(game)).toBe(false);
   });
 
+  it('counts each press of the throttle or brake', () => {
+    const game = newGame();
+    setManual(game, true);
+    const c = manualControl(game);
+    const start = c.presses;
+    setPedals(game, true, false);
+    setPedals(game, true, false);
+    expect(c.presses).toBe(start + 1);
+    setPedals(game, true, true);
+    setPedals(game, false, false);
+    setPedals(game, true, false);
+    expect(c.presses).toBe(start + 3);
+  });
+
   it('G hands the wheel to the GPS, or to autopilot with nowhere to go, and takes it back', () => {
     const game = newGame();
     setManual(game, true);
