@@ -38,6 +38,7 @@ import { festivalsAt, type FestivalState } from '../env/festivals';
 import { KEYS, timeOfDay } from '../env/lighting';
 import { onQualityChange, QUALITY_LEVELS, qualityLevel, qualityPreset, renderPixelRatio, setQuality } from '../env/quality';
 import { moonIllumination, moonPhase, moonPosition, skyDirection, solarPosition } from '../env/sun';
+import { patchMaterial } from '../materialPatch';
 import { Mist, Rain, Splashes } from './effects';
 import { FestivalDecor } from './festivals';
 import type { GlowFrame } from './glow';
@@ -76,20 +77,6 @@ export interface EnvState {
 
 /** CityLayer material hooks the environment adjusts (wet roads, aerial haze on the mountains). */
 type CityMaterials = Partial<Record<'roads' | 'ground' | 'backdrop', MeshLambertMaterial>>;
-
-type ShaderPatch = (shader: { uniforms: Record<string, { value: unknown }>; fragmentShader: string }) => void;
-
-/** Chain a shader patch onto a material that may already have one (the city material converts sRGB colours). */
-function patchMaterial(mat: MeshLambertMaterial, key: string, patch: ShaderPatch): void {
-  const prev = mat.onBeforeCompile;
-  const prevKey = mat.customProgramCacheKey;
-  mat.onBeforeCompile = (shader, renderer) => {
-    prev.call(mat, shader, renderer);
-    patch(shader);
-  };
-  mat.customProgramCacheKey = () => `${prevKey.call(mat)}|${key}`;
-  mat.needsUpdate = true;
-}
 
 export class Environment implements WorldLayer {
   readonly id = 'environment';

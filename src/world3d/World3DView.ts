@@ -29,6 +29,7 @@ import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import type { BuiltCity } from './build/world';
 import { DriveCamera, manageElevation, type CameraMode } from './camera';
+import { aimCutaway, applyCutaway, createCutaway } from './cutaway';
 import { DriveHud } from './driveHud';
 import { Hud } from './hud';
 import { FrameStats } from './stats';
@@ -105,6 +106,8 @@ export class World3DView implements GameView, ViewContext {
   readonly camera = new PerspectiveCamera(40, 1, 1, 40_000);
   readonly renderer: WebGLRenderer;
   readonly modelMat = new MeshLambertMaterial({ vertexColors: true });
+  /** Drive-mode see-through around the player's tuk-tuk. */
+  private readonly cutaway = createCutaway();
   /** Camera rig: target (sim metres), distance, compass yaw of the view direction, elevation above the horizon. */
   readonly rig = { tx: 0, ty: 0, dist: 220, yaw: 0, elev: 40 * DEG };
   hoverRequest: number | null = null;
@@ -152,6 +155,7 @@ export class World3DView implements GameView, ViewContext {
     this.driveHud = new DriveHud(this, container);
     this.stats = new FrameStats(container);
 
+    applyCutaway(this.modelMat, this.cutaway);
     this.env = new Environment(this);
     this.vehicles = new VehicleLayer(this);
     this.layers.push(this.env, this.vehicles, new PeopleLayer(this), new MarkerLayer(this));
@@ -177,6 +181,10 @@ export class World3DView implements GameView, ViewContext {
         const city = new CityLayer(this, res.built);
         this.cityLayer = city;
         this.layers.push(city);
+        for (const id of ['buildings', 'structures', 'windows', 'glow'] as const) {
+          const mat = city.materials[id];
+          if (mat) applyCutaway(mat, this.cutaway);
+        }
         this.env.setCityMaterials(city.materials);
         this.env.onLight = (light) => city.setNight(1 - light);
         city.setNight(1 - this.env.light);
@@ -532,6 +540,7 @@ export class World3DView implements GameView, ViewContext {
     this.updateCamera(dt, now);
     const info: FrameInfo = { now, dt, hour: calendar(this.game.state.time).hour, ui: ui.get() };
     for (const l of this.layers) l.update(info);
+    this.updateCutaway();
     this.renderer.render(this.scene, this.camera);
     this.hud.draw(info, this.width, this.height, this.dpr);
     this.driveHud.draw(info, this.width, this.height, this.dpr);
@@ -543,6 +552,19 @@ export class World3DView implements GameView, ViewContext {
     const s = ui.get();
     if (s.selectedVehicle !== null) return this.game.vehicle(s.selectedVehicle);
     return this.game.playerVehicle();
+  }
+
+  /** In Drive mode, cut a line of sight through to the player's tuk-tuk. */
+  private updateCutaway(): void {
+    const player = this.driveCam.mode === 'manage' ? undefined : this.game.playerVehicle();
+    const proxy = player ? this.vehicles.meshOf(player.id) : undefined;
+    if (!proxy) {
+      aimCutaway(this.cutaway, this.camera, null, 0, 1);
+      return;
+    }
+    const scale = proxy.scale.x;
+    this.v3.copy(proxy.position).setY(proxy.position.y + 1.2 * scale);
+    aimCutaway(this.cutaway, this.camera, this.v3, proxy.position.y, scale);
   }
 
   /** Which camera the frame uses: the chase or kerbside camera in Drive mode, else the free camera. */
