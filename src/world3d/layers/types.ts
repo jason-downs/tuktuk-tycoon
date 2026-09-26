@@ -1,4 +1,4 @@
-import type { Mesh, MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import type { MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Game } from '../../sim/game';
 import type { RideRequest } from '../../sim/types';
 import type { UIState } from '../../ui/store';
@@ -24,8 +24,13 @@ export interface ViewContext {
   screenOf(x: number, y: number, h?: number): { x: number; y: number } | null;
   /** Where a waiting passenger stands: beside the road node, towards the place. */
   kerbOf(req: RideRequest): { x: number; y: number };
-  /** The fleet mesh for a vehicle id, if drawn. */
-  vehicleMesh(id: number): Mesh | undefined;
+  /**
+   * The object that follows a fleet vehicle's rendered pose, if drawn: position
+   * on the ground at the vehicle's centre, rotation.y its heading, scale its
+   * render scale. It has no geometry of its own (the fleet is instanced), but
+   * objects added to it ride along with the vehicle.
+   */
+  vehicleMesh(id: number): Object3D | undefined;
   /** Request under the mouse, for hover effects. */
   readonly hoverRequest: number | null;
   /** The generated static city (props, trees, stats), once the worker has finished. */
