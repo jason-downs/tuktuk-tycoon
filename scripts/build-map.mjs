@@ -9,10 +9,11 @@
 // Data © OpenStreetMap contributors, ODbL.
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import osmtogeojson from 'osmtogeojson';
-import { BBOX } from './bbox.mjs';
+import { BBOX, PLAY_BBOX } from './bbox.mjs';
 
 const RAW = new URL('../data-raw/', import.meta.url);
-const OUT = new URL('../public/data/', import.meta.url);
+// MAP_OUT writes elsewhere (e.g. to preview a rebuild without touching public/data).
+const OUT = process.env.MAP_OUT ? new URL(`file://${process.env.MAP_OUT.replace(/\/?$/, '/')}`) : new URL('../public/data/', import.meta.url);
 
 export const ORIGIN = {
   lat: (BBOX.south + BBOX.north) / 2,
@@ -96,78 +97,21 @@ function onewayOf(tags) {
 
 const nameOf = (tags) => tags['name:en'] || tags.name || '';
 
-function buildGraph(roads) {
-  const ways = roads.elements.filter((w) => w.type === 'way' && w.nodes?.length >= 2);
-  const use = new Map();
-  for (const w of ways) {
-    w.nodes.forEach((id, i) => {
-      const bump = i === 0 || i === w.nodes.length - 1 ? 2 : 1;
-      use.set(id, (use.get(id) ?? 0) + bump);
-    });
-  }
-  const nodeIndex = new Map();
-  const nodeXY = [];
-  const nodeOf = (id, lon, lat) => {
-    let i = nodeIndex.get(id);
-    if (i === undefined) {
-      i = nodeXY.length;
-      nodeIndex.set(id, i);
-      nodeXY.push(toXY(lon, lat));
-    }
-    return i;
-  };
-  const names = [''];
-  const nameIdx = new Map([['', 0]]);
-  const internName = (n) => {
-    if (!nameIdx.has(n)) {
-      nameIdx.set(n, names.length);
-      names.push(n);
-    }
-    return nameIdx.get(n);
-  };
-
-  const edges = [];
-  for (const w of ways) {
-    const cls = classOf(w.tags.highway);
-    let oneway = onewayOf(w.tags);
-    let ids = w.nodes;
-    let geom = w.geometry;
-    if (oneway === -1) {
-      ids = [...ids].reverse();
-      geom = [...geom].reverse();
-      oneway = 1;
-    }
-    const name = internName(nameOf(w.tags));
-    let start = 0;
-    for (let i = 1; i < ids.length; i++) {
-      if (i === ids.length - 1 || use.get(ids[i]) > 1) {
-        const pts = [];
-        for (let k = start; k <= i; k++) pts.push(toXY(geom[k].lon, geom[k].lat));
-        let len = 0;
-        for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
-        const a = nodeOf(ids[start], geom[start].lon, geom[start].lat);
-        const b = nodeOf(ids[i], geom[i].lon, geom[i].lat);
-        if (a !== b && len > 0.5) edges.push({ a, b, cls, oneway, name, len, pts: simplify(pts, 1.0) });
-        start = i;
-      }
-    }
-  }
-
-  // Largest strongly connected component (Tarjan, iterative).
-  const n = nodeXY.length;
-  const out = Array.from({ length: n }, () => []);
+/** Tarjan's strongly connected components (iterative); returns the node set of the largest one. */
+function largestScc(nodeCount, edges) {
+  const out = Array.from({ length: nodeCount }, () => []);
   for (const e of edges) {
     out[e.a].push(e.b);
     if (!e.oneway) out[e.b].push(e.a);
   }
-  const index = new Int32Array(n).fill(-1);
-  const low = new Int32Array(n);
-  const onStack = new Uint8Array(n);
-  const comp = new Int32Array(n).fill(-1);
+  const index = new Int32Array(nodeCount).fill(-1);
+  const low = new Int32Array(nodeCount);
+  const onStack = new Uint8Array(nodeCount);
+  const comp = new Int32Array(nodeCount).fill(-1);
   const stack = [];
   let counter = 0;
   let compCount = 0;
-  for (let root = 0; root < n; root++) {
+  for (let root = 0; root < nodeCount; root++) {
     if (index[root] !== -1) continue;
     const call = [[root, 0]];
     index[root] = low[root] = counter++;
@@ -205,29 +149,318 @@ function buildGraph(roads) {
     }
   }
   const sizes = new Int32Array(compCount);
-  for (let i = 0; i < n; i++) sizes[comp[i]]++;
+  for (let i = 0; i < nodeCount; i++) sizes[comp[i]]++;
   let best = 0;
   for (let c = 1; c < compCount; c++) if (sizes[c] > sizes[best]) best = c;
+  const keep = new Uint8Array(nodeCount);
+  for (let i = 0; i < nodeCount; i++) if (comp[i] === best) keep[i] = 1;
+  return { keep, components: compCount };
+}
 
-  const remap = new Int32Array(n).fill(-1);
+/** Road edges split at junctions, over the whole fetched area. */
+function extractEdges(roads) {
+  const ways = roads.elements.filter((w) => w.type === 'way' && w.nodes?.length >= 2);
+  const use = new Map();
+  for (const w of ways) {
+    w.nodes.forEach((id, i) => {
+      const bump = i === 0 || i === w.nodes.length - 1 ? 2 : 1;
+      use.set(id, (use.get(id) ?? 0) + bump);
+    });
+  }
+  const nodeIndex = new Map();
+  const nodeXY = [];
+  const nodeOf = (id, lon, lat) => {
+    let i = nodeIndex.get(id);
+    if (i === undefined) {
+      i = nodeXY.length;
+      nodeIndex.set(id, i);
+      nodeXY.push(toXY(lon, lat));
+    }
+    return i;
+  };
+  const names = [''];
+  const nameIdx = new Map([['', 0]]);
+  const internName = (nm) => {
+    if (!nameIdx.has(nm)) {
+      nameIdx.set(nm, names.length);
+      names.push(nm);
+    }
+    return nameIdx.get(nm);
+  };
+  const edges = [];
+  for (const w of ways) {
+    const cls = classOf(w.tags.highway);
+    let oneway = onewayOf(w.tags);
+    let ids = w.nodes;
+    let geom = w.geometry;
+    if (oneway === -1) {
+      ids = [...ids].reverse();
+      geom = [...geom].reverse();
+      oneway = 1;
+    }
+    const name = internName(nameOf(w.tags));
+    const lanes = Math.max(0, Math.min(8, parseInt(w.tags.lanes, 10) || 0));
+    let start = 0;
+    for (let i = 1; i < ids.length; i++) {
+      if (i === ids.length - 1 || use.get(ids[i]) > 1) {
+        const pts = [];
+        for (let k = start; k <= i; k++) pts.push(toXY(geom[k].lon, geom[k].lat));
+        let len = 0;
+        for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+        const a = nodeOf(ids[start], geom[start].lon, geom[start].lat);
+        const b = nodeOf(ids[i], geom[i].lon, geom[i].lat);
+        if (a !== b && len > 0.5) edges.push({ a, b, cls, oneway, name, lanes, len, pts: simplify(pts, 1.0) });
+        start = i;
+      }
+    }
+  }
+  return { nodeXY, edges, names };
+}
+
+/** Dijkstra over road length from a source node; returns distances. */
+function dijkstra(nodeCount, edges, source) {
+  const adj = Array.from({ length: nodeCount }, () => []);
+  for (const e of edges) {
+    adj[e.a].push([e.b, e.len]);
+    if (!e.oneway) adj[e.b].push([e.a, e.len]);
+  }
+  const dist = new Float64Array(nodeCount).fill(Infinity);
+  dist[source] = 0;
+  // Binary heap of [dist, node].
+  const heap = [[0, source]];
+  const push = (item) => {
+    heap.push(item);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heap[p][0] <= heap[i][0]) break;
+      [heap[p], heap[i]] = [heap[i], heap[p]];
+      i = p;
+    }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if (m === i) break;
+        [heap[m], heap[i]] = [heap[i], heap[m]];
+        i = m;
+      }
+    }
+    return top;
+  };
+  while (heap.length) {
+    const [d, v] = pop();
+    if (d > dist[v]) continue;
+    for (const [w, len] of adj[v]) {
+      if (d + len < dist[w]) {
+        dist[w] = d + len;
+        push([dist[w], w]);
+      }
+    }
+  }
+  return dist;
+}
+
+/** Roads of these classes (trunk…tertiary) crossing the play-area edge become portals. */
+const PORTAL_MAX_CLASS = 3;
+/** Crossings closer than this (m) are one portal (the two halves of a dual carriageway). */
+const PORTAL_MERGE_M = 90;
+/** Landmarks up to this far outside the play area snap to an in-area kerb instead of going off-map. */
+export const SNAP_IN_M = 350;
+
+/**
+ * Builds the routable graph of the playable area. Roads are clipped at the
+ * play-area edge; main roads crossing it become portals — a boundary node
+ * where outbound traffic leaves and another where it comes back in, joined by
+ * a hidden turnaround — through which out-of-town destinations are reached.
+ */
+function buildGraph(roads, landmarks) {
+  const full = extractEdges(roads);
+  // Keep the full network's main component for out-of-town distances.
+  const fullScc = largestScc(full.nodeXY.length, full.edges);
+  const fullEdges = full.edges.filter((e) => fullScc.keep[e.a] && fullScc.keep[e.b]);
+
+  const [px0, py0] = toXY(PLAY_BBOX.west, PLAY_BBOX.south);
+  const [px1, py1] = toXY(PLAY_BBOX.east, PLAY_BBOX.north);
+  const inside = ([x, y]) => x >= px0 && x <= px1 && y >= py0 && y <= py1;
+
+  // Clip polylines at the boundary; crossing points become boundary nodes.
+  const nodeXY = full.nodeXY.map((p) => p.slice());
+  const edges = [];
+  const crossings = [];
+  const segmentExit = (p, q) => {
+    // Parametric intersection of segment p→q with the play rectangle's border (p inside, q outside).
+    let best = 1;
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    for (const [lim, axis] of [
+      [px0, 0],
+      [px1, 0],
+      [py0, 1],
+      [py1, 1],
+    ]) {
+      const d = axis === 0 ? dx : dy;
+      if (Math.abs(d) < 1e-9) continue;
+      const t = (lim - p[axis]) / d;
+      if (t > 0 && t < best) {
+        const x = p[0] + dx * t;
+        const y = p[1] + dy * t;
+        if (x >= px0 - 0.01 && x <= px1 + 0.01 && y >= py0 - 0.01 && y <= py1 + 0.01) best = t;
+      }
+    }
+    return [p[0] + dx * best, p[1] + dy * best];
+  };
+  const polyLen = (pts) => {
+    let l = 0;
+    for (let k = 1; k < pts.length; k++) l += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    return l;
+  };
+  for (const e of fullEdges) {
+    const aIn = inside(full.nodeXY[e.a]);
+    const bIn = inside(full.nodeXY[e.b]);
+    if (aIn && bIn) {
+      edges.push(e);
+      continue;
+    }
+    if (!aIn && !bIn) continue;
+    // One end inside: keep the inside part up to the border.
+    const pts = aIn ? e.pts : [...e.pts].reverse();
+    const kept = [pts[0]];
+    for (let k = 1; k < pts.length; k++) {
+      if (inside(pts[k])) {
+        kept.push(pts[k]);
+        continue;
+      }
+      kept.push(segmentExit(pts[k - 1], pts[k]));
+      break;
+    }
+    const boundary = nodeXY.length;
+    nodeXY.push(kept[kept.length - 1]);
+    const inner = aIn ? e.a : e.b;
+    // Direction: an edge a→b leaving from inside a (oneway) is outbound.
+    const clipped = aIn
+      ? { ...e, a: e.a, b: boundary, pts: kept, len: polyLen(kept) }
+      : { ...e, a: boundary, b: e.b, pts: [...kept].reverse(), len: polyLen(kept) };
+    if (clipped.len < 0.5) continue;
+    edges.push(clipped);
+    crossings.push({
+      node: boundary,
+      inner,
+      outside: aIn ? e.b : e.a,
+      cls: e.cls,
+      name: e.name,
+      // two-way roads serve both directions; one-way roads only the one they point.
+      outbound: !e.oneway || aIn,
+      inbound: !e.oneway || !aIn,
+      x: kept[kept.length - 1][0],
+      y: kept[kept.length - 1][1],
+    });
+  }
+
+  // Group main-road crossings into portals and add hidden turnarounds.
+  const main = crossings.filter((c) => c.cls <= PORTAL_MAX_CLASS);
+  const portals = [];
+  for (const c of main) {
+    let p = portals.find((q) => Math.hypot(q.x - c.x, q.y - c.y) < PORTAL_MERGE_M);
+    if (!p) {
+      p = { x: c.x, y: c.y, crossings: [], name: c.name, cls: c.cls };
+      portals.push(p);
+    }
+    p.crossings.push(c);
+    if (c.cls < p.cls || (!p.name && c.name)) {
+      p.name = c.name;
+      p.cls = c.cls;
+    }
+  }
+  const portalOut = [];
+  for (const p of portals) {
+    const out = p.crossings.find((c) => c.outbound);
+    const inn = p.crossings.find((c) => c.inbound);
+    if (!out || !inn) continue;
+    if (out.node !== inn.node) {
+      // Hidden U-turn beyond the edge of the map.
+      const a = nodeXY[out.node];
+      const b = nodeXY[inn.node];
+      edges.push({ a: out.node, b: inn.node, cls: p.cls, oneway: 1, name: p.name, lanes: 0, len: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])), pts: [a, b], virtual: 1 });
+    }
+    portalOut.push({ name: p.name, out: out.node, in: inn.node, x: p.x, y: p.y, fullOut: out.outside, fullIn: inn.outside });
+  }
+
+  const scc = largestScc(nodeXY.length, edges);
+  const remap = new Int32Array(nodeXY.length).fill(-1);
   const nodes = [];
-  for (let i = 0; i < n; i++) {
-    if (comp[i] === best) {
+  for (let i = 0; i < nodeXY.length; i++) {
+    if (scc.keep[i]) {
       remap[i] = nodes.length / 2;
       nodes.push(round(nodeXY[i][0], 1), round(nodeXY[i][1], 1));
     }
   }
   const outEdges = [];
+  let keptLen = 0;
+  let inLen = 0;
   for (const e of edges) {
+    if (!e.virtual) inLen += e.len;
     if (remap[e.a] < 0 || remap[e.b] < 0) continue;
-    // Interior points only; endpoints come from the node table.
+    if (!e.virtual) keptLen += e.len;
     const inner = e.pts.slice(1, -1).flatMap(([x, y]) => [round(x, 1), round(y, 1)]);
-    outEdges.push([remap[e.a], remap[e.b], e.cls, e.oneway, e.name, round(e.len, 1), inner]);
+    outEdges.push([remap[e.a], remap[e.b], e.cls, e.oneway, e.name, round(e.len, 1), inner, e.lanes ?? 0, e.virtual ? 1 : 0]);
   }
+  const portalsOut = portalOut
+    .filter((p) => remap[p.out] >= 0 && remap[p.in] >= 0)
+    .map((p, i) => ({ id: `p${i}`, name: full.names[p.name] || 'Road out of town', out: remap[p.out], in: remap[p.in], x: round(p.x, 1), y: round(p.y, 1), fullOut: p.fullOut }));
+
+  // Out-of-town landmarks: shortest road distance from a portal's outside node.
+  const offmap = [];
+  const nearestFullNode = (x, y) => {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < full.nodeXY.length; i++) {
+      if (!fullScc.keep[i]) continue;
+      const d = Math.hypot(full.nodeXY[i][0] - x, full.nodeXY[i][1] - y);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+  const distFrom = portalsOut.map((p) => dijkstra(full.nodeXY.length, fullEdges, p.fullOut));
+  for (const l of landmarks) {
+    const [x, y] = toXY(l.lon, l.lat);
+    const dx = Math.max(px0 - x, 0, x - px1);
+    const dy = Math.max(py0 - y, 0, y - py1);
+    if (Math.hypot(dx, dy) <= SNAP_IN_M) continue;
+    const target = nearestFullNode(x, y);
+    let best = -1;
+    let bestD = Infinity;
+    distFrom.forEach((dist, i) => {
+      if (dist[target] < bestD) {
+        bestD = dist[target];
+        best = i;
+      }
+    });
+    if (best < 0 || !Number.isFinite(bestD)) continue;
+    // Plus the stretch from the boundary node to the portal's first outside node.
+    const p = portalsOut[best];
+    const stub = Math.hypot(full.nodeXY[p.fullOut][0] - p.x, full.nodeXY[p.fullOut][1] - p.y);
+    offmap.push({ id: l.id, portal: best, extraM: round(bestD + stub, 0) });
+  }
+  for (const p of portalsOut) delete p.fullOut;
+
   console.log(
-    `graph: ${n} nodes / ${edges.length} edges → SCC ${nodes.length / 2} nodes / ${outEdges.length} edges (${compCount} components)`,
+    `graph: full ${full.nodeXY.length} nodes → play area ${nodes.length / 2} nodes / ${outEdges.length} edges; ` +
+      `${round((100 * keptLen) / Math.max(1, inLen), 1)}% of in-area road length kept; ${portalsOut.length} portals; ${offmap.length} out-of-town landmarks`,
   );
-  return { origin: ORIGIN, classes: CLASSES, names, nodes, edges: outEdges };
+  return { origin: ORIGIN, classes: CLASSES, names: full.names, nodes, edges: outEdges, portals: portalsOut, offmap };
 }
 
 function roadsGeoJSON(roads) {
@@ -435,7 +668,8 @@ async function write(name, data) {
 await mkdir(OUT, { recursive: true });
 const roads = await loadRaw('roads');
 if (!roads) throw new Error('roads extract is required');
-const graph = buildGraph(roads);
+const landmarks = JSON.parse(await readFile(new URL('../src/content/landmarks.json', import.meta.url), 'utf8'));
+const graph = buildGraph(roads, landmarks);
 await write('graph.json', graph);
 await write('roads.geojson', roadsGeoJSON(roads));
 
