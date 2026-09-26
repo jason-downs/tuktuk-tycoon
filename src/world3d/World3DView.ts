@@ -26,6 +26,7 @@ import { ui } from '../ui/store';
 import type { GameView } from '../ui/view';
 import type { BuiltCity } from './build/world';
 import { Hud } from './hud';
+import { FrameStats } from './stats';
 import { CityLayer } from './layers/city';
 import { Environment } from './layers/environment';
 import { MarkerLayer } from './layers/markers';
@@ -90,6 +91,7 @@ export class World3DView implements GameView, ViewContext {
   private readonly vehicles: VehicleLayer;
   private readonly layers: WorldLayer[] = [];
   private readonly hud: Hud;
+  readonly stats: FrameStats;
   private cityLayer: CityLayer | null = null;
   private tiltOffset = 0;
   private fly: { fromX: number; fromY: number; toX: number; toY: number; fromD: number; toD: number; t: number } | null = null;
@@ -118,6 +120,7 @@ export class World3DView implements GameView, ViewContext {
     this.renderer.domElement.className = 'world-gl';
     container.appendChild(this.renderer.domElement);
     this.hud = new Hud(this, container);
+    this.stats = new FrameStats(container);
 
     this.env = new Environment(this);
     this.vehicles = new VehicleLayer(this);
@@ -184,6 +187,7 @@ export class World3DView implements GameView, ViewContext {
       }
     });
     this.hud.dispose();
+    this.stats.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
@@ -315,6 +319,11 @@ export class World3DView implements GameView, ViewContext {
       this.fly = null;
     };
     const onContext = (e: Event) => e.preventDefault();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '`' && !(e.target instanceof HTMLInputElement)) this.stats.toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    this.cleanups.push(() => window.removeEventListener('keydown', onKey));
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
@@ -417,6 +426,7 @@ export class World3DView implements GameView, ViewContext {
     for (const l of this.layers) l.update(info);
     this.renderer.render(this.scene, this.camera);
     this.hud.draw(info, this.width, this.height, this.dpr);
+    this.stats.record(now, this.renderer);
     this.raf = requestAnimationFrame(this.frame);
   };
 
