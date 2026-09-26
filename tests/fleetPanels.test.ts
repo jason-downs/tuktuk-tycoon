@@ -31,6 +31,7 @@ const world = buildWorld(read<GraphJSON>('graph.json'), read<PoiJSON[]>('pois.js
 function mixedFleet(): Game {
   const game = Game.create(world, { seed: 21 });
   game.addSystem(new FleetSystem());
+  game.state.stats.trips = 5;
   earn(game, 600_000, 'other');
   const spare = rentVehicle(game)!;
   const leased = buyVehicle(game, 'lpg_used', 'lease')!;

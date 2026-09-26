@@ -134,6 +134,8 @@ export interface Vehicle {
   model: string;
   paint: string;
   upgrades: string[];
+  /** Who a rented vehicle belongs to: Lung Daeng (default) or an idle owner around town. */
+  lessor?: 'lung_daeng' | 'owner';
   /** 'rented' vehicles cost rentPerDay and cannot be modified or sold. */
   ownership: 'owned' | 'rented' | 'leased';
   rentPerDay: number;

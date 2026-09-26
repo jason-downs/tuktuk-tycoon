@@ -23,6 +23,12 @@ export const FLEET = {
   /** [pacing] Lung Daeng has three tuk-tuks to rent out, the starter included. */
   maxRented: 3,
   /**
+   * Idle owners around town rent out their plated tuk-tuks. [research] economics.md §9: ~1,040 for-hire tuk-tuks
+   * are registered in Chiang Mai (DLT, Aug 2026) but only ~100 work the streets (TCIJ 2024), so most sit idle.
+   * They rent only to an operator with a hired driver; the day rate and the cap are [pacing].
+   */
+  owners: { rentPerDay: 400, max: 12, model: 'lpg_used' },
+  /**
    * [pacing] Hire-purchase: 25 % down, the rest plus 15 % repaid daily over 120 game days. The real 2015 Bangkok
    * offer in economics.md §4 was 50,000 down + ~11,000/month × 60 months.
    */
@@ -31,6 +37,8 @@ export const FLEET = {
   resale: { share: 0.6, perYear: 0.05 },
   /** [research] economics.md "Hiring and fleet": hiring fee 1,000. */
   hiringFee: 1_000,
+  /** [pacing] Drivers join an operator with a track record: rides the player must complete first. */
+  ridesBeforeHiring: 5,
   /** [research] economics.md §7: Mueang Chiang Mai minimum wage, 380 THB/day since 1 Jan 2025. */
   minWage: 380,
   /**
@@ -378,20 +386,48 @@ function removeVehicle(game: Game, v: Vehicle): void {
 // ---------------------------------------------------------- vehicle market
 export type BuyMode = 'cash' | 'lease';
 
-export function whyCantRent(game: Game): string | null {
-  if (rentedCount(game) >= FLEET.maxRented) return `Lung Daeng only has ${FLEET.maxRented} tuk-tuks to rent out, and you have them all.`;
+export type RentalSource = 'lung_daeng' | 'owner';
+
+/** Rented tuk-tuks from one source (vehicles rented before owners existed count as Lung Daeng's). */
+export function rentedFrom(game: Game, source: RentalSource): number {
+  return game.state.vehicles.filter((v) => v.ownership === 'rented' && (v.lessor ?? 'lung_daeng') === source).length;
+}
+
+export function whyCantRent(game: Game, source: RentalSource = 'lung_daeng'): string | null {
+  if (source === 'owner') {
+    if (hiredDrivers(game).length === 0) return 'Owners only rent to an operator with a hired driver on the books.';
+    if (rentedFrom(game, 'owner') >= FLEET.owners.max) return `You already rent ${FLEET.owners.max} tuk-tuks from owners around town.`;
+    if (!canAfford(game, FLEET.owners.rentPerDay)) return `The owner wants to see ${thb(FLEET.owners.rentPerDay)} before handing over the keys.`;
+    return null;
+  }
+  if (rentedFrom(game, 'lung_daeng') >= FLEET.maxRented) return `Lung Daeng only has ${FLEET.maxRented} tuk-tuks to rent out, and you have them all.`;
   if (!canAfford(game, FLEET.rentPerDay)) return `Lung Daeng wants to see ${thb(FLEET.rentPerDay)} before he hands over the keys.`;
   return null;
 }
 
 /** Rent another of Lung Daeng's tired tuk-tuks; the rent is settled each day at 04:00. */
-export function rentVehicle(game: Game): Vehicle | null {
-  const reason = whyCantRent(game);
+export function rentVehicle(game: Game, source: RentalSource = 'lung_daeng'): Vehicle | null {
+  const reason = whyCantRent(game, source);
   if (reason) {
     game.notify(reason, 'bad');
     return null;
   }
   const taken = new Set(game.state.vehicles.map((v) => v.name));
+  if (source === 'owner') {
+    const name = TUKTUK_NAMES.find((n) => !taken.has(n)) ?? `Rented tuk-tuk #${rentedFrom(game, 'owner') + 1}`;
+    const v = game.spawnVehicle(FLEET.owners.model, handoverNode(game), {
+      name,
+      ownership: 'rented',
+      rentPerDay: FLEET.owners.rentPerDay,
+      paint: game.rng.pick(['nakhon_blue', 'coop_taxi', 'rot_daeng']),
+      condition: Math.round(game.rng.range(60, 80)),
+    });
+    v.lessor = 'owner';
+    park(game, v);
+    game.notify(`An owner at the Tha Phae Gate rank rents you ${v.name}: ${thb(FLEET.owners.rentPerDay)}/day.`, 'good');
+    game.emit('change');
+    return v;
+  }
   const name = RENTAL_NAMES.find((n) => !taken.has(n)) ?? `Lung Daeng’s tuk-tuk #${rentedCount(game) + 1}`;
   const v = game.spawnVehicle('rusty', handoverNode(game), {
     name,
@@ -688,6 +724,10 @@ function refreshPool(game: Game): void {
 
 export function whyCantHire(game: Game, roster: number): string | null {
   if (!fleetState(game).candidates.some((c) => c.roster === roster)) return 'That applicant has moved on.';
+  const rides = game.state.stats.trips;
+  if (rides < FLEET.ridesBeforeHiring) {
+    return `Drivers want to see you have customers first: complete ${FLEET.ridesBeforeHiring} rides yourself (${rides}/${FLEET.ridesBeforeHiring}).`;
+  }
   if (!canAfford(game, FLEET.hiringFee)) return `The hiring fee is ${thb(FLEET.hiringFee)} — you need ${thb(FLEET.hiringFee - game.state.cash)} more.`;
   return null;
 }

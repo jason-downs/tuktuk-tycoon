@@ -5,6 +5,7 @@ import { DAY, HOUR } from '../src/sim/clock';
 import { VEHICLE_MODELS } from '../src/content/vehicles';
 import { businessDay, earn } from '../src/sim/economy';
 import {
+  rentedFrom,
   FLEET,
   FleetSystem,
   MARKET_MODELS,
@@ -39,6 +40,8 @@ const thaPhae = world.landmarks.find((l) => l.id === 'tha_phae_gate')!;
 function newGame(seed = 11, extraCash = 0): Game {
   const game = Game.create(world, { seed });
   game.addSystem(new FleetSystem());
+  // Past the rides drivers want to see before they join.
+  game.state.stats.trips = FLEET.ridesBeforeHiring;
   if (extraCash) earn(game, extraCash, 'other');
   return game;
 }
@@ -380,6 +383,7 @@ describe('headless fleet', () => {
   it('runs alongside the world systems and survives a save round trip', { timeout: 60_000 }, () => {
     const game = Game.create(world, { seed: 9 });
     installSystems(game);
+    game.state.stats.trips = FLEET.ridesBeforeHiring;
     earn(game, 300_000, 'other');
     game.state.autopilot = true;
     const spare = rentVehicle(game)!;
@@ -432,5 +436,28 @@ describe('headless fleet', () => {
     console.log(
       `fleet sim: hired trips ${drivers.map((d) => d.trips).join('/')} (${total}), morale ${drivers.map((d) => d.morale).join('/')}, cash ${Math.round(game.state.cash)}`,
     );
+  });
+});
+
+describe('hiring gate and owner rentals', () => {
+  it('drivers only join after the player completes five rides', () => {
+    const game = Game.create(world, { seed: 31 });
+    game.addSystem(new FleetSystem());
+    const c = fleetState(game).candidates[0];
+    expect(whyCantHire(game, c.roster)).toMatch(/complete 5 rides/);
+    game.state.stats.trips = FLEET.ridesBeforeHiring;
+    expect(whyCantHire(game, c.roster)).toBeNull();
+  });
+
+  it('idle owners rent plated tuk-tuks only to an operator with a hired driver', () => {
+    const game = newGame(32, 50_000);
+    expect(whyCantRent(game, 'owner')).toMatch(/hired driver/);
+    hireFirst(game, 'salary', null);
+    const v = rentVehicle(game, 'owner')!;
+    expect(v.ownership).toBe('rented');
+    expect(v.lessor).toBe('owner');
+    expect(v.rentPerDay).toBe(FLEET.owners.rentPerDay);
+    expect(rentedFrom(game, 'owner')).toBe(1);
+    expect(rentedFrom(game, 'lung_daeng')).toBe(1);
   });
 });

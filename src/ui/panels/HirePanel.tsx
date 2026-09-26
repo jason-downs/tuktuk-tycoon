@@ -18,6 +18,7 @@ import {
   leaseTerms,
   rentVehicle,
   rentedCount,
+  rentedFrom,
   upkeepPerDay,
   whyCantBuy,
   whyCantHire,
@@ -191,9 +192,7 @@ function VehiclesTab({ game }: { game: Game }) {
             <span>cash</span>
           </div>
           <div className="fl-kpi">
-            <b>
-              {rentedCount(game)} / {FLEET.maxRented}
-            </b>
+            <b>{rentedCount(game)}</b>
             <span>rented</span>
           </div>
           <div className="fl-kpi">
@@ -209,6 +208,7 @@ function VehiclesTab({ game }: { game: Game }) {
         </p>
       </div>
       <RentCard game={game} />
+      <OwnerRentCard game={game} />
       <div className="fl-section">
         <span className="eyebrow">Dealer</span>
         <span className="muted small">buy outright or on hire-purchase</span>
@@ -217,6 +217,34 @@ function VehiclesTab({ game }: { game: Game }) {
         <ModelCard key={id} game={game} model={VEHICLE_MODELS[id]} />
       ))}
     </>
+  );
+}
+
+function OwnerRentCard({ game }: { game: Game }) {
+  const model = VEHICLE_MODELS[FLEET.owners.model];
+  const why = whyCantRent(game, 'owner');
+  return (
+    <div className="fl-card">
+      <div className="fl-card-head">
+        <span className="fl-name">Rent an idle tuk-tuk from its owner</span>
+        <span className="fl-price">{baht(FLEET.owners.rentPerDay)}/day</span>
+      </div>
+      <p className="fl-hook">
+        Of the ~1,040 for-hire tuk-tuks registered in Chiang Mai, only about a hundred work the streets. Their owners are
+        happy to rent them to a reliable operator.
+      </p>
+      <ModelChips model={model} rented />
+      <p className="fl-note">
+        Plated, in decent shape, no deposit. Needs a hired driver on your books. You rent {rentedFrom(game, 'owner')} of up
+        to {FLEET.owners.max}.
+      </p>
+      <div className="fl-actions">
+        <button className="btn primary" disabled={!!why} onClick={() => rentVehicle(game, 'owner')}>
+          Rent one · {baht(FLEET.owners.rentPerDay)}/day
+        </button>
+      </div>
+      <Why reason={why} />
+    </div>
   );
 }
 
@@ -233,7 +261,7 @@ function RentCard({ game }: { game: Game }) {
       <ModelChips model={model} rented />
       <p className="fl-note">
         No deposit. Rent is paid at 04:00, and handing one back costs that day’s rent. Rented tuk-tuks can’t be sold or
-        modified. You rent {rentedCount(game)} of his {FLEET.maxRented}.
+        modified. You rent {rentedFrom(game, 'lung_daeng')} of his {FLEET.maxRented}.
       </p>
       <div className="fl-actions">
         <button className="btn primary" disabled={!!why} onClick={() => rentVehicle(game)}>
