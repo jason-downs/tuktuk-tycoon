@@ -59,6 +59,8 @@ simulations (`tests/`).
   - `ratingModifiers(vehicle, trip)`
   - `sightRules(vehicle, request)`
   - `extraChargers()`
+  - `edgePenalty(edge)`: per-edge routing time multiplier (road closures; Infinity forbids). The events system owns it;
+    the game hands it to the shared router every step, and vehicles on a penalised edge slow down (at most ×1/5).
 - **Events**:
   - Subscribe with `game.on(name, fn)`, emit with `game.emit(name, payload)`.
   - Built-in events: `trip` (a `TripResult`), `day` (the closing `DayBook`), `notice`, `haggle`, `speed`, `pause`,

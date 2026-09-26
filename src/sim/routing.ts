@@ -24,6 +24,9 @@ const UTURN_PENALTY_S = 12;
 /** Multiplier on travel time per road class (service roads cut through car parks). */
 const CLASS_TIME_FACTOR = [1, 1, 1, 1, 1, 1, 1.3, 1.6];
 
+/** Time multiplier for driving off a forbidden arc the vehicle is already standing on. */
+const FORBIDDEN_EXIT_FACTOR = 10;
+
 class MinHeap {
   private ids: number[] = [];
   private keys: number[] = [];
@@ -91,6 +94,11 @@ export class Router {
   readonly graph: RoadGraph;
   /** Optional per-class slowdown (e.g. rush hour); 1 = free flow. */
   congestion: (cls: number) => number = () => 1;
+  /**
+   * Optional per-edge travel-time multiplier (road closures, festival crowds). Infinity forbids the edge, except
+   * that a vehicle standing on a forbidden arc may still drive off it. Values below 1 make routes non-optimal.
+   */
+  edgePenalty: ((edge: number) => number) | null = null;
 
   constructor(graph: RoadGraph) {
     this.graph = graph;
@@ -103,8 +111,16 @@ export class Router {
   }
 
   arcTime(arc: number, metres?: number): number {
-    const e = this.graph.edges[arc >> 1];
-    return ((metres ?? e.len) / this.graph.speedOf(arc >> 1)) * CLASS_TIME_FACTOR[e.cls] * this.congestion(e.cls);
+    const edge = arc >> 1;
+    const e = this.graph.edges[edge];
+    const t = ((metres ?? e.len) / this.graph.speedOf(edge)) * CLASS_TIME_FACTOR[e.cls] * this.congestion(e.cls);
+    return this.edgePenalty ? t * this.edgePenalty(edge) : t;
+  }
+
+  /** Time to drive `metres` of the arc a vehicle starts on; a forbidden arc can still be left. */
+  private startTime(arc: number, metres: number): number {
+    const t = this.arcTime(arc, metres);
+    return t < Infinity ? t : (metres / this.graph.speedOf(arc >> 1)) * FORBIDDEN_EXIT_FACTOR;
   }
 
   /** Route from a node or a point on an arc to a target node. */
@@ -132,10 +148,10 @@ export class Router {
       seed(from, 0, -1);
     } else {
       const len = graph.arcLen(from.arc);
-      seed(graph.arcTo(from.arc), this.arcTime(from.arc, Math.max(0, len - from.s)), from.arc);
+      seed(graph.arcTo(from.arc), this.startTime(from.arc, Math.max(0, len - from.s)), from.arc);
       const rev = reverseArc(from.arc);
       if (allowUTurn && graph.arcValid(rev)) {
-        seed(graph.arcFrom(from.arc), this.arcTime(rev, from.s) + UTURN_PENALTY_S, rev);
+        seed(graph.arcFrom(from.arc), this.startTime(rev, from.s) + UTURN_PENALTY_S, rev);
       }
     }
 
@@ -155,6 +171,7 @@ export class Router {
         const w = graph.arcTo(arc);
         if (closed[w] === gen) continue;
         const cost = gv + this.arcTime(arc);
+        if (cost === Infinity) continue;
         if (stamp[w] !== gen || cost < g[w]) {
           stamp[w] = gen;
           g[w] = cost;
