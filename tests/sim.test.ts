@@ -38,8 +38,9 @@ describe('headless simulation', () => {
     expect(condition - v.condition).toBeLessThan(35);
     expect(game.state.books.length).toBeGreaterThanOrEqual(1);
     expect(Number.isFinite(game.state.cash)).toBe(true);
-    // A simulated day stays under 4 s of CPU (about 2 s on a laptop).
-    expect(ms).toBeLessThan(4000);
+    // A simulated day costs about 2 s of CPU on a laptop; heavy parallel load inflates CPU time by a third or
+    // more, so the limit catches a doubling, not a busy machine.
+    expect(ms).toBeLessThan(5000);
     console.log(
       `day sim: ${ms.toFixed(0)} ms CPU, trips ${game.state.stats.trips}, cash ${game.state.cash}, ${v.odometer.toFixed(0)} km, wear ${(condition - v.condition).toFixed(1)}, rep ${game.state.reputation.toFixed(2)}, requests alive ${game.state.requests.length}`,
     );

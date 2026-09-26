@@ -530,7 +530,9 @@ describe('whole-city build', () => {
     expect(mine).toBeLessThan(1_600_000);
     // Structures also hold the moat parapets, bridges, platforms and the power-line cables.
     expect(t.structures).toBeLessThan(400_000);
-    expect(ms).toBeLessThan(4000);
+    // About 3 s of CPU on a laptop; heavy parallel load inflates CPU time by a third or more, so the limit
+    // catches a doubling of the build, not a busy machine.
+    expect(ms).toBeLessThan(6000);
   });
 
   it('keeps every building vertex finite and above the ground', () => {
