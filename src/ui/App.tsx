@@ -472,7 +472,7 @@ function PanelHost({ game, view }: { game: Game; view: GameView | null }) {
         <h2>
           {panel.icon} {panel.title}
         </h2>
-        <button className="btn tiny" onClick={() => ui.set({ panel: null })} aria-label="Close panel">
+        <button className="btn tiny" onClick={() => ui.set({ panel: null })} aria-label="Close panel" title="Close (Esc)">
           ✕
         </button>
       </div>

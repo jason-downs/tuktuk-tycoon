@@ -8,6 +8,7 @@ import { HelpModal } from './help/HelpModal';
 import { ManualDriveOverlay } from './manual/ManualDrive';
 import { Minimap } from './Minimap';
 import { TutorialCoach } from './tutorial/TutorialCoach';
+import { Tooltips } from './Tooltips';
 import { WorldBadge } from './WorldBadge';
 
 export interface OverlayProps {
@@ -28,4 +29,5 @@ export const OVERLAYS: { id: string; component: ComponentType<OverlayProps> }[] 
   { id: 'dropoff', component: DropoffFx },
   { id: 'tutorial', component: TutorialCoach },
   { id: 'help', component: HelpModal },
+  { id: 'tooltips', component: Tooltips },
 ];

@@ -822,3 +822,43 @@ button {
   caret-color: transparent;
   white-space: nowrap;
 }
+
+/* Tooltips (Tooltips.tsx): the title of the control under the mouse or reached by keyboard. Hidden until placed
+   (.placed); .above puts the arrow on the bottom edge, --arrow-at from the left. */
+.tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  max-width: 260px;
+  padding: 6px 10px;
+  background: var(--teak-2);
+  color: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.35;
+  pointer-events: none;
+  visibility: hidden;
+}
+.tooltip.placed {
+  visibility: visible;
+}
+.tooltip::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--arrow-at, 50%) - 6px);
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--teak-2);
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.tooltip.above::before {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
+}
